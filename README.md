@@ -7,10 +7,10 @@ documentation; the hosted service is maintained separately.
 The incremental 0.2.0 client offers sync/async HTTP resources, durable job polling,
 sklearn-shaped `Classifier`/`Regressor`, named DataFrames/arrays/CSV/Parquet input,
 probabilities, predictor reopening/metadata, credential-safe serialization and
-sanitized typed errors. Three executed examples use controlled synthetic transport. Actual execution is
-subject to service catalogue capability/rights/limits. The hosted initial preview
-qualifies narrow TabICLv2 classification only. A Regressor class does not imply a
-qualified hosted regression model.
+sanitized typed errors. Four executed examples use controlled synthetic transport, with separate bounded
+live acceptance. Actual execution is subject to service catalogue capabilities,
+rights and limits. TabICLv2 and Kumo Medium classification/regression tasks are separately qualified
+for the narrow hosted preview; each additional task requires its own evidence.
 
 Full sklearn matrix qualification, resumable uploads, large batch jobs,
 causal discovery/ergodic integration and the complete all-model notebook pack
@@ -46,7 +46,8 @@ Client.submit_fit request requires the caller to reuse its idempotency_key; omit
 it generates a fresh key for each call. Estimator refit creates a new upload/job. Model availability and maximum
 rows/features/classes are visible through `Client.models()`.
 
-See [SDK guide](docs/usage.md) and [contributor notes](CONTRIBUTING.md).
+See [SDK guide](docs/usage.md), [model selection](docs/model-selection.md) and
+[contributor notes](CONTRIBUTING.md).
 
 ## Checks
 
