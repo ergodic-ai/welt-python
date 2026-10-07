@@ -12,7 +12,7 @@ from .credentials import credential, secret
 from .errors import (AuthenticationError, CapacityError, ConflictError, ExecutionError,
     InvalidInputError, JobCancelledError, JobTimeoutError, ModelUnavailableError,
     NotFoundError, PermissionDeniedError, PredictionPendingError, RateLimitError,
-    ResultExpiredError, TransportError, WeltError)
+    ResultExpiredError, ResultDeletedError, TransportError, WeltError)
 
 
 def _retry_after(response):
@@ -55,6 +55,8 @@ def _response(response):
             cls = CapacityError
         elif code == "execution_failed":
             cls = ExecutionError
+        elif code == "result_deleted":
+            cls = ResultDeletedError
         elif code == "prediction_timeout":
             cls = PredictionPendingError
         raise cls(error.get("message", "Welt request failed."), code=code,
@@ -159,6 +161,14 @@ class Client(_HTTP):
 
     def dataset(self, dataset_id):
         return self.request("GET", f"/v1/datasets/{_id(dataset_id)}")
+
+    def delete_dataset(self, dataset_id):
+        """Delete this owned dataset only if it has no retained/active dependents."""
+        return self.request("DELETE", f"/v1/datasets/{_id(dataset_id)}")
+
+    def delete_causal_result(self, result_id):
+        """Explicitly delete an owned primary graph/scores; retain job/usage metadata."""
+        return self.request("DELETE", f"/v1/causal-results/{_id(result_id)}")
 
     def upload(self, *, columns, rows, name="SDK dataset", target=None):
         return self.request("POST", "/v1/datasets", json=dict(
@@ -304,6 +314,14 @@ class AsyncClient(_HTTP):
 
     async def dataset(self, dataset_id):
         return await self.request("GET", f"/v1/datasets/{_id(dataset_id)}")
+
+    async def delete_dataset(self, dataset_id):
+        """Delete this owned dataset only if it has no retained/active dependents."""
+        return await self.request("DELETE", f"/v1/datasets/{_id(dataset_id)}")
+
+    async def delete_causal_result(self, result_id):
+        """Explicitly delete an owned primary graph/scores; retain job/usage metadata."""
+        return await self.request("DELETE", f"/v1/causal-results/{_id(result_id)}")
 
     async def upload(self, *, columns, rows, name="SDK dataset", target=None):
         return await self.request("POST", "/v1/datasets", json=dict(

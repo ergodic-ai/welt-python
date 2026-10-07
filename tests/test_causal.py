@@ -390,3 +390,38 @@ def test_invalid_seed_rejected_locally_without_upload_or_request(seed):
     ) as client:
         with pytest.raises(ValueError):
             client.submit_discover("dataset_fixture", seed=seed)
+
+
+@pytest.mark.parametrize('asynchronous', [False, True])
+def test_explicit_owned_deletion_path_and_typed_primary_result_deleted(asynchronous):
+    from welt import ResultDeletedError
+    calls=[]
+    def handle(request):
+        calls.append((request.method, request.url.raw_path.decode()))
+        if request.method=='DELETE':
+            return httpx.Response(204)
+        return httpx.Response(410, json={'error':dict(code='result_deleted',message='Discovery result was explicitly deleted.',retryable=False,request_id='req_fixture')})
+    async def run():
+        async with AsyncClient(base_url='https://fixture.invalid',api_key='fixture',transport=httpx.MockTransport(handle)) as client:
+            assert await client.delete_causal_result('causal/owned') is None
+            assert await client.delete_dataset('dataset/owned') is None
+            with pytest.raises(ResultDeletedError) as caught:
+                await client.causal_scores('job_fixture')
+            assert caught.value.code=='result_deleted' and caught.value.status_code==410
+    if asynchronous:
+        asyncio.run(run())
+    else:
+        with Client(base_url='https://fixture.invalid',api_key='fixture',transport=httpx.MockTransport(handle)) as client:
+            assert client.delete_causal_result('causal/owned') is None
+            assert client.delete_dataset('dataset/owned') is None
+            with pytest.raises(ResultDeletedError) as caught:
+                client.causal_scores('job_fixture')
+            assert caught.value.code=='result_deleted' and caught.value.status_code==410
+    assert calls==[('DELETE','/v1/causal-results/causal%2Fowned'),('DELETE','/v1/datasets/dataset%2Fowned'),('GET','/v1/jobs/job_fixture/result')]
+
+
+def test_dataset_provenance_accessor_is_immutable():
+    result = CausalResult(result_payload())
+    assert result.dataset_id == 'dataset_fixture'
+    with pytest.raises(AttributeError):
+        result.dataset_id = 'different_dataset'

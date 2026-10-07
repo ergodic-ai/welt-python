@@ -71,3 +71,19 @@ steps; a model's discovered edges do not establish causal truth. Native edge
 scores are neither calibrated confidence nor graph posterior probabilities.
 Primary graph/score retention/deletion and result quotas are server contracts,
 independent of seven-day downloadable prediction payloads.
+
+## Explicit owned lifecycle
+
+`client.delete_causal_result(result.id)` explicitly deletes the retained primary
+graph and scores. `client.delete_dataset(result.dataset_id)` separately deletes
+an upload only if it has no retained predictor/result or queued/running job
+dependencies. AsyncClient exposes the same methods with `await`. There is no
+implicit deletion, cascade or expiry when a client closes or discovery times out.
+These are source-candidate operations until the service lifecycle gate is accepted.
+
+A successful deletion returns `None`; repeat deletion of the same owned resource
+is safe. A foreign or missing identity raises `NotFoundError`. Dataset dependencies
+raise `ConflictError` with code `dependency_conflict`. Explicitly deleted primary
+result/score reads raise `ResultDeletedError`, while job/provenance/usage metadata
+remain. If payload removal returns retryable `deletion_pending`, retry the same
+DELETE; quota and dataset dependency remain reserved until it completes.

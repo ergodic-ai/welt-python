@@ -49,6 +49,10 @@ class ResultExpiredError(WeltError):
     pass
 
 
+class ResultDeletedError(WeltError):
+    pass
+
+
 class TransportError(WeltError):
     pass
 

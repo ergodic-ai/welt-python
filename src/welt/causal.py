@@ -148,6 +148,10 @@ class CausalResult:
         return self._payload["model_version"]
 
     @property
+    def dataset_id(self):
+        return self._payload["dataset_id"]
+
+    @property
     def job_id(self):
         return self._payload["diagnostics"]["job_id"]
 

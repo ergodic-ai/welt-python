@@ -11,7 +11,7 @@ from .errors import (
     WeltError,
     ConflictError, JobCancelledError, JobTimeoutError, NotFoundError,
     PermissionDeniedError, PredictionPendingError, RateLimitError,
-    ResultExpiredError, TransportError,
+    ResultExpiredError, ResultDeletedError, TransportError,
 )
 from .estimators import Classifier, Regressor
 from .causal import CausalDiscovery, CausalResult
@@ -20,7 +20,7 @@ from .errors import InvalidCausalResultError, OptionalDependencyError, Unsupport
 __all__ = [
     "AsyncClient", "AsyncJob", "Credential", "ConflictError", "JobCancelledError",
     "JobTimeoutError", "NotFoundError", "PermissionDeniedError", "PredictionPendingError",
-    "RateLimitError", "ResultExpiredError", "TransportError",
+    "RateLimitError", "ResultExpiredError", "ResultDeletedError", "TransportError",
     "AuthenticationError",
     "CapacityError",
     "Classifier",
