@@ -79,6 +79,15 @@ def _fit(dataset_id, model, task, configuration, seed):
                 configuration=configuration, seed=seed)
 
 
+def _discovery(dataset_id, model, configuration, seed, constraints, model_version):
+    if type(seed) is not int or not 0 <= seed <= 2**32-1:
+        raise ValueError("seed must be an unsigned32-bit integer.")
+    return dict(dataset_id=dataset_id, model_id=model, model_version=model_version,
+                configuration=configuration, seed=seed,
+                constraints=constraints if constraints is not None else
+                dict(required_edges=[], forbidden_edges=[], temporal_order=[]))
+
+
 class _HTTP:
     def _configure(self, base_url, api_key, max_retries, max_retry_delay):
         if type(max_retries) is not int or not 0 <= max_retries <= 5:
@@ -162,6 +171,32 @@ class Client(_HTTP):
             headers={"Idempotency-Key": idempotency_key or uuid4().hex})
         return Job(self, result["id"])
 
+    def submit_discover(self, dataset_id, *, model="arrow", configuration="default", seed=0,
+                        constraints=None, model_version=None, idempotency_key=None):
+        payload = _discovery(dataset_id, model, configuration, seed, constraints, model_version)
+        result = self.request("POST", "/v1/discoveries", json=payload,
+                              headers={"Idempotency-Key": idempotency_key or uuid4().hex})
+        return Job(self, result["id"])
+
+    def discover(self, dataset_id, *, model="arrow", configuration="default", seed=0,
+                 constraints=None, model_version=None, idempotency_key=None, timeout=600):
+        return self.submit_discover(dataset_id, model=model, configuration=configuration,
+            seed=seed, constraints=constraints, model_version=model_version,
+            idempotency_key=idempotency_key).result(timeout=timeout)
+
+    def causal_result(self, job_id):
+        from .causal import CausalResult
+        from .errors import InvalidCausalResultError
+        result = CausalResult(self.request("GET", f"/v1/jobs/{_id(job_id)}/result"))
+        if result.job_id != str(job_id):
+            raise InvalidCausalResultError("Causal result belongs to a different discovery job.", code="invalid_causal_result")
+        return result
+
+    def causal_scores(self, job_id):
+        from .causal import validated_scores
+        result = self.causal_result(job_id)
+        return validated_scores(result, self.request("GET", f"/v1/jobs/{_id(job_id)}/result/scores"))
+
     def job(self, job_id):
         return Job(self, job_id)
 
@@ -212,6 +247,8 @@ class Job:
         while True:
             job = self.inspect()
             if job["status"] == "succeeded":
+                if job["operation"] == "discover":
+                    return self.client.causal_result(self.id)
                 return (self.client.request("GET", f"/v1/jobs/{_id(self.id)}/result")
                         if job["operation"] == "predict" else self.client.predictor(job["predictor_id"]))
             _failed(job)
@@ -279,6 +316,32 @@ class AsyncClient(_HTTP):
             headers={"Idempotency-Key": idempotency_key or uuid4().hex})
         return AsyncJob(self, result["id"])
 
+    async def submit_discover(self, dataset_id, *, model="arrow", configuration="default", seed=0,
+                              constraints=None, model_version=None, idempotency_key=None):
+        payload = _discovery(dataset_id, model, configuration, seed, constraints, model_version)
+        result = await self.request("POST", "/v1/discoveries", json=payload,
+                                    headers={"Idempotency-Key": idempotency_key or uuid4().hex})
+        return AsyncJob(self, result["id"])
+
+    async def discover(self, dataset_id, *, model="arrow", configuration="default", seed=0,
+                       constraints=None, model_version=None, idempotency_key=None, timeout=600):
+        job = await self.submit_discover(dataset_id, model=model, configuration=configuration,
+            seed=seed, constraints=constraints, model_version=model_version, idempotency_key=idempotency_key)
+        return await job.result(timeout=timeout)
+
+    async def causal_result(self, job_id):
+        from .causal import CausalResult
+        from .errors import InvalidCausalResultError
+        result = CausalResult(await self.request("GET", f"/v1/jobs/{_id(job_id)}/result"))
+        if result.job_id != str(job_id):
+            raise InvalidCausalResultError("Causal result belongs to a different discovery job.", code="invalid_causal_result")
+        return result
+
+    async def causal_scores(self, job_id):
+        from .causal import validated_scores
+        result = await self.causal_result(job_id)
+        return validated_scores(result, await self.request("GET", f"/v1/jobs/{_id(job_id)}/result/scores"))
+
     def job(self, job_id):
         return AsyncJob(self, job_id)
 
@@ -305,6 +368,8 @@ class AsyncJob:
         while True:
             job = await self.inspect()
             if job["status"] == "succeeded":
+                if job["operation"] == "discover":
+                    return await self.client.causal_result(self.id)
                 return (await self.client.request("GET", f"/v1/jobs/{_id(self.id)}/result")
                         if job["operation"] == "predict" else await self.client.predictor(job["predictor_id"]))
             _failed(job)

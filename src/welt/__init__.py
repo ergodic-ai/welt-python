@@ -14,6 +14,8 @@ from .errors import (
     ResultExpiredError, TransportError,
 )
 from .estimators import Classifier, Regressor
+from .causal import CausalDiscovery, CausalResult
+from .errors import InvalidCausalResultError, OptionalDependencyError, UnsupportedGraphConversionError
 
 __all__ = [
     "AsyncClient", "AsyncJob", "Credential", "ConflictError", "JobCancelledError",
@@ -29,5 +31,7 @@ __all__ = [
     "ModelUnavailableError",
     "Regressor",
     "WeltError",
+    "CausalDiscovery", "CausalResult", "InvalidCausalResultError",
+    "OptionalDependencyError", "UnsupportedGraphConversionError",
 ]
-__version__ = "0.2.0"
+__version__ = "0.3.0"

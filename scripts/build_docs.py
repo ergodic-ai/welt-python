@@ -19,7 +19,8 @@ def main():
     version=tomllib.loads((ROOT/'pyproject.toml').read_text())['project']['version']
     if installed_version('welt-client') != version or getattr(welt,'__version__',None) != version:
         raise SystemExit('Installed SDK version must match the documentation source version.')
-    required=('Client','Job','Classifier','Regressor','AsyncClient','AsyncJob')
+    required=('Client','Job','Classifier','Regressor','AsyncClient','AsyncJob',
+              'CausalDiscovery','CausalResult')
     if any(not hasattr(welt,name) for name in required):
         raise SystemExit('Installed SDK is missing a required documented public symbol.')
     out=Path(args.output)/f'v{version}';out.mkdir(parents=True,exist_ok=True)

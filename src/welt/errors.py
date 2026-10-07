@@ -64,3 +64,15 @@ class JobCancelledError(ExecutionError):
 class PredictionPendingError(WeltError):
     def __init__(self, message, *, job_id=None, **kwargs):
         super().__init__(message, job_id=job_id, **kwargs)
+
+
+class InvalidCausalResultError(WeltError, ValueError):
+    pass
+
+
+class UnsupportedGraphConversionError(WeltError, ValueError):
+    pass
+
+
+class OptionalDependencyError(WeltError, ImportError):
+    pass
