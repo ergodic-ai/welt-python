@@ -2,15 +2,17 @@
 
 The service catalogue is authoritative for actual task/model/configuration limits.
 A Python class or named catalogue entry alone does not qualify hosted execution.
-The initial available classifier is upstream TabICLv2: at most 500 training rows,
-20 features, 10 classes and 100 query rows per prediction in the bounded preview.
-Other selected families and its regressor require separate gates; no classical or
-older-generation fallback is permitted.
+The bounded upstream TabICLv2 preview has separately qualified classification
+and regression tasks: at most 500 training rows, 20 features and 100 query rows.
+Classification supports up to 10 classes; regression returns mean points with its
+explicit constant-target policy. The catalogue also reports matching-worker
+readiness for each task. Other selected families require their own gates; no
+classical or older-generation fallback is permitted.
 
 | Behavior | Current boundary |
 | --- | --- |
 | Classification preparation/prediction/probabilities/reopen | Available with the qualified classifier; metadata pins model/configuration/seed. |
-| Regressor class | HTTP/estimator interface exists; hosted regression still needs an eligible qualified task. |
+| Regression preparation/prediction/reopen | Qualified TabICLv2 task returns finite target-unit points, with classes/probabilities absent. See the task-specific regression guide. |
 | DataFrame/array/CSV/Parquet | Scalar cells; named schema safe alignment. Files are currently loaded into memory; Parquet needs optional reader. |
 | Durable jobs | Explicit submission, polling, reconnect, cancellation. A local wait timeout leaves durable work running. |
 | Usage | Logical operation IDs plus lifecycle/attempt workload metadata; event count is not fit count or monetary price. |

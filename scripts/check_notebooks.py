@@ -17,6 +17,8 @@ ROOT=Path(__file__).resolve().parents[1]
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--live',action='store_true')
+    paths=sorted((ROOT/'examples/notebooks').glob('*.ipynb'))
+    parser.add_argument('--notebook',choices=[p.stem for p in paths],help='Execute one named example; default executes all.')
     args=parser.parse_args()
     env=os.environ.copy()
     env['WELT_NOTEBOOK_MODE']='live' if args.live else 'fixture'
@@ -25,7 +27,8 @@ def main():
     import welt
     if 'site-packages' not in str(Path(welt.__file__)):
         raise SystemExit('Install the built SDK wheel into the execution environment first.')
-    for path in sorted((ROOT/'examples/notebooks').glob('*.ipynb')):
+    for path in paths:
+        if args.notebook and path.stem!=args.notebook:continue
         notebook=nbformat.read(path,as_version=4);nbformat.validate(notebook)
         for cell in notebook.cells:
             if cell.cell_type=='code' and (cell.outputs or cell.execution_count is not None):

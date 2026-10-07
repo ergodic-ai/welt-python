@@ -1,8 +1,9 @@
 # Executed notebook examples
 
-Three examples start with supported workflows:
+Four examples demonstrate task-gated workflows:
 
 - [Classification](https://github.com/ergodic-ai/welt-python/blob/main/examples/notebooks/classification.ipynb): synthetic table upload, durable fit, probabilities, repeated prediction and reopen.
+- [Regression](https://github.com/ergodic-ai/welt-python/blob/main/examples/notebooks/regression.ipynb): separately qualified task, finite mean points, named-column alignment and pinned reopen.
 - [Async resources and jobs](https://github.com/ergodic-ai/welt-python/blob/main/examples/notebooks/async-jobs.ipynb): async requests, durable identity and reconnect using SDK0.2.
 - [Artifacts and usage](https://github.com/ergodic-ai/welt-python/blob/main/examples/notebooks/artifacts-and-usage.ipynb): fitted provenance and logical operation accounting without pricing or deletion.
 
@@ -13,7 +14,7 @@ nbclient, keeps outputs in memory/temp directories and rejects saved source outp
 Synthetic fixture execution proves example/client plumbing, not FM quality or
 backend security. Separate live evidence is needed for real model behavior.
 
-Regression/model swapping, true batch workflows and five-engine causal-to-ergodic
+Further model swapping, true batch workflows and five-engine causal-to-ergodic
 examples are later gates requiring their actual supported contracts and runtimes.
 No placeholder notebook is counted as working or silently skipped to close the
 complete catalogue milestone. Notebook sources have cleared execution counts and
