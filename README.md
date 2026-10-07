@@ -14,7 +14,9 @@ for the narrow hosted preview; each additional task requires its own evidence.
 
 ArrowFM observational discovery returns durable native DAGs and separate scores,
 with explicit owned result/dataset lifecycle and typed graph conversion. Its
-bounded hosted preview is qualified; local Ergodic continuation uses the approved
+bounded hosted preview is qualified. CDFM adds native directed graphs with its
+original adaptive threshold and preserved scores; unsupported conversion is typed.
+Local Ergodic continuation for declared DAGs uses the approved
 private co-release artifact until a public distribution is available.
 
 Full sklearn matrix qualification, resumable uploads, large batch jobs,

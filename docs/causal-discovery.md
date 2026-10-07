@@ -3,7 +3,11 @@
 SDK0.3.0 supports the independently accepted ArrowFM observational preview:
 2–500 rows and2–20 finite continuous variables, original native DAG decoder and
 separate scores. The service catalogue reports exact task/version/readiness.
-Other causal engines and a usable public Ergodic co-release remain gated.
+CDFM also qualifies this input envelope with original native adaptive threshold,
+separate native scores and directed output, including possible cycles/reciprocals.
+Select model="cdfm" through the same client interfaces; it does not relabel an
+acyclic directed result as a declared DAG. Other causal engines and a usable public
+Ergodic co-release remain gated.
 No automatic Ergodic/model download is performed by these interfaces.
 
 `Client` and `AsyncClient` provide `submit_discover(dataset_id, model='arrow',
