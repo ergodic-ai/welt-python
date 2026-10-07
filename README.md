@@ -4,16 +4,17 @@ Python client for Welt's structured-data foundation-model API. Installable packa
 `welt-client`, import `welt`. This public repository owns SDK source and developer
 documentation; the hosted service is maintained separately.
 
-The current 0.1.0 client offers synchronous HTTP resources, durable job polling,
+The incremental 0.2.0 client offers sync/async HTTP resources, durable job polling,
 sklearn-shaped `Classifier`/`Regressor`, named DataFrames/arrays/CSV/Parquet input,
-probabilities, predictor reopening and sanitized typed errors. Actual execution is
+probabilities, predictor reopening/metadata, credential-safe serialization and
+sanitized typed errors. Three executed examples use controlled synthetic transport. Actual execution is
 subject to service catalogue capability/rights/limits. The hosted initial preview
 qualifies narrow TabICLv2 classification only. A Regressor class does not imply a
 qualified hosted regression model.
 
-Full sklearn matrix qualification, async client, resumable uploads, large batch
-jobs, causal discovery/ergodic integration and executed notebook documentation
-are tracked for subsequent releases. File input currently loads into memory.
+Full sklearn matrix qualification, resumable uploads, large batch jobs,
+causal discovery/ergodic integration and the complete all-model notebook pack
+remain later gates. File input currently loads into memory.
 Private API state and model artifacts are never bundled with this SDK.
 
 ## Install and use
@@ -40,7 +41,7 @@ reopened = Classifier.from_predictor(model.predictor_id_)
 
 A local wait timeout leaves server work running. Reconnect using `Client.job(id)`;
 `job.cancel()` requests explicit server cancellation. New intentional fits use new
-identities. There are no automatic HTTP request retries today. Repeating an explicit
+identities. Safe GET requests have bounded retries; POST mutations never auto-retry. Repeating an explicit
 Client.submit_fit request requires the caller to reuse its idempotency_key; omitting
 it generates a fresh key for each call. Estimator refit creates a new upload/job. Model availability and maximum
 rows/features/classes are visible through `Client.models()`.
@@ -66,3 +67,11 @@ after waiting/submitting; blocking `fit` closes that internal client automatical
 
 Licensed under Apache 2.0. See [LICENSE](LICENSE). Model weights and the hosted
 service are separate and are not licensed by this SDK repository.
+
+## Developer guides and Jupyter examples
+
+See [onboarding](docs/onboarding.md), [capabilities](docs/capabilities.md) and
+[notebook execution](docs/notebooks.md). Versioned static SDK docs are generated
+from these guides and installed package signatures; broader feature/model gates
+remain explicit. Notebook sources have cleared outputs and default to no live API
+access. Run them from a built wheel via `scripts/check_notebooks.py`.

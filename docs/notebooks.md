@@ -1,0 +1,20 @@
+# Executed notebook examples
+
+Three examples start with supported workflows:
+
+- [Classification](https://github.com/ergodic-ai/welt-python/blob/main/examples/notebooks/classification.ipynb): synthetic table upload, durable fit, probabilities, repeated prediction and reopen.
+- [Async resources and jobs](https://github.com/ergodic-ai/welt-python/blob/main/examples/notebooks/async-jobs.ipynb): async requests, durable identity and reconnect using SDK0.2.
+- [Artifacts and usage](https://github.com/ergodic-ai/welt-python/blob/main/examples/notebooks/artifacts-and-usage.ipynb): fitted provenance and logical operation accounting without pricing or deletion.
+
+[Execution instructions](https://github.com/ergodic-ai/welt-python/blob/main/examples/notebooks/README.md)
+cover default controlled transport, explicit bounded live mode and credential-safe
+source handling. CI executes real Jupyter kernels from an installed SDK wheel using
+nbclient, keeps outputs in memory/temp directories and rejects saved source outputs.
+Synthetic fixture execution proves example/client plumbing, not FM quality or
+backend security. Separate live evidence is needed for real model behavior.
+
+Regression/model swapping, true batch workflows and five-engine causal-to-ergodic
+examples are later gates requiring their actual supported contracts and runtimes.
+No placeholder notebook is counted as working or silently skipped to close the
+complete catalogue milestone. Notebook sources have cleared execution counts and
+outputs. Download/open notebooks from the matching reviewed SDK revision for reuse.

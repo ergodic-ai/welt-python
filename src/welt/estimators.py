@@ -9,6 +9,7 @@ from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils.validation import check_is_fitted
 
 from .client import Client
+from .credentials import credential
 from .errors import PredictionPendingError
 
 
@@ -38,12 +39,14 @@ def table(X):
     for row in array:
         values = []
         for value in row:
-            if pd.isna(value):
-                value = None
-            elif isinstance(value, np.generic):
+            if isinstance(value, np.generic):
                 value = value.item()
+            if value is pd.NA or value is pd.NaT:
+                value = None
             if not isinstance(value, (str, int, float, bool, type(None))):
                 raise ValueError("Table cells must be scalar numeric or categorical values.")
+            if pd.isna(value):
+                value = None
             if isinstance(value, float) and not np.isfinite(value):
                 raise ValueError("Infinite values are unsupported.")
             values.append(value)
@@ -64,12 +67,22 @@ class _RemoteEstimator(BaseEstimator):
         self.model = model
         self.configuration = configuration
         self.base_url = base_url
-        self.api_key = api_key
+        self.api_key = credential(api_key)
         self.random_state = random_state
         self.timeout = timeout
 
     def _client(self):
         return Client(base_url=self.base_url, api_key=self.api_key)
+
+    def set_params(self, **params):
+        if "api_key" in params:
+            params["api_key"] = credential(params["api_key"])
+        return super().set_params(**params)
+
+    def _clear_fitted(self):
+        for name in list(vars(self)):
+            if name.endswith("_") and not name.startswith("__"):
+                delattr(self, name)
 
     def submit_fit(self, X, y):
         columns, rows, named = table(X)
@@ -82,6 +95,8 @@ class _RemoteEstimator(BaseEstimator):
             check_classification_targets(targets)
         elif not np.issubdtype(targets.dtype, np.number):
             raise ValueError("Regression targets must be numeric.")
+        elif not np.isfinite(targets).all():
+            raise ValueError("Regression targets must be finite.")
         target_name = "__welt_target__"
         while target_name in columns:
             target_name += "_"
@@ -106,6 +121,8 @@ class _RemoteEstimator(BaseEstimator):
         return job
 
     def fit(self, X, y):
+        # A failed refit cannot leave an old remote identity looking newly fitted.
+        self._clear_fitted()
         columns, _, named = table(X)
         job = self.submit_fit(X, y)
         try:
@@ -142,15 +159,19 @@ class _RemoteEstimator(BaseEstimator):
             random_state=predictor["seed"],
         )
         estimator._set_fitted(predictor)
+        estimator.feature_names_in_ = np.asarray(predictor["columns"], dtype=object)
         return estimator
 
     def predict_details(self, X, *, probabilities=False):
         check_is_fitted(self, "predictor_id_")
         columns, rows, named = table(X)
         if len(columns) != self.n_features_in_:
-            raise ValueError("Prediction feature count differs from the fitted table.")
+            raise ValueError(f"X has {len(columns)} features, but {type(self).__name__} "
+                             f"is expecting {self.n_features_in_} features as input.")
         if not named:
             columns = self._columns_
+        elif set(columns) != set(self._columns_):
+            raise ValueError("Prediction names differ from the fitted table.")
         with self._client() as client:
             try:
                 return client.request(
@@ -165,6 +186,16 @@ class _RemoteEstimator(BaseEstimator):
 
     def predict(self, X):
         return np.asarray(self.predict_details(X)["predictions"])
+
+    def metadata(self):
+        """Inspect pinned predictor metadata through current server authorization."""
+        check_is_fitted(self, "predictor_id_")
+        with self._client() as client:
+            return client.predictor(self.predictor_id_)
+
+    def export_metadata(self):
+        """Return JSON-compatible server metadata; no key or executable context."""
+        return self.metadata()
 
     def __sklearn_tags__(self):
         tags = super().__sklearn_tags__()

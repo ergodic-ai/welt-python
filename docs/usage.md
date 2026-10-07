@@ -1,4 +1,4 @@
-# SDK 0.1.0 guide
+# SDK guide
 
 `Client()` reads `WELT_BASE_URL` and `WELT_API_KEY`. Always close it or use a context
 manager. `Client.models()` reports actual capabilities, not blanket task support.
@@ -31,15 +31,24 @@ a job_id for reconnect after server-side small-prediction timeout.
 Predictors retain exact model/config/seed identity. `Classifier.from_predictor(id)`
 reopens a persisted fit. A new fit creates a new predictor; cache eviction does not
 mean deletion. Current SDK resources include datasets(), predictors(), jobs() and
-usage(); metadata export/delete/recipes are future SDK work.
+usage(); metadata inspection/export_metadata() returns authorized JSON-compatible server
+provenance only, never weights/context/credentials. Delete/recipes require future routes.
 
 Only controlled tests establish current clone/Pipeline/CV and construction behavior.
-The full official estimator/task/version matrix, async resources, batch/resumable
-files, causal results/ergodic and executable Jupyter notebooks remain qualification
-and implementation work. No conformal uncertainty or full catalogue availability
+The full official estimator/task/version matrix, batch/resumable
+files and causal results/ergodic remain qualification/implementation work. Separate
+AsyncClient/AsyncJob interfaces and the supported notebook examples are documented
+in the incremental0.2 source; their checks are distinct from real model qualification. No conformal uncertainty or full catalogue availability
 is claimed by this SDK release.
 
-No automatic HTTP retry policy is implemented. Reusing a Client submission requires
+In0.2, only safe GET requests have bounded automatic retries (default two,
+maximum five), respecting Retry-After up to the configured wait bound; a larger
+hint returns an actionable typed error rather than retrying early. POST mutations
+never auto-retry. Reusing a Client submission requires
 explicit `idempotency_key` preservation by the caller; omitted keys are freshly
 generated per call. Estimator fit/submit_fit makes a new dataset upload and logical
 fit, so call Client.submit_fit on the existing dataset for an intentional request replay.
+
+The [capability boundary](capabilities.md), [onboarding guide](onboarding.md),
+[executed notebook examples](notebooks.md) and generated installed-package reference
+explain supported behavior. The source examples default to synthetic transport.

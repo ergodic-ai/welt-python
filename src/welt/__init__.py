@@ -1,6 +1,7 @@
 """Welt Python SDK."""
 
-from .client import Client, Job
+from .client import AsyncClient, AsyncJob, Client, Job
+from .credentials import Credential
 from .errors import (
     AuthenticationError,
     CapacityError,
@@ -8,10 +9,16 @@ from .errors import (
     InvalidInputError,
     ModelUnavailableError,
     WeltError,
+    ConflictError, JobCancelledError, JobTimeoutError, NotFoundError,
+    PermissionDeniedError, PredictionPendingError, RateLimitError,
+    ResultExpiredError, TransportError,
 )
 from .estimators import Classifier, Regressor
 
 __all__ = [
+    "AsyncClient", "AsyncJob", "Credential", "ConflictError", "JobCancelledError",
+    "JobTimeoutError", "NotFoundError", "PermissionDeniedError", "PredictionPendingError",
+    "RateLimitError", "ResultExpiredError", "TransportError",
     "AuthenticationError",
     "CapacityError",
     "Classifier",
@@ -23,4 +30,4 @@ __all__ = [
     "Regressor",
     "WeltError",
 ]
-__version__ = "0.1.0"
+__version__ = "0.2.0"

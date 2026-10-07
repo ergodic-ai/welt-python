@@ -1,30 +1,113 @@
-"""HTTP resources and durable job handles (API-035)."""
-
+"""Equivalent synchronous/asynchronous resources and durable job handles."""
+import asyncio
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+import math
 import os
 import time
+from urllib.parse import quote
 from uuid import uuid4
-
 import httpx
-
-from .errors import (
-    AuthenticationError,
-    CapacityError,
-    ExecutionError,
-    InvalidInputError,
-    ModelUnavailableError,
-    PredictionPendingError,
-    WeltError,
-)
+from .credentials import credential, secret
+from .errors import (AuthenticationError, CapacityError, ConflictError, ExecutionError,
+    InvalidInputError, JobCancelledError, JobTimeoutError, ModelUnavailableError,
+    NotFoundError, PermissionDeniedError, PredictionPendingError, RateLimitError,
+    ResultExpiredError, TransportError, WeltError)
 
 
-class Client:
-    def __init__(self, base_url=None, api_key=None, *, timeout=60, transport=None):
+def _retry_after(response):
+    value = response.headers.get("Retry-After")
+    if value is None:
+        return None
+    try:
+        delay = float(value)
+    except ValueError:
+        try:
+            when = parsedate_to_datetime(value)
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=timezone.utc)
+            delay = (when - datetime.now(timezone.utc)).total_seconds()
+        except (TypeError, ValueError, OverflowError):
+            return None
+    return max(0, delay) if math.isfinite(delay) else None
+
+
+def _response(response):
+    if response.is_error:
+        try:
+            error = response.json()["error"]
+            if not isinstance(error, dict):
+                raise ValueError()
+        except (ValueError, KeyError, TypeError):
+            raise WeltError(f"HTTP {response.status_code} from Welt API.",
+                            status_code=response.status_code) from None
+        code = error.get("code", "unknown")
+        classes = {401: AuthenticationError, 403: PermissionDeniedError,
+                   404: NotFoundError, 409: ConflictError, 410: ResultExpiredError,
+                   422: InvalidInputError, 429: RateLimitError}
+        cls = classes.get(response.status_code, WeltError)
+        if code in ("invalid_input", "schema_mismatch", "workload_limit", "payload_limit",
+                    "unsupported_capability"):
+            cls = InvalidInputError
+        elif code in ("model_unavailable", "version_unavailable", "worker_unavailable"):
+            cls = ModelUnavailableError
+        elif code == "capacity_limit":
+            cls = CapacityError
+        elif code == "execution_failed":
+            cls = ExecutionError
+        elif code == "prediction_timeout":
+            cls = PredictionPendingError
+        raise cls(error.get("message", "Welt request failed."), code=code,
+                  request_id=error.get("request_id"), retryable=error.get("retryable", False),
+                  job_id=error.get("job_id"), status_code=response.status_code,
+                  retry_after=_retry_after(response))
+    if response.status_code == 204:
+        return None
+    try:
+        return response.json()
+    except ValueError:
+        raise WeltError("Welt API returned an invalid response.", code="invalid_response",
+                        status_code=response.status_code) from None
+
+
+def _id(value):
+    return quote(str(value), safe="")
+
+
+def _fit(dataset_id, model, task, configuration, seed):
+    return dict(dataset_id=dataset_id, model_id=model, task=task,
+                configuration=configuration, seed=seed)
+
+
+class _HTTP:
+    def _configure(self, base_url, api_key, max_retries, max_retry_delay):
+        if type(max_retries) is not int or not 0 <= max_retries <= 5:
+            raise ValueError("max_retries must be an integer from 0 to 5.")
+        if not math.isfinite(max_retry_delay) or not 0 <= max_retry_delay <= 60:
+            raise ValueError("max_retry_delay must be from 0 to 60 seconds.")
         self.base_url = base_url or os.getenv("WELT_BASE_URL", "http://localhost:8080")
-        self.api_key = api_key or os.getenv("WELT_API_KEY")
-        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
-        self.http = httpx.Client(
-            base_url=self.base_url, headers=headers, timeout=timeout, transport=transport
-        )
+        self.api_key = credential(secret(api_key) or os.getenv("WELT_API_KEY"))
+        self.max_retries, self.max_retry_delay = max_retries, max_retry_delay
+        value = secret(self.api_key)
+        return {"Authorization": f"Bearer {value}"} if value else {}
+
+    def _delay(self, method, attempt, response=None):
+        # Reads retry automatically. Mutations require caller-controlled replay.
+        if method.upper() != "GET" or attempt >= self.max_retries:
+            return None
+        if response is not None and response.status_code not in (429, 502, 503, 504):
+            return None
+        delay = _retry_after(response) if response is not None else None
+        delay = min(0.25 * 2**attempt, self.max_retry_delay) if delay is None else delay
+        return delay if delay <= self.max_retry_delay else None
+
+
+class Client(_HTTP):
+    def __init__(self, base_url=None, api_key=None, *, timeout=60, transport=None,
+                 max_retries=2, max_retry_delay=5):
+        headers = self._configure(base_url, api_key, max_retries, max_retry_delay)
+        self.http = httpx.Client(base_url=self.base_url, headers=headers, timeout=timeout,
+                                 transport=transport, follow_redirects=False)
 
     def close(self):
         self.http.close()
@@ -36,45 +119,19 @@ class Client:
         self.close()
 
     def request(self, method, path, **kwargs):
-        response = self.http.request(method, path, **kwargs)
-        if response.is_error:
+        for attempt in range(self.max_retries + 1):
             try:
-                error = response.json()["error"]
-            except (ValueError, KeyError, TypeError):
-                raise WeltError(f"HTTP {response.status_code} from Welt API.") from None
-            code = error.get("code", "unknown")
-            cls = WeltError
-            if code.startswith("authentication"):
-                cls = AuthenticationError
-            elif code in (
-                "invalid_input",
-                "schema_mismatch",
-                "workload_limit",
-                "payload_limit",
-                "unsupported_capability",
-            ):
-                cls = InvalidInputError
-            elif code in ("model_unavailable", "version_unavailable", "worker_unavailable"):
-                cls = ModelUnavailableError
-            elif code == "capacity_limit":
-                cls = CapacityError
-            elif code == "execution_failed":
-                cls = ExecutionError
-            elif code == "prediction_timeout":
-                raise PredictionPendingError(
-                    error.get("message", code),
-                    code=code,
-                    request_id=error.get("request_id"),
-                    retryable=True,
-                    job_id=error.get("job_id"),
-                )
-            raise cls(
-                error.get("message", code),
-                code=code,
-                request_id=error.get("request_id"),
-                retryable=error.get("retryable", False),
-            )
-        return response.json()
+                response = self.http.request(method, path, **kwargs)
+            except httpx.RequestError:
+                delay = self._delay(method, attempt)
+                if delay is None:
+                    raise TransportError("Could not reach Welt API; reconnect to accepted jobs.",
+                                         code="transport_error", retryable=True) from None
+            else:
+                delay = self._delay(method, attempt, response)
+                if delay is None:
+                    return _response(response)
+            time.sleep(delay)
 
     def models(self):
         return self.request("GET", "/v1/models")["items"]
@@ -91,33 +148,53 @@ class Client:
     def usage(self):
         return self.request("GET", "/v1/usage")["items"]
 
-    def upload(self, *, columns, rows, name="SDK dataset", target=None):
-        return self.request(
-            "POST", "/v1/datasets", json=dict(columns=columns, rows=rows, name=name, target=target)
-        )
+    def dataset(self, dataset_id):
+        return self.request("GET", f"/v1/datasets/{_id(dataset_id)}")
 
-    def submit_fit(
-        self, dataset_id, *, model, task, configuration="default", seed=0, idempotency_key=None
-    ):
-        result = self.request(
-            "POST",
-            "/v1/fits",
-            json=dict(
-                dataset_id=dataset_id,
-                model_id=model,
-                task=task,
-                configuration=configuration,
-                seed=seed,
-            ),
-            headers={"Idempotency-Key": idempotency_key or uuid4().hex},
-        )
+    def upload(self, *, columns, rows, name="SDK dataset", target=None):
+        return self.request("POST", "/v1/datasets", json=dict(
+            columns=columns, rows=rows, name=name, target=target))
+
+    def submit_fit(self, dataset_id, *, model, task, configuration="default", seed=0,
+                   idempotency_key=None):
+        result = self.request("POST", "/v1/fits", json=_fit(
+            dataset_id, model, task, configuration, seed),
+            headers={"Idempotency-Key": idempotency_key or uuid4().hex})
         return Job(self, result["id"])
 
     def job(self, job_id):
         return Job(self, job_id)
 
     def predictor(self, predictor_id):
-        return self.request("GET", f"/v1/predictors/{predictor_id}")
+        return self.request("GET", f"/v1/predictors/{_id(predictor_id)}")
+
+    def predict(self, predictor_id, *, columns, rows, probabilities=False):
+        return self.request("POST", f"/v1/predictors/{_id(predictor_id)}/predict",
+                            json=dict(columns=columns, rows=rows, probabilities=probabilities))
+
+
+def _failed(job):
+    if job["status"] in ("failed", "cancelled"):
+        error = job.get("error") or {"code": "job_cancelled", "message": "Job was cancelled."}
+        cls = JobCancelledError if job["status"] == "cancelled" else ExecutionError
+        raise cls(error["message"], code=error["code"], job_id=job["id"],
+                  request_id=error.get("request_id"), retryable=error.get("retryable", False))
+
+
+def _deadline(timeout, poll_interval):
+    if not math.isfinite(timeout) or timeout < 0:
+        raise ValueError("timeout must be finite and nonnegative.")
+    if not math.isfinite(poll_interval) or poll_interval <= 0:
+        raise ValueError("poll_interval must be finite and positive.")
+    return time.monotonic() + timeout
+
+
+def _wait(deadline, job_id, interval):
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise JobTimeoutError("Waiting timed out; the server job continues. Reconnect with client.job().",
+                              code="job_wait_timeout", job_id=job_id, retryable=True)
+    return min(interval, remaining)
 
 
 class Job:
@@ -125,28 +202,111 @@ class Job:
         self.client, self.id = client, job_id
 
     def inspect(self):
-        return self.client.request("GET", f"/v1/jobs/{self.id}")
+        return self.client.request("GET", f"/v1/jobs/{_id(self.id)}")
 
     def cancel(self):
-        return self.client.request("POST", f"/v1/jobs/{self.id}/cancel")
+        return self.client.request("POST", f"/v1/jobs/{_id(self.id)}/cancel")
 
     def result(self, *, timeout=600, poll_interval=0.25):
-        deadline = time.monotonic() + timeout
+        deadline = _deadline(timeout, poll_interval)
         while True:
             job = self.inspect()
             if job["status"] == "succeeded":
-                if job["operation"] == "predict":
-                    return self.client.request("GET", f"/v1/jobs/{self.id}/result")
-                return self.client.predictor(job["predictor_id"])
-            if job["status"] in ("failed", "cancelled"):
-                error = job.get("error") or {
-                    "code": "job_cancelled",
-                    "message": "Job was cancelled.",
-                }
-                raise ExecutionError(error["message"], code=error["code"])
-            if time.monotonic() >= deadline:
-                raise TimeoutError(
-                    f"Waiting for job {self.id} timed out; the server job continues. Reconnect with Client.job()."
-                )
-            time.sleep(poll_interval)
+                return (self.client.request("GET", f"/v1/jobs/{_id(self.id)}/result")
+                        if job["operation"] == "predict" else self.client.predictor(job["predictor_id"]))
+            _failed(job)
+            time.sleep(_wait(deadline, self.id, poll_interval))
+            poll_interval = min(poll_interval * 1.4, 5)
+
+
+class AsyncClient(_HTTP):
+    def __init__(self, base_url=None, api_key=None, *, timeout=60, transport=None,
+                 max_retries=2, max_retry_delay=5):
+        headers = self._configure(base_url, api_key, max_retries, max_retry_delay)
+        self.http = httpx.AsyncClient(base_url=self.base_url, headers=headers, timeout=timeout,
+                                      transport=transport, follow_redirects=False)
+
+    async def aclose(self):
+        await self.http.aclose()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        await self.aclose()
+
+    async def request(self, method, path, **kwargs):
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = await self.http.request(method, path, **kwargs)
+            except httpx.RequestError:
+                delay = self._delay(method, attempt)
+                if delay is None:
+                    raise TransportError("Could not reach Welt API; reconnect to accepted jobs.",
+                                         code="transport_error", retryable=True) from None
+            else:
+                delay = self._delay(method, attempt, response)
+                if delay is None:
+                    return _response(response)
+            await asyncio.sleep(delay)
+
+    async def models(self):
+        return (await self.request("GET", "/v1/models"))["items"]
+
+    async def datasets(self):
+        return (await self.request("GET", "/v1/datasets"))["items"]
+
+    async def predictors(self):
+        return (await self.request("GET", "/v1/predictors"))["items"]
+
+    async def jobs(self):
+        return (await self.request("GET", "/v1/jobs"))["items"]
+
+    async def usage(self):
+        return (await self.request("GET", "/v1/usage"))["items"]
+
+    async def dataset(self, dataset_id):
+        return await self.request("GET", f"/v1/datasets/{_id(dataset_id)}")
+
+    async def upload(self, *, columns, rows, name="SDK dataset", target=None):
+        return await self.request("POST", "/v1/datasets", json=dict(
+            columns=columns, rows=rows, name=name, target=target))
+
+    async def submit_fit(self, dataset_id, *, model, task, configuration="default", seed=0,
+                         idempotency_key=None):
+        result = await self.request("POST", "/v1/fits", json=_fit(
+            dataset_id, model, task, configuration, seed),
+            headers={"Idempotency-Key": idempotency_key or uuid4().hex})
+        return AsyncJob(self, result["id"])
+
+    def job(self, job_id):
+        return AsyncJob(self, job_id)
+
+    async def predictor(self, predictor_id):
+        return await self.request("GET", f"/v1/predictors/{_id(predictor_id)}")
+
+    async def predict(self, predictor_id, *, columns, rows, probabilities=False):
+        return await self.request("POST", f"/v1/predictors/{_id(predictor_id)}/predict",
+                                  json=dict(columns=columns, rows=rows, probabilities=probabilities))
+
+
+class AsyncJob:
+    def __init__(self, client, job_id):
+        self.client, self.id = client, job_id
+
+    async def inspect(self):
+        return await self.client.request("GET", f"/v1/jobs/{_id(self.id)}")
+
+    async def cancel(self):
+        return await self.client.request("POST", f"/v1/jobs/{_id(self.id)}/cancel")
+
+    async def result(self, *, timeout=600, poll_interval=0.25):
+        deadline = _deadline(timeout, poll_interval)
+        while True:
+            job = await self.inspect()
+            if job["status"] == "succeeded":
+                return (await self.client.request("GET", f"/v1/jobs/{_id(self.id)}/result")
+                        if job["operation"] == "predict" else await self.client.predictor(job["predictor_id"]))
+            _failed(job)
+            await asyncio.sleep(_wait(deadline, self.id, poll_interval))
             poll_interval = min(poll_interval * 1.4, 5)

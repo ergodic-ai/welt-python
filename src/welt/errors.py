@@ -2,9 +2,11 @@
 
 
 class WeltError(Exception):
-    def __init__(self, message, *, code="unknown", request_id=None, retryable=False):
+    def __init__(self, message, *, code="unknown", request_id=None, retryable=False,
+                 job_id=None, status_code=None, retry_after=None):
         super().__init__(message)
         self.code, self.request_id, self.retryable = code, request_id, retryable
+        self.job_id, self.status_code, self.retry_after = job_id, status_code, retry_after
 
 
 class AuthenticationError(WeltError):
@@ -27,7 +29,38 @@ class ExecutionError(WeltError):
     pass
 
 
+class PermissionDeniedError(WeltError):
+    pass
+
+
+class NotFoundError(WeltError):
+    pass
+
+
+class ConflictError(WeltError):
+    pass
+
+
+class RateLimitError(CapacityError):
+    pass
+
+
+class ResultExpiredError(WeltError):
+    pass
+
+
+class TransportError(WeltError):
+    pass
+
+
+class JobTimeoutError(WeltError, TimeoutError):
+    pass
+
+
+class JobCancelledError(ExecutionError):
+    pass
+
+
 class PredictionPendingError(WeltError):
     def __init__(self, message, *, job_id=None, **kwargs):
-        self.job_id = job_id
-        super().__init__(message, **kwargs)
+        super().__init__(message, job_id=job_id, **kwargs)
