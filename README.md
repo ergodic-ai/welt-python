@@ -9,7 +9,7 @@ sklearn-shaped `Classifier`/`Regressor`, named DataFrames/arrays/CSV/Parquet inp
 probabilities, predictor reopening/metadata, credential-safe serialization and
 sanitized typed errors. Four executed examples use controlled synthetic transport, with separate bounded
 live acceptance. Actual execution is subject to service catalogue capabilities,
-rights and limits. TabICLv2, Kumo Medium and TabDPT1.3 classification/regression tasks are separately qualified
+rights and limits. TabICLv2, Kumo Medium, TabDPT1.3 and Mitra-v2 classification/regression tasks are separately qualified
 for the narrow hosted preview; each additional task requires its own evidence.
 
 Full sklearn matrix qualification, resumable uploads, large batch jobs,
