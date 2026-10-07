@@ -1,11 +1,13 @@
 # Executed notebook examples
 
-Four examples demonstrate task-gated workflows:
+Five source-candidate examples demonstrate task-gated workflows:
 
 - [Classification](https://github.com/ergodic-ai/welt-python/blob/main/examples/notebooks/classification.ipynb): synthetic table upload, durable fit, probabilities, repeated prediction and reopen.
 - [Regression](https://github.com/ergodic-ai/welt-python/blob/main/examples/notebooks/regression.ipynb): separately qualified task, finite mean points, named-column alignment and pinned reopen.
 - [Async resources and jobs](https://github.com/ergodic-ai/welt-python/blob/main/examples/notebooks/async-jobs.ipynb): async requests, durable identity and reconnect using SDK0.2.
 - [Artifacts and usage](https://github.com/ergodic-ai/welt-python/blob/main/examples/notebooks/artifacts-and-usage.ipynb): fitted provenance and logical operation accounting without pricing or deletion.
+
+- [Causal discovery](https://github.com/ergodic-ai/welt-python/blob/feat/causal-client-preview/examples/notebooks/causal-discovery.ipynb): target-free upload, immutable native graphs, explicit owned score access, provenance and reconnect. Live ArrowFM execution and optional local Ergodic continuation remain separate gates.
 
 [Execution instructions](https://github.com/ergodic-ai/welt-python/blob/main/examples/notebooks/README.md)
 cover default controlled transport, explicit bounded live mode and credential-safe

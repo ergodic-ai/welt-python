@@ -7,7 +7,7 @@ documentation; the hosted service is maintained separately.
 The incremental 0.2.0 client offers sync/async HTTP resources, durable job polling,
 sklearn-shaped `Classifier`/`Regressor`, named DataFrames/arrays/CSV/Parquet input,
 probabilities, predictor reopening/metadata, credential-safe serialization and
-sanitized typed errors. Four executed examples use controlled synthetic transport, with separate bounded
+sanitized typed errors. Five source-candidate examples use controlled synthetic transport, with separate bounded
 live acceptance. Actual execution is subject to service catalogue capabilities,
 rights and limits. TabICLv2, Kumo Medium, TabDPT1.3 and Mitra-v2 classification/regression tasks are separately qualified
 for the narrow hosted preview; each additional task requires its own evidence.

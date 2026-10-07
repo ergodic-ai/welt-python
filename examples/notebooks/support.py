@@ -134,3 +134,69 @@ def prepare_regression(client):
     if predictor['model_version']!=profile['version']:
         raise RuntimeError('Prepared regression version differs from the selected available profile.')
     return columns,query,predictor
+
+
+class CausalSyntheticService(SyntheticService):
+    """Native-result wire fixture only; no discovery model or causal truth claim."""
+    def __init__(self):
+        super().__init__()
+        self.causal_results, self.causal_scores = {}, {}
+
+    def __call__(self, request):
+        assert request.url.host == 'notebook.invalid', 'Fixture must not make live requests.'
+        path, method = request.url.path, request.method
+        value = json.loads(request.content) if request.content else {}
+        if path == '/v1/models':
+            return httpx.Response(200, json={'items': [dict(id='arrow', status='available',
+                tasks=['causal_discovery'], task_profiles=[dict(task='causal_discovery',
+                status='available', execution_available=True, version='synthetic-arrow-contract-v1',
+                limits=dict(min_rows=2,max_rows=500,min_features=2,max_features=20))])]})
+        if path == '/v1/discoveries':
+            dataset=self.data[value['dataset_id']]
+            assert dataset['target'] is None and value['model_id']=='arrow'
+            jid=f'job-{len(self.job_records)}';rid=f'causal-{len(self.causal_results)}'
+            names=dataset['columns']
+            edges=[dict(u=names[0],v=names[1],u_mark='tail',v_mark='arrow'),
+                   dict(u=names[1],v=names[2],u_mark='tail',v_mark='arrow')]
+            result=dict(id=rid,workspace_id='workspace-fixture',dataset_id=dataset['id'],
+                model_version='synthetic-arrow-contract-v1',configuration_version='synthetic-native-dag-v1',
+                variables=names,native_graph_type='dag',edge_marks=edges,
+                score_semantics='native_directed_edge_probability',score_reference=f'scores-{rid}',
+                decoder=dict(name='synthetic wire fixture; no model decoder'),
+                assumptions=['Synthetic graph fixture, not learned discovery'],
+                constraints_applied=value['constraints'],diagnostics=dict(job_id=jid,seed=value['seed']))
+            self.causal_results[jid]=result
+            self.causal_scores[jid]=dict(result_id=rid,score_reference=result['score_reference'],
+                variables=names,score_axes='source_row_target_column',
+                score_semantics='native_directed_edge_probability',
+                values=[[0,.8,.2,.1],[.1,0,.7,.1],[.2,.1,0,.1],[.1,.1,.1,0]])
+            operation_id=f'discovery-operation-{len(self.causal_results)}'
+            self.job_records[jid]=dict(id=jid,status='succeeded',operation='discover',
+                predictor_id=None,operation_id=operation_id)
+            for status in ('running','succeeded'):
+                self.events.append(dict(id=f'event-{len(self.events)}',operation_id=operation_id,kind='discover',
+                    status=status,dataset_id=dataset['id'],predictor_id=None,model_id='arrow',
+                    model_version=result['model_version'],task='causal_discovery',rows=len(dataset['rows']),
+                    columns=len(names),attempt=1,created_at='2026-01-01T00:00:00Z'))
+            return httpx.Response(202,json=self.job_records[jid])
+        if path.startswith('/v1/jobs/') and path.endswith('/result/scores'):
+            return httpx.Response(200,json=self.causal_scores[path.split('/')[3]])
+        if path.startswith('/v1/jobs/') and path.endswith('/result'):
+            return httpx.Response(200,json=self.causal_results[path.split('/')[3]])
+        return super().__call__(request)
+
+
+def notebook_causal_client():
+    options=notebook_options()
+    if os.environ.get('WELT_NOTEBOOK_MODE','fixture')=='fixture':
+        options['transport']=httpx.MockTransport(CausalSyntheticService())
+    return Client(**options)
+
+
+def causal_table():
+    """Arrow frozen chain/isolate panel input: seed42, full128x4 observations."""
+    rng=np.random.default_rng(42)
+    values=rng.exponential(size=(128,4))-1
+    values[:,1]=1.5*values[:,0]+.25*values[:,1]
+    values[:,2]=1.1*values[:,1]+.25*values[:,2]
+    return ['z_treatment','m_mediator','a_outcome','isolated'],values

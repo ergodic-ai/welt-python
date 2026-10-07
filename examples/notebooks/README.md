@@ -1,7 +1,9 @@
 # Executable notebooks
 
 The notebooks demonstrate task-gated classification/regression, async job reconnect,
-predictor reopening and usage. True batch and the five-engine causal/ergodic pack follow their
+predictor reopening and usage, plus a causal SDK source candidate. The causal
+notebook validates native-result/score plumbing using a synthetic transport; live
+ArrowFM and optional approved Ergodic conversion remain separate gates. True batch and the five-engine causal/ergodic pack follow their
 actual implementation/qualification; no placeholder notebook is claimed working.
 
 Run from this directory using the repository's locked development environment,
@@ -13,8 +15,12 @@ always have cleared outputs/execution counts; execution never writes outputs her
 For bounded live execution, explicitly set `WELT_NOTEBOOK_MODE=live`, the HTTPS
 `WELT_BASE_URL` of your Welt service and `WELT_API_KEY` via local secret configuration.
 Do not paste credentials into cells. Use separately qualified TabICLv2 classification and regression task profiles;
-unavailable tasks reject without fallback. Each notebook prepares 128 rows/four features
-and predicts 32 rows, with a 120 second preparation wait. Created synthetic state is
+unavailable tasks reject without fallback. The supervised notebooks prepare 128 rows/four features
+and predict 32 rows, with a 120 second preparation wait. The causal candidate
+requires a separately available ArrowFM task and submits the full128x4 seed42
+observational chain/isolate input, with no target or predictions. Optional local
+graph conversion requires the approved Ergodic co-release artifact; its absence
+is explicit and is not counted as executed causal continuation. Created synthetic state is
 retained; no deletion is performed. Check service readiness/capacity before opting
 in. Operator live evidence is separate from default CI execution.
 
