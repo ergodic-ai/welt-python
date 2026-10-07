@@ -4,16 +4,21 @@ Python client for Welt's structured-data foundation-model API. Installable packa
 `welt-client`, import `welt`. This public repository owns SDK source and developer
 documentation; the hosted service is maintained separately.
 
-The incremental 0.2.0 client offers sync/async HTTP resources, durable job polling,
+The incremental 0.3.0 client offers sync/async HTTP resources, durable job polling,
 sklearn-shaped `Classifier`/`Regressor`, named DataFrames/arrays/CSV/Parquet input,
 probabilities, predictor reopening/metadata, credential-safe serialization and
-sanitized typed errors. Five source-candidate examples use controlled synthetic transport, with separate bounded
+sanitized typed errors. Five examples use controlled synthetic transport, with separate bounded
 live acceptance. Actual execution is subject to service catalogue capabilities,
 rights and limits. TabICLv2, Kumo Medium, TabDPT1.3 and Mitra-v2 classification/regression tasks are separately qualified
 for the narrow hosted preview; each additional task requires its own evidence.
 
+ArrowFM observational discovery returns durable native DAGs and separate scores,
+with explicit owned result/dataset lifecycle and typed graph conversion. Its
+bounded hosted preview is qualified; local Ergodic continuation uses the approved
+private co-release artifact until a public distribution is available.
+
 Full sklearn matrix qualification, resumable uploads, large batch jobs,
-causal discovery/ergodic integration and the complete all-model notebook pack
+the remaining causal engines/public Ergodic co-release and the complete all-model notebook pack
 remain later gates. File input currently loads into memory.
 Private API state and model artifacts are never bundled with this SDK.
 
@@ -47,7 +52,7 @@ it generates a fresh key for each call. Estimator refit creates a new upload/job
 rows/features/classes are visible through `Client.models()`.
 
 See [SDK guide](docs/usage.md), [model selection](docs/model-selection.md) and
-[contributor notes](CONTRIBUTING.md).
+[causal discovery](docs/causal-discovery.md) and [contributor notes](CONTRIBUTING.md).
 
 ## Checks
 

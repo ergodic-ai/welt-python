@@ -22,7 +22,7 @@ reproduce publisher benchmark recipes.
 | Model swapping | Available between qualified TabICLv2, Kumo Medium, TabDPT1.3 and Mitra-v2 tasks; new models need a new fit. See model selection. |
 | Resumable files / true large batch jobs | Future transport implementation, not implied by file convenience reads. |
 | Metadata export / recipes / deletion plans | export_metadata() returns pinned server provenance; recipes and deletion plans require released routes. No executable/context/credential export. |
-| Causal discovery / ergodic | Planned learned engines, native graph semantics and valid local continuation; no placeholder result or invented orientation. |
+| Causal discovery / ergodic | ArrowFM bounded observational preview:2–500 rows/2–20 finite continuous variables, native DAG/owned scores/durable reopen. Literal local continuation passes with the private approved Ergodic0.1.1 artifact; usable public co-release and remaining engines are gated. |
 | Confidence / conformal | Native probabilities are not calibrated coverage or conformal intervals; conformal is later. |
 
 Sklearn cloning/Pipeline/CV checks establish specific supported behavior, not all

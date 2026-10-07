@@ -1,7 +1,9 @@
-# Causal SDK source candidate
+# Causal discovery
 
-SDK0.3.0 source candidate; live discovery and public package publication remain
-qualification gates. The deployed API currently offers supervised models only.
+SDK0.3.0 supports the independently accepted ArrowFM observational preview:
+2–500 rows and2–20 finite continuous variables, original native DAG decoder and
+separate scores. The service catalogue reports exact task/version/readiness.
+Other causal engines and a usable public Ergodic co-release remain gated.
 No automatic Ergodic/model download is performed by these interfaces.
 
 `Client` and `AsyncClient` provide `submit_discover(dataset_id, model='arrow',
@@ -79,7 +81,9 @@ graph and scores. `client.delete_dataset(result.dataset_id)` separately deletes
 an upload only if it has no retained predictor/result or queued/running job
 dependencies. AsyncClient exposes the same methods with `await`. There is no
 implicit deletion, cascade or expiry when a client closes or discovery times out.
-These are source-candidate operations until the service lifecycle gate is accepted.
+These explicit server routes are deployed; dependency/race/tenant contracts were
+checked against temporary local state. Live acceptance retains its synthetic
+results and does not delete hosted state.
 
 A successful deletion returns `None`; repeat deletion of the same owned resource
 is safe. A foreign or missing identity raises `NotFoundError`. Dataset dependencies
