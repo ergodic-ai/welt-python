@@ -2,7 +2,7 @@
 
 The service catalogue is authoritative for actual task/model/configuration limits.
 A Python class or named catalogue entry alone does not qualify hosted execution.
-The bounded upstream TabICLv2 and Kumo Medium previews each have separately
+The bounded upstream TabICLv2, Kumo Medium and TabDPT1.3 previews each have separately
 qualified classification and regression tasks: at most 500 training rows,
 20 features and 100 query rows.
 Classification supports up to 10 classes; regression returns mean points with its
@@ -13,11 +13,11 @@ classical or older-generation fallback is permitted.
 | Behavior | Current boundary |
 | --- | --- |
 | Classification preparation/prediction/probabilities/reopen | Available with the qualified classifier; metadata pins model/configuration/seed. |
-| Regression preparation/prediction/reopen | Qualified TabICLv2 and Kumo Medium tasks return finite target-unit points, with classes/probabilities absent. See the task-specific regression guide. |
+| Regression preparation/prediction/reopen | Qualified TabICLv2, Kumo Medium and TabDPT1.3 tasks return finite target-unit points, with classes/probabilities absent. See the task-specific regression guide. |
 | DataFrame/array/CSV/Parquet | Scalar cells; named schema safe alignment. Files are currently loaded into memory; Parquet needs optional reader. |
 | Durable jobs | Explicit submission, polling, reconnect, cancellation. A local wait timeout leaves durable work running. |
 | Usage | Logical operation IDs plus lifecycle/attempt workload metadata; event count is not fit count or monetary price. |
-| Model swapping | Available between qualified TabICLv2 and Kumo Medium tasks; new models need a new fit. See model selection. |
+| Model swapping | Available between qualified TabICLv2, Kumo Medium and TabDPT1.3 tasks; new models need a new fit. See model selection. |
 | Resumable files / true large batch jobs | Future transport implementation, not implied by file convenience reads. |
 | Metadata export / recipes / deletion plans | export_metadata() returns pinned server provenance; recipes and deletion plans require released routes. No executable/context/credential export. |
 | Causal discovery / ergodic | Planned learned engines, native graph semantics and valid local continuation; no placeholder result or invented orientation. |
