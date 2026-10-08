@@ -78,4 +78,43 @@ class RegressionNotebookFixture(unittest.TestCase):
         np.testing.assert_array_equal(target,expected_target)
 
 
+class FileNotebookFixture(unittest.TestCase):
+    @staticmethod
+    def support():
+        return RegressionNotebookFixture.support()
+
+    def test_lost_ack_resume_same_identity_schema_and_async(self):
+        from welt import TransportError
+        support=self.support()
+        import asyncio
+        schema=dict(columns=['code','value','flag','target'],types=['string','number','boolean','number'])
+        body=b'code,value,flag,target\n0012,1.5,true,0\n0042,,false,1\n'
+        with tempfile.TemporaryDirectory() as folder, patch.dict('os.environ',{'WELT_NOTEBOOK_MODE':'fixture','WELT_API_KEY':'must-not-be-read'}):
+            path=Path(folder)/'data.csv';path.write_bytes(body)
+            service=support.UploadSyntheticService()
+            options=support.notebook_options()
+            import httpx
+            options['transport']=httpx.MockTransport(service)
+            with support.Client(**options) as client:
+                with self.assertRaises(TransportError) as raised:
+                    client.upload_file(path,target='target',schema=schema)
+                uid=raised.exception.upload_id
+                self.assertEqual(client.upload_info(uid)['received_indices'],[0])
+                result=client.resume_upload(uid,path,target='target',schema=schema)
+                self.assertEqual(result['types'],['categorical','numeric','categorical','numeric'])
+                self.assertEqual(result['rows'],2)
+                self.assertEqual(service.file_tables[result['id']],[['0012',1.5,True,0.0],['0042',None,False,1.0]])
+                self.assertEqual(set(result),{'id','name','rows','columns','types','target','created_at'})
+                self.assertEqual(client.resume_upload(uid,path,target='target',schema=schema)['id'],result['id'])
+                self.assertEqual(client.upload_info(uid)['status'],'complete')
+                self.assertEqual(len(client.datasets()),1)
+                self.assertEqual(client.dataset(result['id'])['columns'],schema['columns'])
+            async def check():
+                async with support.notebook_async_file_client() as client:
+                    result=await client.upload_file(path,target='target',schema=schema)
+                    self.assertEqual(result['rows'],2)
+                    self.assertEqual(result['types'],['categorical','numeric','categorical','numeric'])
+            asyncio.run(check())
+
+
 if __name__=='__main__':unittest.main()

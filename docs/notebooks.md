@@ -1,6 +1,6 @@
 # Executed notebook examples
 
-Five source-candidate examples demonstrate task-gated workflows:
+Six source-candidate examples demonstrate task-gated workflows:
 
 - [Classification](https://github.com/ergodic-ai/welt-python/blob/main/examples/notebooks/classification.ipynb): synthetic table upload, durable fit, probabilities, repeated prediction and reopen.
 - [Regression](https://github.com/ergodic-ai/welt-python/blob/main/examples/notebooks/regression.ipynb): separately qualified task, finite mean points, named-column alignment and pinned reopen.
@@ -21,3 +21,5 @@ examples are later gates requiring their actual supported contracts and runtimes
 No placeholder notebook is counted as working or silently skipped to close the
 complete catalogue milestone. Notebook sources have cleared execution counts and
 outputs. Download/open notebooks from the matching reviewed SDK revision for reuse.
+
+- [Files and resume](https://github.com/ergodic-ai/welt-python/blob/feat/causal-client-preview/examples/notebooks/files-and-resume.ipynb): SDK 0.4 candidate CSV declaration, lost acknowledgement, resumption, repeat completion, dataset reopening and async upload. Hosted acceptance/publication are separate gates.

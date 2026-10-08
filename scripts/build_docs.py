@@ -43,7 +43,7 @@ def main():
     base=out.parent;base.mkdir(parents=True,exist_ok=True)
     (base/'index.html').write_text(f'<!doctype html><html lang="en"><meta charset="utf-8"><title>Welt SDK documentation</title><body><a href="v{html.escape(version)}/">Welt SDK {html.escape(version)} documentation</a></body></html>')
     (base/'.nojekyll').write_text('')
-    manifest=dict(sdk_version=version,pages=sorted(pages),supported_notebooks=['classification','regression','artifacts-and-usage','async-jobs','causal-discovery'],scope='incremental; full-model/SDK closure gates pending')
+    manifest=dict(sdk_version=version,pages=sorted(pages),supported_notebooks=['classification','regression','artifacts-and-usage','async-jobs','causal-discovery','files-and-resume'],scope='incremental; full-model/SDK closure gates pending')
     (out/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     print(f'Built {len(pages)} documentation pages for SDK {version}; no credentials or outputs included')
 

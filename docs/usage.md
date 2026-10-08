@@ -16,8 +16,9 @@ with Client() as client:
 `Classifier` and `Regressor` support fit/predict and `predict_details`; Classifier
 supports predict_proba. Labels/probabilities follow persisted class order. DataFrame
 prediction columns may be safely reordered; missing/extra names or width/type
-changes reject. Arrays follow positional order. CSV/Parquet paths are convenient
-in-memory reads today, not resumable streaming upload. `submit_fit(X,y)` returns
+changes reject. Arrays follow positional order. Estimator CSV/Parquet paths remain convenient in-memory reads. SDK 0.4 source
+adds explicit Client/AsyncClient [resumable CSV file uploads](files.md); hosted
+acceptance and publication for this source candidate remain separate gates. `submit_fit(X,y)` returns
 a durable Job without blocking; it owns an HTTP client, so close `job.client` in
 a finally block when finished. Blocking estimator fit closes that client internally. Explicit Client uploads permit dataset-ID reuse.
 
@@ -35,8 +36,8 @@ usage(); metadata inspection/export_metadata() returns authorized JSON-compatibl
 provenance only, never weights/context/credentials. Delete/recipes require future routes.
 
 Only controlled tests establish current clone/Pipeline/CV and construction behavior.
-The full official estimator/task/version matrix, batch/resumable
-files and causal results/ergodic remain qualification/implementation work. Separate
+The full official estimator/task/version matrix, batch, Parquet transport and complete causal/ergodic closure remain separate
+qualification/implementation gates. Separate
 AsyncClient/AsyncJob interfaces and the supported notebook examples are documented
 in the incremental0.2 source; their checks are distinct from real model qualification. No conformal uncertainty or full catalogue availability
 is claimed by this SDK release.

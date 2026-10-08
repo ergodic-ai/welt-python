@@ -200,3 +200,84 @@ def causal_table():
     values[:,1]=1.5*values[:,0]+.25*values[:,1]
     values[:,2]=1.1*values[:,1]+.25*values[:,2]
     return ['z_treatment','m_mediator','a_outcome','isolated'],values
+
+
+class UploadSyntheticService(SyntheticService):
+    """Tiny CSV protocol fixture; memory use here is not server capacity evidence."""
+    def __init__(self, interrupt_once=True):
+        super().__init__()
+        self.uploads = {}
+        self.file_tables = {}
+        self.interrupt_once = interrupt_once
+
+    def __call__(self, request):
+        import csv
+        import hashlib
+        import io
+        assert request.url.host == 'notebook.invalid', 'Fixture must not make live requests.'
+        path, method = request.url.path, request.method
+        if path == '/v1/uploads' and method == 'POST':
+            declared = json.loads(request.content)
+            uid = f'upload-{len(self.uploads)}'
+            self.uploads[uid] = dict(info=dict(id=uid, workspace_id='workspace-fixture', **declared, chunk_bytes=16,
+                received_indices=[], status='uploading', dataset_id=None,
+                expires_at='2099-01-01T00:00:00Z'), chunks={})
+            return httpx.Response(200, json=self.uploads[uid]['info'])
+        if path.startswith('/v1/uploads/'):
+            parts = path.split('/'); uid = parts[3]
+            state = self.uploads[uid]; info = state['info']
+            if method == 'GET':
+                return httpx.Response(200, json=info)
+            if len(parts) == 6 and parts[4] == 'chunks' and method == 'PUT':
+                index = int(parts[5]); body = request.content
+                assert hashlib.sha256(body).hexdigest() == request.headers['x-chunk-sha256']
+                expected = min(info['chunk_bytes'], info['size_bytes'] - index * info['chunk_bytes'])
+                assert len(body) == expected and expected > 0
+                if index in state['chunks']:
+                    assert state['chunks'][index] == body
+                state['chunks'][index] = body
+                info['received_indices'] = sorted(state['chunks'])
+                if self.interrupt_once:
+                    self.interrupt_once = False
+                    raise httpx.ReadError('Synthetic lost chunk acknowledgement.', request=request)
+                return httpx.Response(200, json=info)
+            if path.endswith('/complete') and method == 'POST':
+                if info['dataset_id']:
+                    return httpx.Response(200, json=self.data[info['dataset_id']])
+                body = b''.join(state['chunks'][i] for i in range(len(state['chunks'])))
+                assert len(body) == info['size_bytes'] and hashlib.sha256(body).hexdigest() == info['sha256']
+                table = list(csv.reader(io.StringIO(body.decode('utf-8'))))
+                columns = table[0]; types = info['schema']['types']
+                assert columns == info['schema']['columns']
+                def cell(value, kind):
+                    if value == '': return None
+                    if kind == 'number': return float(value)
+                    if kind == 'boolean':
+                        assert value in ('true', 'false')
+                        return value == 'true'
+                    return value
+                rows = [[cell(v, t) for v, t in zip(row, types)] for row in table[1:]]
+                item = dict(id=f'dataset-{len(self.data)}', name='Uploaded CSV', columns=columns,
+                    types=['numeric' if t == 'number' else 'categorical' for t in types],
+                    rows=len(rows), target=info['target'], created_at='2026-01-01T00:00:00Z')
+                self.file_tables[item['id']] = rows
+                self.data[item['id']] = item
+                info.update(status='complete', dataset_id=item['id'])
+                return httpx.Response(200, json=item)
+        if path.startswith('/v1/datasets/') and method == 'GET':
+            return httpx.Response(200, json=self.data[path.rsplit('/', 1)[1]])
+        return super().__call__(request)
+
+
+def notebook_file_client():
+    options = notebook_options()
+    if os.environ.get('WELT_NOTEBOOK_MODE', 'fixture') == 'fixture':
+        options['transport'] = httpx.MockTransport(UploadSyntheticService())
+    return Client(**options)
+
+
+def notebook_async_file_client():
+    options = notebook_options()
+    if os.environ.get('WELT_NOTEBOOK_MODE', 'fixture') == 'fixture':
+        options['transport'] = httpx.MockTransport(UploadSyntheticService(interrupt_once=False))
+    return AsyncClient(**options)

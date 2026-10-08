@@ -1,7 +1,7 @@
 # Executable notebooks
 
 The notebooks demonstrate task-gated classification/regression, async job reconnect,
-predictor reopening and usage, plus a causal SDK source candidate. The causal
+predictor reopening and usage, plus causal and SDK 0.4 resumable CSV source candidates. The causal
 notebook validates native-result/score plumbing using a synthetic transport; live
 ArrowFM and optional approved Ergodic conversion remain separate gates. True batch and the five-engine causal/ergodic pack follow their
 actual implementation/qualification; no placeholder notebook is claimed working.
@@ -50,3 +50,11 @@ To validate only the separately qualified regression task without preparing the
 other examples again, use `.venv/bin/python scripts/check_notebooks.py --live --notebook regression` with the same locally configured credentials. The optional
 `--notebook` selector also works in default fixture mode. Other examples are not
 counted as checked by a selected run.
+
+The files-and-resume candidate writes only a tiny local synthetic CSV. Default
+fixture mode accepts a chunk then loses its acknowledgement, demonstrating resume
+without creating a second upload. Live mode may complete without interruption; it
+retains synthetic hosted uploads/datasets and performs no deletion or model jobs.
+Use the matching built SDK 0.4 wheel for this new notebook. Async await cancellation
+is local and differs from explicit job cancellation. Backend tenant/capacity and
+actual model reuse require separate hosted evidence.
