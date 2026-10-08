@@ -147,6 +147,50 @@ class Client(_HTTP):
     def models(self):
         return self.request("GET", "/v1/models")["items"]
 
+    def research_datasets(self, *, q=None, source=None, availability=None, license=None,
+                          limit=20, cursor=None):
+        """Search one bounded research-catalogue page; does not upload content."""
+        from .research import search_params
+        return self.request("GET", "/v1/research-datasets", params=search_params(
+            q, source, availability, license, limit, cursor))
+
+    def research_dataset(self, dataset_id):
+        from .research import research_id
+        return self.request("GET", f"/v1/research-datasets/{research_id(dataset_id)}")
+
+    def download_research_dataset(self, dataset_id, path, *, version=None,
+                                  max_bytes=64 * 1024 * 1024):
+        """Download pinned bytes to a new file; verify size/SHA before publication."""
+        from pathlib import Path
+        from .research import destination, download_metadata, research_id
+        dataset_id = research_id(dataset_id)
+        pinned, digest, size = download_metadata(self.research_dataset(dataset_id), dataset_id,
+                                                  version, max_bytes)
+        try:
+            with destination(path, digest, size) as writer:
+                with self.http.stream("GET", f"/v1/research-datasets/{dataset_id}/content",
+                         params={"version": pinned}, headers={"Accept-Encoding": "identity"},
+                         follow_redirects=False) as response:
+                    if response.headers.get("content-encoding", "identity").lower() != "identity":
+                        from .research import invalid_download
+                        raise invalid_download()
+                    if response.is_error:
+                        error_body = bytearray()
+                        for chunk in response.iter_raw(chunk_size=65536):
+                            if len(error_body) + len(chunk) > 65536:
+                                from .research import invalid_download
+                                raise invalid_download()
+                            error_body.extend(chunk)
+                        _response(httpx.Response(response.status_code, headers=response.headers,
+                                                 content=bytes(error_body)))
+                    writer.headers(response)
+                    for chunk in response.iter_raw(chunk_size=65536):
+                        writer.write(chunk)
+        except httpx.RequestError:
+            raise TransportError("Research download interrupted; no destination was published.",
+                                 code="transport_error", retryable=True) from None
+        return Path(path)
+
     def datasets(self):
         return self.request("GET", "/v1/datasets")["items"]
 
@@ -299,6 +343,48 @@ class AsyncClient(_HTTP):
 
     async def models(self):
         return (await self.request("GET", "/v1/models"))["items"]
+
+    async def research_datasets(self, *, q=None, source=None, availability=None, license=None,
+                                limit=20, cursor=None):
+        from .research import search_params
+        return await self.request("GET", "/v1/research-datasets", params=search_params(
+            q, source, availability, license, limit, cursor))
+
+    async def research_dataset(self, dataset_id):
+        from .research import research_id
+        return await self.request("GET", f"/v1/research-datasets/{research_id(dataset_id)}")
+
+    async def download_research_dataset(self, dataset_id, path, *, version=None,
+                                        max_bytes=64 * 1024 * 1024):
+        from pathlib import Path
+        from .research import destination, download_metadata, research_id
+        dataset_id = research_id(dataset_id)
+        pinned, digest, size = download_metadata(await self.research_dataset(dataset_id), dataset_id,
+                                                  version, max_bytes)
+        try:
+            with destination(path, digest, size) as writer:
+                async with self.http.stream("GET", f"/v1/research-datasets/{dataset_id}/content",
+                         params={"version": pinned}, headers={"Accept-Encoding": "identity"},
+                         follow_redirects=False) as response:
+                    if response.headers.get("content-encoding", "identity").lower() != "identity":
+                        from .research import invalid_download
+                        raise invalid_download()
+                    if response.is_error:
+                        error_body = bytearray()
+                        async for chunk in response.aiter_raw(chunk_size=65536):
+                            if len(error_body) + len(chunk) > 65536:
+                                from .research import invalid_download
+                                raise invalid_download()
+                            error_body.extend(chunk)
+                        _response(httpx.Response(response.status_code, headers=response.headers,
+                                                 content=bytes(error_body)))
+                    writer.headers(response)
+                    async for chunk in response.aiter_raw(chunk_size=65536):
+                        writer.write(chunk)
+        except httpx.RequestError:
+            raise TransportError("Research download interrupted; no destination was published.",
+                                 code="transport_error", retryable=True) from None
+        return Path(path)
 
     async def datasets(self):
         return (await self.request("GET", "/v1/datasets"))["items"]

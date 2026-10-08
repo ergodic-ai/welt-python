@@ -32,16 +32,19 @@ Predictors retain exact model/config/seed identity. `Classifier.from_predictor(i
 reopens a persisted fit. A new fit creates a new predictor; cache eviction does not
 mean deletion. Current SDK resources include datasets(), predictors(), jobs() and
 usage(); metadata inspection/export_metadata() returns authorized JSON-compatible server
-provenance only, never weights/context/credentials. Delete/recipes require future routes.
+provenance only, never weights/context/credentials. Explicit owned dataset/causal-result
+deletion is available; recipe/deletion-plan transport remains separate.
 
 Only controlled tests establish current clone/Pipeline/CV and construction behavior.
 The full official estimator/task/version matrix, batch/resumable
-files and causal results/ergodic remain qualification/implementation work. Separate
-AsyncClient/AsyncJob interfaces and the supported notebook examples are documented
-in the incremental0.2 source; their checks are distinct from real model qualification. No conformal uncertainty or full catalogue availability
+files, remaining causal engines and public Ergodic continuation remain gates.
+AsyncClient/AsyncJob and native ArrowFM/CDFM/AVICI results retain their independently
+qualified narrow boundaries; the supported notebook checks remain distinct from
+real model qualification. SDK0.6 adds the [research catalogue](research-datasets.md)
+without including unreleased CSV0.4 or batch0.5. No conformal uncertainty or full catalogue availability
 is claimed by this SDK release.
 
-In0.2, only safe GET requests have bounded automatic retries (default two,
+Safe metadata GET requests have bounded automatic retries (default two,
 maximum five), respecting Retry-After up to the configured wait bound; a larger
 hint returns an actionable typed error rather than retrying early. POST mutations
 never auto-retry. Reusing a Client submission requires

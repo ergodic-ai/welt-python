@@ -4,7 +4,10 @@ Python client for Welt's structured-data foundation-model API. Installable packa
 `welt-client`, import `welt`. This public repository owns SDK source and developer
 documentation; the hosted service is maintained separately.
 
-The incremental 0.3.0 client offers sync/async HTTP resources, durable job polling,
+The incremental 0.6.0 client retains the released 0.3 interfaces and adds bounded
+sync/async research catalogue search, inspection and verified file downloads.
+It does not include the separate unreleased resumable CSV0.4 or batch0.5 candidates.
+The client offers sync/async HTTP resources, durable job polling,
 sklearn-shaped `Classifier`/`Regressor`, named DataFrames/arrays/CSV/Parquet input,
 probabilities, predictor reopening/metadata, credential-safe serialization and
 sanitized typed errors. Five examples use controlled synthetic transport, with separate bounded
@@ -56,7 +59,7 @@ Client.submit_fit request requires the caller to reuse its idempotency_key; omit
 it generates a fresh key for each call. Estimator refit creates a new upload/job. Model availability and maximum
 rows/features/classes are visible through `Client.models()`.
 
-See [SDK guide](docs/usage.md), [model selection](docs/model-selection.md) and
+See [research datasets](docs/research-datasets.md), [SDK guide](docs/usage.md), [model selection](docs/model-selection.md) and
 [causal discovery](docs/causal-discovery.md) and [contributor notes](CONTRIBUTING.md).
 
 ## Checks
