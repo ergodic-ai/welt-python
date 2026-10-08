@@ -174,6 +174,34 @@ class Client(_HTTP):
         return self.request("POST", "/v1/datasets", json=dict(
             columns=columns, rows=rows, name=name, target=target))
 
+    def upload_info(self, upload_id):
+        return self.request("GET", f"/v1/uploads/{_id(upload_id)}")
+
+    def upload_file(self, path, *, target=None, schema=None):
+        """Upload bounded binary chunks; failures expose upload_id for resume."""
+        from .uploads import declaration
+        declared = declaration(path, target, schema)
+        info = self.request("POST", "/v1/uploads", json=declared)
+        return self._send_file(info, path, declared)
+
+    def resume_upload(self, upload_id, path, *, target=None, schema=None):
+        from .uploads import declaration
+        return self._send_file(self.upload_info(upload_id), path, declaration(path, target, schema), upload_id)
+
+    def _send_file(self, info, path, declared, upload_id=None):
+        from .uploads import annotate, chunks, matches
+        try:
+            matches(info, declared, upload_id)
+            for index, body, digest in chunks(path, info, declared):
+                self.request("PUT", f"/v1/uploads/{_id(info['id'])}/chunks/{index}", content=body,
+                    headers={"Content-Type": "application/octet-stream", "X-Chunk-SHA256": digest})
+            return self.request("POST", f"/v1/uploads/{_id(info['id'])}/complete")
+        except (WeltError, OSError, asyncio.CancelledError) as error:
+            known_id = upload_id or (info.get("id") if isinstance(info, dict) else None)
+            if isinstance(known_id, str) and known_id:
+                annotate(error, known_id)
+            raise
+
     def submit_fit(self, dataset_id, *, model, task, configuration="default", seed=0,
                    idempotency_key=None):
         result = self.request("POST", "/v1/fits", json=_fit(
@@ -326,6 +354,60 @@ class AsyncClient(_HTTP):
     async def upload(self, *, columns, rows, name="SDK dataset", target=None):
         return await self.request("POST", "/v1/datasets", json=dict(
             columns=columns, rows=rows, name=name, target=target))
+
+    async def upload_info(self, upload_id):
+        return await self.request("GET", f"/v1/uploads/{_id(upload_id)}")
+
+    async def upload_file(self, path, *, target=None, schema=None):
+        from .uploads import declaration
+        declared = await asyncio.to_thread(declaration, path, target, schema)
+        info = await self.request("POST", "/v1/uploads", json=declared)
+        return await self._send_file(info, path, declared)
+
+    async def resume_upload(self, upload_id, path, *, target=None, schema=None):
+        from .uploads import declaration
+        declared = await asyncio.to_thread(declaration, path, target, schema)
+        return await self._send_file(await self.upload_info(upload_id), path, declared, upload_id)
+
+    async def _send_file(self, info, path, declared, upload_id=None):
+        from .uploads import annotate, chunks, matches
+        try:
+            matches(info, declared, upload_id)
+            iterator = chunks(path, info, declared)
+            # Avoid synchronous disk reads on the async HTTP event loop.
+            def advance():
+                return next(iterator, None)
+            async def next_chunk():
+                task = asyncio.create_task(asyncio.to_thread(advance))
+                try:
+                    return await asyncio.shield(task)
+                except asyncio.CancelledError as cancelled:
+                    # Finish this bounded read before closing its generator.
+                    while not task.done():
+                        try:
+                            await asyncio.shield(task)
+                        except asyncio.CancelledError:
+                            continue
+                        except Exception:
+                            break
+                    try:
+                        task.result()
+                    except (Exception, asyncio.CancelledError):
+                        pass
+                    raise cancelled
+            try:
+                while item := await next_chunk():
+                    index, body, digest = item
+                    await self.request("PUT", f"/v1/uploads/{_id(info['id'])}/chunks/{index}", content=body,
+                        headers={"Content-Type": "application/octet-stream", "X-Chunk-SHA256": digest})
+            finally:
+                iterator.close()
+            return await self.request("POST", f"/v1/uploads/{_id(info['id'])}/complete")
+        except (WeltError, OSError, asyncio.CancelledError) as error:
+            known_id = upload_id or (info.get("id") if isinstance(info, dict) else None)
+            if isinstance(known_id, str) and known_id:
+                annotate(error, known_id)
+            raise
 
     async def submit_fit(self, dataset_id, *, model, task, configuration="default", seed=0,
                          idempotency_key=None):
