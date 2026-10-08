@@ -34,4 +34,8 @@ __all__ = [
     "CausalDiscovery", "CausalResult", "InvalidCausalResultError",
     "OptionalDependencyError", "UnsupportedGraphConversionError",
 ]
-__version__ = "0.4.0"
+__version__ = "0.5.0"
+
+from .batch import BatchResult, BatchPayload
+from .errors import InvalidBatchResultError
+__all__ += ["BatchResult", "BatchPayload", "InvalidBatchResultError"]

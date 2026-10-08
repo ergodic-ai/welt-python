@@ -78,6 +78,43 @@ class RegressionNotebookFixture(unittest.TestCase):
         np.testing.assert_array_equal(target,expected_target)
 
 
+class BatchNotebookFixture(unittest.TestCase):
+    def test_manifest_reopen_payload_partial_order_and_expiry(self):
+        from welt import ResultExpiredError
+        support=RegressionNotebookFixture.support()
+        service=support.BatchSyntheticService()
+        with patch.dict('os.environ',{'WELT_NOTEBOOK_MODE':'fixture','WELT_API_KEY':'must-not-be-read'}):
+            with support.notebook_batch_client(service) as client:
+                columns,query,predictor=support.prepare(client)
+                dataset=client.upload(columns=columns,rows=query[:5].tolist())
+                job=client.submit_batch(dataset['id'],predictor_id=predictor['id'],probabilities=True)
+                result=job.result()
+                self.assertEqual(result.status,'partially_completed')
+                self.assertEqual(service.payload_reads,0)
+            with support.notebook_batch_client(service) as client:
+                self.assertEqual(client.batch_result(job.id).to_dict(),result.to_dict())
+                payload=client.batch_payload(job.id,result_reference=result.result_reference)
+                self.assertEqual(payload.predictions[2:4],(None,None))
+                self.assertEqual(payload.probabilities[2:4],(None,None))
+                self.assertEqual(payload.errors[0]['range'],(2,4))
+                detached=payload.to_dict();detached['errors'][0]['range'][0]=99
+                self.assertEqual(payload.errors[0]['range'],(2,4))
+                operation=client.job(job.id).inspect()['operation_id']
+                self.assertNotEqual(operation,job.id)
+                self.assertEqual([e['status'] for e in client.usage() if e['operation_id']==operation],
+                                 ['queued','partially_completed'])
+                service.expired=True
+                with self.assertRaises(ResultExpiredError):client.batch_payload(job.id)
+                self.assertEqual(client.batch_result(job.id).to_dict(),result.to_dict())
+
+    def test_live_batch_refuses_before_transport_or_client_creation(self):
+        support=RegressionNotebookFixture.support()
+        with patch.dict('os.environ',{'WELT_NOTEBOOK_MODE':'live'}),patch.object(support,'Client') as client:
+            with self.assertRaisesRegex(RuntimeError,'no qualified live task'):
+                support.notebook_batch_client()
+            client.assert_not_called()
+
+
 class FileNotebookFixture(unittest.TestCase):
     @staticmethod
     def support():

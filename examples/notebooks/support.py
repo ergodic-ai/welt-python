@@ -99,6 +99,79 @@ def notebook_async_client():
     return AsyncClient(**notebook_options())
 
 
+class BatchSyntheticService(SyntheticService):
+    """Partial batch wire fixture; no native calls, database CAS or resource proof."""
+    def __init__(self):
+        super().__init__()
+        self.batch_results, self.batch_payloads = {}, {}
+        self.payload_reads = 0
+        self.expired = False
+
+    def usage(self, *args, **kwargs):
+        super().usage(*args, **kwargs)
+        self.events[-1].update(resolved_configuration={}, device=None)
+
+    def __call__(self, request):
+        assert request.url.host == 'notebook.invalid', 'Fixture must not make live requests.'
+        path, method = request.url.path, request.method
+        if path == '/v1/batch-predictions' and method == 'POST':
+            value = json.loads(request.content)
+            dataset = self.data[value['dataset_id']]
+            predictor = self.fitted[value['predictor_id']]
+            assert dataset['target'] is None and len(dataset['rows']) == 5
+            assert predictor['task'] == 'classification'
+            jid = f'batch-job-{len(self.batch_results)}'
+            op = f'batch-operation-{len(self.batch_results)}'
+            reference = f'batch-result-{len(self.batch_results)}'
+            result = dict(job_id=jid, row_count=5, successful_ranges=[[0,2],[4,5]],
+                failed_ranges=[[2,4]], result_reference=reference,
+                expires_at='2099-01-01T00:00:00+00:00', model_version=predictor['model_version'])
+            ordered = [dataset['columns'].index(c) for c in predictor['columns']]
+            rows = [[row[i] for i in ordered] for row in dataset['rows']]
+            labels = ['positive' if row[0]+.5*row[1]>0 else 'negative' for row in rows]
+            predictions = [labels[0],labels[1],None,None,labels[4]]
+            vectors = [[.1,.9] if label=='positive' else [.9,.1] for label in labels]
+            probabilities = [vectors[0],vectors[1],None,None,vectors[4]] if value['probabilities'] else None
+            self.batch_results[jid] = result
+            self.batch_payloads[jid] = dict(job_id=jid,result_reference=reference,row_count=5,
+                model_version=predictor['model_version'],predictor_id=predictor['id'],operation_id=op,
+                batch_protocol='welt-batch-contiguous-v1',predictions=predictions,
+                probabilities=probabilities,classes=predictor['classes'],
+                errors=[dict(range=[2,4],code='execution_failed',retryable=False,outcome='failed')])
+            self.job_records[jid] = dict(id=jid,status='partially_completed',stage='partially_completed',
+                operation='batch_predict',operation_id=op,model_id=predictor['model_id'],
+                model_version=predictor['model_version'],dataset_id=dataset['id'],
+                predictor_id=predictor['id'],task='classification',configuration='default',
+                resolved_configuration={},seed=predictor['seed'],result=result,error=None,
+                created_at='2026-01-01T00:00:00+00:00',updated_at='2026-01-01T00:00:00+00:00',
+                expires_at=result['expires_at'])
+            for status in ('queued','partially_completed'):
+                self.usage(op,'batch_predict',status,dataset['id'],predictor['id'],5)
+            return httpx.Response(202,json=self.job_records[jid])
+        if path.startswith('/v1/jobs/batch-job-'):
+            jid = path.split('/')[3]
+            if path.endswith('/result/payload'):
+                assert request.url.params['result_reference'] == self.batch_results[jid]['result_reference']
+                self.payload_reads += 1
+                if self.expired:
+                    return httpx.Response(410,json=dict(error=dict(code='result_expired',
+                        message='Synthetic fixture clock has crossed payload expiry.',retryable=False,
+                        request_id='synthetic-batch-expiry',job_id=jid)))
+                return httpx.Response(200,json=self.batch_payloads[jid])
+            if path.endswith('/result'):
+                return httpx.Response(200,json=self.batch_results[jid])
+            return httpx.Response(200,json=self.job_records[jid])
+        return super().__call__(request)
+
+
+def notebook_batch_client(service=None):
+    if os.environ.get('WELT_NOTEBOOK_MODE','fixture') != 'fixture':
+        raise RuntimeError('Batch has no qualified live task; this example is controlled transport only.')
+    options=notebook_options()
+    options['transport']=httpx.MockTransport(service if service is not None else BatchSyntheticService())
+    return Client(**options)
+
+
 def synthetic_table():
     rng=np.random.default_rng(9);X=rng.normal(size=(160,4))
     labels=np.where(X[:,0]+0.5*X[:,1]>0,'positive','negative')

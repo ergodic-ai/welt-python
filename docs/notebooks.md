@@ -1,6 +1,6 @@
 # Executed notebook examples
 
-Six source-candidate examples demonstrate task-gated workflows:
+Seven source-candidate examples demonstrate task-gated workflows:
 
 - [Classification](https://github.com/ergodic-ai/welt-python/blob/main/examples/notebooks/classification.ipynb): synthetic table upload, durable fit, probabilities, repeated prediction and reopen.
 - [Regression](https://github.com/ergodic-ai/welt-python/blob/main/examples/notebooks/regression.ipynb): separately qualified task, finite mean points, named-column alignment and pinned reopen.
@@ -16,10 +16,12 @@ nbclient, keeps outputs in memory/temp directories and rejects saved source outp
 Synthetic fixture execution proves example/client plumbing, not FM quality or
 backend security. Separate live evidence is needed for real model behavior.
 
-Further model swapping, true batch workflows and five-engine causal-to-ergodic
+Further model swapping, native batch qualification and five-engine causal-to-ergodic
 examples are later gates requiring their actual supported contracts and runtimes.
 No placeholder notebook is counted as working or silently skipped to close the
 complete catalogue milestone. Notebook sources have cleared execution counts and
 outputs. Download/open notebooks from the matching reviewed SDK revision for reuse.
 
 - [Files and resume](https://github.com/ergodic-ai/welt-python/blob/feat/causal-client-preview/examples/notebooks/files-and-resume.ipynb): SDK 0.4 candidate CSV declaration, lost acknowledgement, resumption, repeat completion, dataset reopening and async upload. Hosted acceptance/publication are separate gates.
+
+- [Batch predictions](https://github.com/ergodic-ai/welt-python/blob/feat/batch-client-preview/examples/notebooks/batch-predictions.ipynb): SDK 0.5 candidate partial manifest, explicit ordered payload, durable reconnect and typed expiry through controlled transport. Current live mode refuses before requests; native batch tasks and hosted acceptance remain unqualified.

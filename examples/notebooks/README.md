@@ -3,8 +3,10 @@
 The notebooks demonstrate task-gated classification/regression, async job reconnect,
 predictor reopening and usage, plus causal and SDK 0.4 resumable CSV source candidates. The causal
 notebook validates native-result/score plumbing using a synthetic transport; live
-ArrowFM and optional approved Ergodic conversion remain separate gates. True batch and the five-engine causal/ergodic pack follow their
-actual implementation/qualification; no placeholder notebook is claimed working.
+ArrowFM and optional approved Ergodic conversion remain separate gates. The SDK
+0.5 batch candidate demonstrates partial manifests, explicit payloads and expiry
+through controlled transport. Native batch and the five-engine causal/ergodic pack
+follow their actual qualification; no placeholder model execution is claimed.
 
 Run from this directory using the repository's locked development environment,
 or run `python scripts/check_notebooks.py` from its root. Default mode uses only
@@ -58,3 +60,11 @@ retains synthetic hosted uploads/datasets and performs no deletion or model jobs
 Use the matching built SDK 0.4 wheel for this new notebook. Async await cancellation
 is local and differs from explicit job cancellation. Backend tenant/capacity and
 actual model reuse require separate hosted evidence.
+
+The batch-predictions candidate uses the matching SDK 0.5 wheel. Its synthetic
+fixture illustrates one failed range, immutable row placement, client reopening,
+operation usage and typed payload expiry. It does not test native predictions,
+database races, cancellation preemption or seven days of hosted retention. Live
+mode refuses before any request because no task has qualified batch. Select a
+separately qualified existing notebook when running the checker with `--live`;
+there is no silent batch skip to claim a complete live notebook pack.

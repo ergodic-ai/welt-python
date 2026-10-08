@@ -20,7 +20,7 @@ def main():
     if installed_version('welt-client') != version or getattr(welt,'__version__',None) != version:
         raise SystemExit('Installed SDK version must match the documentation source version.')
     required=('Client','Job','Classifier','Regressor','AsyncClient','AsyncJob',
-              'CausalDiscovery','CausalResult')
+              'CausalDiscovery','CausalResult','BatchResult','BatchPayload')
     if any(not hasattr(welt,name) for name in required):
         raise SystemExit('Installed SDK is missing a required documented public symbol.')
     out=Path(args.output)/f'v{version}';out.mkdir(parents=True,exist_ok=True)
@@ -43,7 +43,7 @@ def main():
     base=out.parent;base.mkdir(parents=True,exist_ok=True)
     (base/'index.html').write_text(f'<!doctype html><html lang="en"><meta charset="utf-8"><title>Welt SDK documentation</title><body><a href="v{html.escape(version)}/">Welt SDK {html.escape(version)} documentation</a></body></html>')
     (base/'.nojekyll').write_text('')
-    manifest=dict(sdk_version=version,pages=sorted(pages),supported_notebooks=['classification','regression','artifacts-and-usage','async-jobs','causal-discovery','files-and-resume'],scope='incremental; full-model/SDK closure gates pending')
+    manifest=dict(sdk_version=version,pages=sorted(pages),supported_notebooks=['classification','regression','artifacts-and-usage','async-jobs','causal-discovery','files-and-resume','batch-predictions'],scope='incremental; full-model/SDK closure gates pending')
     (out/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     print(f'Built {len(pages)} documentation pages for SDK {version}; no credentials or outputs included')
 

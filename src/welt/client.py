@@ -209,6 +209,39 @@ class Client(_HTTP):
             headers={"Idempotency-Key": idempotency_key or uuid4().hex})
         return Job(self, result["id"])
 
+    def submit_batch(self, dataset_id, *, predictor_id, probabilities=False, idempotency_key=None):
+        if type(probabilities) is not bool:
+            raise ValueError("probabilities must be boolean.")
+        result = self.request("POST", "/v1/batch-predictions",
+            json=dict(predictor_id=predictor_id, dataset_id=dataset_id, probabilities=probabilities),
+            headers={"Idempotency-Key": idempotency_key or uuid4().hex})
+        return Job(self, result["id"])
+
+    def batch(self, dataset_id, *, predictor_id, probabilities=False, idempotency_key=None, timeout=600):
+        job = self.submit_batch(dataset_id, predictor_id=predictor_id, probabilities=probabilities,
+            idempotency_key=idempotency_key)
+        try:
+            return job.result(timeout=timeout)
+        except WeltError as error:
+            if error.job_id is None:
+                error.job_id = job.id
+            raise
+
+    def batch_result(self, job_id):
+        from .batch import BatchResult, job_binding
+        job = job_binding(self.job(job_id).inspect(), job_id)
+        return BatchResult(self.request("GET", f"/v1/jobs/{_id(job_id)}/result"), job)
+
+    def batch_payload(self, job_id, *, result_reference=None):
+        from .batch import BatchPayload, BatchResult, job_binding, invalid
+        job = job_binding(self.job(job_id).inspect(), job_id)
+        result = BatchResult(self.request("GET", f"/v1/jobs/{_id(job_id)}/result"), job)
+        if result_reference is not None and result_reference != result.result_reference:
+            invalid()
+        value = self.request("GET", f"/v1/jobs/{_id(job_id)}/result/payload",
+                             params={"result_reference": result.result_reference})
+        return BatchPayload(value, result, job)
+
     def submit_discover(self, dataset_id, *, model="arrow", configuration="default", seed=0,
                         constraints=None, model_version=None, idempotency_key=None):
         payload = _discovery(dataset_id, model, configuration, seed, constraints, model_version)
@@ -284,6 +317,8 @@ class Job:
         deadline = _deadline(timeout, poll_interval)
         while True:
             job = self.inspect()
+            if job.get("operation") == "batch_predict" and job["status"] in ("succeeded", "partially_completed", "failed", "cancelled"):
+                return self.client.batch_result(self.id)
             if job["status"] == "succeeded":
                 if job["operation"] == "discover":
                     return self.client.causal_result(self.id)
@@ -416,6 +451,39 @@ class AsyncClient(_HTTP):
             headers={"Idempotency-Key": idempotency_key or uuid4().hex})
         return AsyncJob(self, result["id"])
 
+    async def submit_batch(self, dataset_id, *, predictor_id, probabilities=False, idempotency_key=None):
+        if type(probabilities) is not bool:
+            raise ValueError("probabilities must be boolean.")
+        result = await self.request("POST", "/v1/batch-predictions",
+            json=dict(predictor_id=predictor_id, dataset_id=dataset_id, probabilities=probabilities),
+            headers={"Idempotency-Key": idempotency_key or uuid4().hex})
+        return AsyncJob(self, result["id"])
+
+    async def batch(self, dataset_id, *, predictor_id, probabilities=False, idempotency_key=None, timeout=600):
+        job = await self.submit_batch(dataset_id, predictor_id=predictor_id, probabilities=probabilities,
+            idempotency_key=idempotency_key)
+        try:
+            return await job.result(timeout=timeout)
+        except (WeltError, asyncio.CancelledError) as error:
+            if getattr(error, "job_id", None) is None:
+                error.job_id = job.id
+            raise
+
+    async def batch_result(self, job_id):
+        from .batch import BatchResult, job_binding
+        job = job_binding(await self.job(job_id).inspect(), job_id)
+        return BatchResult(await self.request("GET", f"/v1/jobs/{_id(job_id)}/result"), job)
+
+    async def batch_payload(self, job_id, *, result_reference=None):
+        from .batch import BatchPayload, BatchResult, job_binding, invalid
+        job = job_binding(await self.job(job_id).inspect(), job_id)
+        result = BatchResult(await self.request("GET", f"/v1/jobs/{_id(job_id)}/result"), job)
+        if result_reference is not None and result_reference != result.result_reference:
+            invalid()
+        value = await self.request("GET", f"/v1/jobs/{_id(job_id)}/result/payload",
+                                   params={"result_reference": result.result_reference})
+        return BatchPayload(value, result, job)
+
     async def submit_discover(self, dataset_id, *, model="arrow", configuration="default", seed=0,
                               constraints=None, model_version=None, idempotency_key=None):
         payload = _discovery(dataset_id, model, configuration, seed, constraints, model_version)
@@ -465,13 +533,19 @@ class AsyncJob:
 
     async def result(self, *, timeout=600, poll_interval=0.25):
         deadline = _deadline(timeout, poll_interval)
-        while True:
-            job = await self.inspect()
-            if job["status"] == "succeeded":
-                if job["operation"] == "discover":
-                    return await self.client.causal_result(self.id)
-                return (await self.client.request("GET", f"/v1/jobs/{_id(self.id)}/result")
-                        if job["operation"] == "predict" else await self.client.predictor(job["predictor_id"]))
-            _failed(job)
-            await asyncio.sleep(_wait(deadline, self.id, poll_interval))
-            poll_interval = min(poll_interval * 1.4, 5)
+        try:
+            while True:
+                job = await self.inspect()
+                if job.get("operation") == "batch_predict" and job["status"] in ("succeeded", "partially_completed", "failed", "cancelled"):
+                    return await self.client.batch_result(self.id)
+                if job["status"] == "succeeded":
+                    if job["operation"] == "discover":
+                        return await self.client.causal_result(self.id)
+                    return (await self.client.request("GET", f"/v1/jobs/{_id(self.id)}/result")
+                            if job["operation"] == "predict" else await self.client.predictor(job["predictor_id"]))
+                _failed(job)
+                await asyncio.sleep(_wait(deadline, self.id, poll_interval))
+                poll_interval = min(poll_interval * 1.4, 5)
+        except asyncio.CancelledError as error:
+            error.job_id = self.id
+            raise

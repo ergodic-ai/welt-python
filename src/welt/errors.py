@@ -80,3 +80,7 @@ class UnsupportedGraphConversionError(WeltError, ValueError):
 
 class OptionalDependencyError(WeltError, ImportError):
     pass
+
+
+class InvalidBatchResultError(WeltError, ValueError):
+    pass
