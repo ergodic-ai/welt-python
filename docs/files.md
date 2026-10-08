@@ -44,9 +44,17 @@ Replaying completion returns the same dataset, and cannot recreate a deleted one
 
 Preview defaults are 1 MiB/chunk, 64 MiB/file, four active uploads/workspace and
 24 hours to complete an upload, with at most 4096 chunks. Each CSV field is bounded
-to 131072 characters. The existing normalized dataset size, row/column
+to 131072 characters. Each header/data record also has a conservative 10 MiB
+budget counted as JSON-escaped lexical field text before parsing. This includes
+Unicode/control-character expansion; long numeric spellings can reject even when
+the normalized value would be small. The existing normalized dataset size, row/column
 allowances and individual model envelopes still apply. Raw CSV size does not
-expand a model's admitted context. Logical upload expiry is distinct from physical
+expand a model's admitted context. Only one completion is admitted per API process by default across workspaces. A
+busy completion returns retryable `upload_busy` (429) with `Retry-After: 30`;
+respect the retry guidance and resume the same acknowledged upload ID rather than
+creating another upload.
+
+Logical upload expiry is distinct from physical
 storage cleanup. This slice performs no hosted deletion.
 
 `AsyncClient` exposes the same upload methods with `await`; local cancellation
