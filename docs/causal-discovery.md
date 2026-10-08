@@ -6,7 +6,12 @@ separate scores. The service catalogue reports exact task/version/readiness.
 CDFM also qualifies this input envelope with original native adaptive threshold,
 separate native scores and directed output, including possible cycles/reciprocals.
 Select model="cdfm" through the same client interfaces; it does not relabel an
-acyclic directed result as a declared DAG. Other causal engines and a usable public
+acyclic directed result as a declared DAG. AVICI also qualifies this input envelope
+through model="avici", preserving full observations, native population z-score,
+strict probability>0.5 decoding and directed cycles/reciprocals. Its native PRNG
+key stays0; request seeds are retained provenance. It also refuses every
+non-declared-DAG Ergodic conversion. Native scores are not calibrated causal
+confidence or effects. Other causal engines and a usable public
 Ergodic co-release remain gated.
 No automatic Ergodic/model download is performed by these interfaces.
 
