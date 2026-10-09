@@ -23,8 +23,11 @@ with Client(base_url="https://welt.ergodic.dev",
     info = client.research_dataset(chosen)
     print(info["license"], info["schema"], info["targets"], info["splits"])
     content = info["content"]
+    print(content["media_type"], content["filename"])
+    suffix = {"application/vnd.apache.parquet": ".parquet",
+              "application/zip": ".zip"}[content["media_type"]]
     path = client.download_research_dataset(
-        chosen, Path("research.parquet"), version=content["version"])
+        chosen, Path("research" + suffix), version=content["version"])
 ```
 
 A page preserves `next_cursor`, `total`, `catalogue_version` and `facets`. Request
@@ -65,8 +68,26 @@ GET metadata has bounded retries. An interrupted content stream raises a sanitiz
 `TransportError`; rerun the download into a new destination after checking the
 catalogue. Partial bytes are never resumed or accepted implicitly.
 
-The downloaded format is Parquet. For local inspection install the existing
-`parquet` extra and use `pandas.read_parquet(path)`. Full research files can exceed
+Inspect `content.media_type` and its `filename` hint before opening a download.
+Ordinary tables are `application/vnd.apache.parquet`; install the existing
+`parquet` extra and use `pandas.read_parquet(path)`. Some source-qualified datasets
+are `application/zip` notice-bearing distributions containing exactly
+`dataset.parquet`, `LICENSE.txt` and `ATTRIBUTION.txt`. Explicitly extract those
+three members together into a new experiment directory; use fixed local member
+names, refuse unexpected members or existing destinations, and retain both notice
+files with the table when sharing. The SDK downloads verified binary bytes and
+does not silently extract archives or discard notices. The pinned Iris onboarding
+dataset remains an ordinary Parquet download.
+
+`content.version` and `content.sha256` identify the complete downloaded bytes.
+For a ZIP these are the archive checksum, while
+`info["provenance"]["canonical_sha256"]` identifies the unchanged canonical
+`dataset.parquet` inside it. Keep the full detail metadata and distinguish these
+two checksums when checking the extracted table. Downloadability remains a
+dataset-specific serving decision; it does not imply that every catalogue entry
+has eligible content.
+
+Full research files can exceed
 a serving model's row/feature/class bounds; inspect `Client.models()` and use an
 explicitly declared preparation/split recipe before uploading. There is no silent
 sampling, target inference, scientific benchmark claim or automatic upload here.
