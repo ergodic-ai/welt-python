@@ -1,15 +1,15 @@
 # Causal discovery
 
-SDK0.3.0 supports the independently accepted ArrowFM observational preview:
-2–500 rows and2–20 finite continuous variables, original native DAG decoder and
+SDK 0.7 retains the independently accepted ArrowFM observational preview:
+2–500 rows and 2–20 finite continuous variables, original native DAG decoder and
 separate scores. The service catalogue reports exact task/version/readiness.
 CDFM also qualifies this input envelope with original native adaptive threshold,
 separate native scores and directed output, including possible cycles/reciprocals.
 Select model="cdfm" through the same client interfaces; it does not relabel an
 acyclic directed result as a declared DAG. AVICI also qualifies this input envelope
 through model="avici", preserving full observations, native population z-score,
-strict probability>0.5 decoding and directed cycles/reciprocals. Its native PRNG
-key stays0; request seeds are retained provenance. It also refuses every
+strict probability > 0.5 decoding and directed cycles/reciprocals. Its native PRNG
+key stays 0; request seeds are retained provenance. It also refuses every
 non-declared-DAG Ergodic conversion. Native scores are not calibrated causal
 confidence or effects. Other causal engines and a usable public
 Ergodic co-release remain gated.
@@ -68,7 +68,7 @@ graph. Typed malformed-result errors apply without repair.
 `result.to_ergodic()` converts a declared native DAG locally, retains every isolate
 and native tail/arrow direction. It refuses every graph not explicitly declared a
 native DAG, including acyclic directed graphs and cycles, without projection.
-The actual compatible Ergodic0.1.1 co-release wheel has been
+The actual compatible Ergodic 0.1.1 co-release wheel has been
 checked privately. Its repository is private and the public package-index name
 currently refers to another project; there is no public causal extra yet. Install
 only the approved co-release artifact when available. Missing/unrelated dependency

@@ -1,7 +1,11 @@
-# Executable notebooks
+# SDK 0.7 notebook execution
+
+Download the matching notebook and support.py from tag v0.7.0 into the same
+directory. The helper works outside a repository checkout. Install the pinned
+release wheel plus optional JupyterLab, open from this directory and restart/run all.
 
 The notebooks demonstrate task-gated classification/regression, async job reconnect,
-predictor reopening and usage, plus a causal SDK source candidate. The causal
+predictor reopening and usage, research download and native causal discovery. The causal
 notebook validates native-result/score plumbing using a synthetic transport; live
 ArrowFM and optional approved Ergodic conversion remain separate gates. True batch and the five-engine causal/ergodic pack follow their
 actual implementation/qualification; no placeholder notebook is claimed working.

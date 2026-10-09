@@ -1,68 +1,76 @@
 # Welt Python SDK
 
-Python client for Welt's structured-data foundation-model API. Installable package
-`welt-client`, import `welt`. This public repository owns SDK source and developer
-documentation; the hosted service is maintained separately.
+From a DataFrame to a prediction. Use familiar `Classifier` and `Regressor`
+estimators backed by durable predictors in your private Welt workspace.
+Install `welt-client`, import `welt`. Python 3.11–3.13.
 
-The incremental 0.6.0 client retains the released 0.3 interfaces and adds bounded
-sync/async research catalogue search, inspection and verified file downloads.
-It does not include the separate unreleased resumable CSV0.4 or batch0.5 candidates.
-The client offers sync/async HTTP resources, durable job polling,
-sklearn-shaped `Classifier`/`Regressor`, named DataFrames/arrays/CSV/Parquet input,
-probabilities, predictor reopening/metadata, credential-safe serialization and
-sanitized typed errors. Five examples use controlled synthetic transport, with separate bounded
-live acceptance. Actual execution is subject to service catalogue capabilities,
-rights and limits. TabICLv2, Kumo Medium, TabDPT1.3 and Mitra-v2 classification/regression tasks are separately qualified
-for the narrow hosted preview; each additional task requires its own evidence.
+[Start here](https://ergodic-ai.github.io/welt-python/) ·
+[Guides](https://ergodic-ai.github.io/welt-python/v0.7.0/own-data.html) ·
+[Reference](https://ergodic-ai.github.io/welt-python/v0.7.0/reference.html) ·
+[Models and limits](docs/capabilities.md)
 
-ArrowFM observational discovery returns durable native DAGs and separate scores,
-with explicit owned result/dataset lifecycle and typed graph conversion. Its
-bounded hosted preview is qualified. CDFM adds native directed graphs with its
-original adaptive threshold and preserved scores; unsupported conversion is typed.
-AVICI adds original native directed scores with strict probability>0.5 decoding,
-including cycles/reciprocals, within the same bounded observational envelope.
-Its native inference key is fixed at0; request seeds remain provenance.
-Local Ergodic continuation for declared DAGs uses the approved
-private co-release artifact until a public distribution is available.
-
-Full sklearn matrix qualification, resumable uploads, large batch jobs,
-the remaining causal engines/public Ergodic co-release and the complete all-model notebook pack
-remain later gates. File input currently loads into memory.
-Private API state and model artifacts are never bundled with this SDK.
-
-## Install and use
+## Install
 
 ```sh
-pip install .
-# Optional Parquet reader:
-pip install '.[parquet]'
+python -m pip install 'welt-client @ https://github.com/ergodic-ai/welt-python/releases/download/v0.7.0/welt_client-0.7.0-py3-none-any.whl'
 ```
 
-Set `WELT_BASE_URL` to your service URL and `WELT_API_KEY` through your local secret
-configuration. Do not commit credentials or serialize credential-bearing clients/
-estimators. Signup/key onboarding depends on your deployed service's account release.
+Create a workspace API key at [Welt](https://welt.ergodic.dev) with **Allow writes,
+fits and predictions** enabled. Configure `WELT_API_KEY` through local secret
+configuration or a hidden `getpass` prompt. Keep the secret out of source, notebooks,
+logs and shell history. SDK 0.7 defaults to `https://welt.ergodic.dev`; an explicit
+`base_url` overrides `WELT_BASE_URL`, which overrides that default. Local development
+must explicitly select localhost.
+
+## Predict
 
 ```python
+import numpy as np
+import pandas as pd
 from welt import Classifier
 
-model = Classifier(model='tabicl-v2', random_state=9)
-model.fit(X_train, y_train)   # uploads, submits durable fit, waits
-predictions = model.predict(X_test)
-probabilities = model.predict_proba(X_test)
+rng = np.random.default_rng(9)
+values = rng.normal(size=(160, 4))
+train = pd.DataFrame(values[:128], columns=["a", "b", "c", "d"])
+train["label"] = np.where(values[:128, 0] + 0.5 * values[:128, 1] > 0,
+                          "positive", "negative")
+query = pd.DataFrame(values[128:], columns=["a", "b", "c", "d"])
+model = Classifier(model="tabicl-v2", random_state=9)
+model.fit(train, target="label")
+predictions = model.predict(query)
+print(predictions.shape)  # (32,)
 reopened = Classifier.from_predictor(model.predictor_id_)
+repeat = reopened.predict(query)
 ```
 
-A local wait timeout leaves server work running. Reconnect using `Client.job(id)`;
-`job.cancel()` requests explicit server cancellation. New intentional fits use new
-identities. Safe GET requests have bounded retries; POST mutations never auto-retry. Repeating an explicit
-Client.submit_fit request requires the caller to reuse its idempotency_key; omitting
-it generates a fresh key for each call. Estimator refit creates a new upload/job. Model availability and maximum
-rows/features/classes are visible through `Client.models()`.
+This synthetic recipe returns one label per query row, in order; actual labels
+come from the hosted model. It is not an accuracy benchmark. Use `Regressor`
+explicitly for numeric targets; the [complete regression example](docs/start.md)
+returns one finite target-unit point per row. `fit` uploads the table and waits for
+remote preparation; `predict` executes remotely. Created datasets/predictors remain
+retained. Reopening uses the pinned identity without another fit or training upload.
 
-See [research datasets](docs/research-datasets.md), [SDK guide](docs/usage.md), [model selection](docs/model-selection.md) and
-[causal discovery](docs/causal-discovery.md) and [contributor notes](CONTRIBUTING.md).
+SDK 0.7 adds explicit DataFrame target convenience and hosted credential guidance
+while preserving `fit(X, y)`, sync/async resources, durable jobs, research downloads
+and native causal objects. Available hosted tasks and workers follow the service
+catalogue. Bounded TabICLv2, Kumo Medium, TabDPT1.3 and Mitra-v2 classification and
+regression previews are separately qualified: 500 training rows, 20 features,
+100 query rows, and 10 classes for classification. Other tasks need separate
+qualification. File reads load into memory. Held resumable CSV and large batch
+APIs are excluded.
 
-## Checks
+A local wait timeout leaves server work running. Reconnect by its job ID rather
+than fitting again; [recovery](docs/async-and-errors.md) describes typed failures,
+authentication, cancellation and retry behavior. Probabilities are not calibrated
+coverage. ArrowFM, CDFM and AVICI discovery preserve native graph and score semantics;
+[causal conversion](docs/causal-discovery.md) is restricted to declared native DAGs
+and the separately approved Ergodic co-release artifact. Public Ergodic distribution
+and the complete all-model catalogue remain gated.
+
+## Examples and development
+
+[Runnable script](examples/first_prediction.py) · [Jupyter notebooks](docs/notebooks.md) ·
+[Research datasets](docs/research-datasets.md) · [Contributing](CONTRIBUTING.md)
 
 ```sh
 uv sync --frozen
@@ -70,22 +78,10 @@ uv run --frozen pytest -q
 uv build
 ```
 
-Tests use an independent in-memory HTTP contract fixture. They neither contact the
-hosted service nor execute a foundation model, and make no scientific/latency claim.
-CI does not require access to private backend source, credentials or checkpoints.
+Controlled synthetic transport tests neither contact the hosted service nor execute
+foundation models. Notebook sources have cleared outputs; clean-wheel execution and
+bounded authorized live acceptance are separate evidence. CI requires no private
+backend, credentials or checkpoints.
 
-For explicit estimator `submit_fit(X, y)`, close `job.client` in a finally block
-after waiting/submitting; blocking `fit` closes that internal client automatically.
-
-## License
-
-Licensed under Apache 2.0. See [LICENSE](LICENSE). Model weights and the hosted
-service are separate and are not licensed by this SDK repository.
-
-## Developer guides and Jupyter examples
-
-See [onboarding](docs/onboarding.md), [capabilities](docs/capabilities.md) and
-[notebook execution](docs/notebooks.md). Versioned static SDK docs are generated
-from these guides and installed package signatures; broader feature/model gates
-remain explicit. Notebook sources have cleared outputs and default to no live API
-access. Run them from a built wheel via `scripts/check_notebooks.py`.
+Apache 2.0: see [LICENSE](LICENSE). Model weights and hosted service are separate
+from this SDK licence.

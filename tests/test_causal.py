@@ -171,13 +171,13 @@ def test_result_reopen_rejects_different_owned_job_identity(asynchronous):
     if asynchronous:
 
         async def exercise():
-            async with AsyncClient(transport=httpx.MockTransport(response)) as client:
+            async with AsyncClient(api_key="fixture-only", transport=httpx.MockTransport(response)) as client:
                 with pytest.raises(InvalidCausalResultError):
                     await client.causal_result("other-job")
 
         asyncio.run(exercise())
     else:
-        with Client(transport=httpx.MockTransport(response)) as client:
+        with Client(api_key="fixture-only", transport=httpx.MockTransport(response)) as client:
             with pytest.raises(InvalidCausalResultError):
                 client.causal_result("other-job")
 

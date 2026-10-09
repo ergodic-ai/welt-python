@@ -22,8 +22,8 @@ def table(X):
             else pd.read_csv(path)
         )
     if isinstance(X, pd.DataFrame):
-        if any(not isinstance(c, str) for c in X.columns) or X.columns.has_duplicates:
-            raise ValueError("DataFrame columns must be unique strings.")
+        if any(not isinstance(c, str) or not c.strip() for c in X.columns) or X.columns.has_duplicates:
+            raise ValueError("DataFrame columns must be unique, nonempty strings.")
         columns = list(X.columns)
         array = X.to_numpy(dtype=object)
         named = True
@@ -52,6 +52,29 @@ def table(X):
             values.append(value)
         rows.append(values)
     return columns, rows, named
+
+
+def _training_table(X, y, target):
+    if (y is None) == (target is None):
+        raise ValueError("Provide exactly one of y or target='column_name'.")
+    if target is not None:
+        if not isinstance(X, pd.DataFrame):
+            raise ValueError("target requires a pandas DataFrame; use fit(X, y) for arrays or files.")
+        if not isinstance(target, str) or not target.strip():
+            raise ValueError("target must be a nonempty column name.")
+        if any(not isinstance(c, str) or not c.strip() for c in X.columns) or X.columns.has_duplicates:
+            raise ValueError("DataFrame columns must be unique, nonempty strings.")
+        if target not in X.columns:
+            raise ValueError("The target column is missing; provide its exact DataFrame column name.")
+        y = X[target]
+        X = X.drop(columns=[target])
+    columns, rows, named = table(X)
+    targets = np.asarray(y)
+    if targets.ndim != 1 or len(targets) != len(rows):
+        raise ValueError("y must be a one-dimensional target with one value per row.")
+    if pd.isna(targets).any():
+        raise ValueError("Targets must not contain missing values.")
+    return columns, rows, named, targets
 
 
 class _RemoteEstimator(BaseEstimator):
@@ -84,13 +107,12 @@ class _RemoteEstimator(BaseEstimator):
             if name.endswith("_") and not name.startswith("__"):
                 delattr(self, name)
 
-    def submit_fit(self, X, y):
-        columns, rows, named = table(X)
-        targets = np.asarray(y)
-        if targets.ndim != 1 or len(targets) != len(rows):
-            raise ValueError("y must be a one-dimensional target with one value per row.")
-        if pd.isna(targets).any():
-            raise ValueError("Targets must not contain missing values.")
+    def submit_fit(self, X, y=None, *, target=None):
+        """Submit preparation; specify y or a DataFrame target column explicitly."""
+        columns, rows, _, targets = _training_table(X, y, target)
+        return self._submit_table(columns, rows, targets)
+
+    def _submit_table(self, columns, rows, targets):
         if self._task == "classification":
             check_classification_targets(targets)
         elif not np.issubdtype(targets.dtype, np.number):
@@ -120,11 +142,12 @@ class _RemoteEstimator(BaseEstimator):
             raise
         return job
 
-    def fit(self, X, y):
+    def fit(self, X, y=None, *, target=None):
+        """Fit with separate labels or fit(dataframe, target="column_name")."""
         # A failed refit cannot leave an old remote identity looking newly fitted.
         self._clear_fitted()
-        columns, _, named = table(X)
-        job = self.submit_fit(X, y)
+        columns, rows, named, targets = _training_table(X, y, target)
+        job = self._submit_table(columns, rows, targets)
         try:
             predictor = job.result(timeout=self.timeout)
         finally:
@@ -165,13 +188,19 @@ class _RemoteEstimator(BaseEstimator):
     def predict_details(self, X, *, probabilities=False):
         check_is_fitted(self, "predictor_id_")
         columns, rows, named = table(X)
+        if named and set(columns) != set(self._columns_):
+            missing = sorted(set(self._columns_) - set(columns))
+            extra = sorted(set(columns) - set(self._columns_))
+            # Bound schema context; no rows, values, or full input representations.
+            def names(values):
+                return repr([name[:80] for name in values[:10]]) + (" (more omitted)" if len(values) > 10 else "")
+            raise ValueError(f"Prediction names differ from the fitted table. Missing: {names(missing)}. "
+                             f"Extra: {names(extra)}. Supply only the fitted feature columns.")
         if len(columns) != self.n_features_in_:
             raise ValueError(f"X has {len(columns)} features, but {type(self).__name__} "
                              f"is expecting {self.n_features_in_} features as input.")
         if not named:
             columns = self._columns_
-        elif set(columns) != set(self._columns_):
-            raise ValueError("Prediction names differ from the fitted table.")
         with self._client() as client:
             try:
                 return client.request(

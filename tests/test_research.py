@@ -181,7 +181,7 @@ def test_catalogue_urls_and_filename_are_not_used(tmp_path):
         c.http.follow_redirects = True
         c.download_research_dataset('p10k-example', tmp_path/'chosen')
     assert (tmp_path/'chosen').read_bytes() == BODY
-    assert all(r.url.host == 'localhost' for r in seen)
+    assert all(r.url.host == 'welt.ergodic.dev' for r in seen)
 
 
 def test_version_must_equal_content_checksum(tmp_path):

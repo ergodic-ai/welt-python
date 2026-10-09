@@ -14,10 +14,10 @@ python -m venv .venv
 # macOS/Linux:
 . .venv/bin/activate
 # Windows PowerShell: .venv\Scripts\Activate.ps1
-python -m pip install 'welt-client[parquet] @ https://github.com/ergodic-ai/welt-python/releases/download/v0.6.0/welt_client-0.6.0-py3-none-any.whl'
+python -m pip install 'welt-client[parquet] @ https://github.com/ergodic-ai/welt-python/releases/download/v0.7.0/welt_client-0.7.0-py3-none-any.whl'
 ```
 
-Download [first_request.py](https://raw.githubusercontent.com/ergodic-ai/welt-python/v0.6.0/examples/first_request.py)
+Download [first_request.py](https://raw.githubusercontent.com/ergodic-ai/welt-python/v0.7.0/examples/first_request.py)
 from the same reviewed release, then run:
 
 ```sh
@@ -59,7 +59,7 @@ If a local wait times out, server work continues; use the supplied job ID and
 from unavailable workers, capacity or revoked credentials remain actionable and
 do not produce a success celebration. No latency guarantee is implied.
 
-SDK0.6 contains research methods and the released0.3 interfaces. It excludes the
+SDK 0.7 contains research methods and the released0.3 interfaces. It excludes the
 separate unreleased CSV0.4 and batch0.5 candidates. No PyPI release is claimed.
 See [Research datasets](research-datasets.md), [SDK guide](usage.md) and
 [model capabilities](capabilities.md). Broader managed signup/recovery and all-model

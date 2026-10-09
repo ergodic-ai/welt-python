@@ -1,0 +1,20 @@
+{
+  "tracking": "API-068",
+  "scope": "Company mark in user-authorized public Welt SDK documentation; no third-party model licence assertion",
+  "assets": [
+    {
+      "file": "ergodic-mark-dark.svg",
+      "source": "Welt approved Signal/Workbench company asset: apps/web/src/assets/ergodic-mark-dark.svg",
+      "source_sha256": "50ad34c1bf3c029eac0479414886bc1b9605775ee5d11a1e23e5bbf9313e75eb",
+      "sha256": "7bf1b625839d8a19ba7321c22f204c82474bee646d23edb377775ff1b4ce5cc3",
+      "transformation": "Removed Adobe embedded editor metadata; visible SVG artwork unchanged."
+    },
+    {
+      "file": "ergodic-mark-light.svg",
+      "source": "Welt approved Signal/Workbench company asset: apps/web/src/assets/ergodic-mark-light.svg",
+      "source_sha256": "642be05439a731787e0099d09ba1092c8d87aef2689252fc46b5bae0db3cca82",
+      "sha256": "f3ba67cb066f484a89b167da5ca6c4d171014e958cb19e5a4b6018212d6036fe",
+      "transformation": "Removed Adobe embedded editor metadata; visible SVG artwork unchanged."
+    }
+  ]
+}

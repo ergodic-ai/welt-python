@@ -21,7 +21,7 @@ a new fit. Array inputs use positional schema; named DataFrame columns must matc
 the fitted names and are safely reordered. Invalid, missing or extra features
 reject instead of being silently dropped.
 
-The [regression notebook](https://github.com/ergodic-ai/welt-python/blob/main/examples/notebooks/regression.ipynb)
+The [regression notebook](https://github.com/ergodic-ai/welt-python/blob/v0.7.0/examples/notebooks/regression.ipynb)
 uses the frozen synthetic planted fixture: seed42, 128 training rows, four numeric
 features and 32 query rows. It checks finite point outputs, null class/probability
 fields, named-column reordering, pinned version and reopen agreement. It imposes

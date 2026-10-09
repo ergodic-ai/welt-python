@@ -200,3 +200,51 @@ def causal_table():
     values[:,1]=1.5*values[:,0]+.25*values[:,1]
     values[:,2]=1.1*values[:,1]+.25*values[:,2]
     return ['z_treatment','m_mediator','a_outcome','isolated'],values
+
+
+def estimator_transport():
+    """Share a controlled service across real estimator calls; live opt-in unchanged."""
+    from contextlib import contextmanager
+    from unittest.mock import patch
+
+    @contextmanager
+    def session():
+        options = notebook_options()
+        if os.environ.get('WELT_NOTEBOOK_MODE', 'fixture') == 'fixture':
+            with patch('welt.estimators.Client', lambda **unused: Client(**options)):
+                yield
+        else:
+            yield
+    return session()
+
+
+class ResearchSyntheticService(SyntheticService):
+    """Verified download plumbing using labelled fixture bytes, never real Parquet."""
+    body = b'controlled research fixture bytes; not a Parquet file\n'
+
+    def __call__(self, request):
+        from hashlib import sha256
+        assert request.url.host == 'notebook.invalid'
+        digest = sha256(self.body).hexdigest()
+        detail = dict(id='research-fixture', name='Controlled research fixture',
+            availability='available', license='Synthetic fixture; no source dataset',
+            schema=dict(columns=[]), targets=[], splits=[],
+            provenance=dict(source='controlled transport; no real research bytes'),
+            content=dict(version=digest, sha256=digest, size_bytes=len(self.body),
+                media_type='application/vnd.apache.parquet', filename='fixture.parquet'))
+        if request.url.path == '/v1/research-datasets':
+            return httpx.Response(200, json=dict(items=[detail], next_cursor=None,
+                total=1, catalogue_version='synthetic-v1', facets={}))
+        if request.url.path == '/v1/research-datasets/research-fixture':
+            return httpx.Response(200, json=detail)
+        if request.url.path == '/v1/research-datasets/research-fixture/content':
+            assert request.url.params['version'] == digest
+            return httpx.Response(200, stream=httpx.ByteStream(self.body))
+        return super().__call__(request)
+
+
+def notebook_research_client():
+    options = notebook_options()
+    if os.environ.get('WELT_NOTEBOOK_MODE', 'fixture') == 'fixture':
+        options['transport'] = httpx.MockTransport(ResearchSyntheticService())
+    return Client(**options)

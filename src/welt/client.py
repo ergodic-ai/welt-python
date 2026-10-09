@@ -12,7 +12,7 @@ from .credentials import credential, secret
 from .errors import (AuthenticationError, CapacityError, ConflictError, ExecutionError,
     InvalidInputError, JobCancelledError, JobTimeoutError, ModelUnavailableError,
     NotFoundError, PermissionDeniedError, PredictionPendingError, RateLimitError,
-    ResultExpiredError, ResultDeletedError, TransportError, WeltError)
+    ResultExpiredError, ResultDeletedError, TransportError, WeltError, safe_id)
 
 
 def _retry_after(response):
@@ -32,16 +32,29 @@ def _retry_after(response):
     return max(0, delay) if math.isfinite(delay) else None
 
 
-def _response(response):
+def _error_fields(error, api_key=None):
+    fields = dict(error)
+    if api_key:
+        fields = {k: (None if isinstance(v, str) and api_key in v else v)
+                  for k, v in fields.items()}
+    fields["code"] = safe_id(fields.get("code")) or "unknown"
+    fields["retryable"] = fields.get("retryable") is True
+    return fields
+
+
+def _response(response, *, api_key=None):
     if response.is_error:
         try:
             error = response.json()["error"]
             if not isinstance(error, dict):
                 raise ValueError()
         except (ValueError, KeyError, TypeError):
-            raise WeltError(f"HTTP {response.status_code} from Welt API.",
-                            status_code=response.status_code) from None
-        code = error.get("code", "unknown")
+            if response.status_code in (401, 403):
+                error = {"code": "authentication_failed" if response.status_code == 401 else "permission_denied"}
+            else:
+                raise WeltError(f"HTTP {response.status_code} from Welt API.",
+                                status_code=response.status_code) from None
+        code = _error_fields(error, api_key)["code"]
         classes = {401: AuthenticationError, 403: PermissionDeniedError,
                    404: NotFoundError, 409: ConflictError, 410: ResultExpiredError,
                    422: InvalidInputError, 429: RateLimitError}
@@ -59,7 +72,20 @@ def _response(response):
             cls = ResultDeletedError
         elif code == "prediction_timeout":
             cls = PredictionPendingError
-        raise cls(error.get("message", "Welt request failed."), code=code,
+        message = error.get("message", "Welt request failed.")
+        if response.status_code == 401:
+            cls = AuthenticationError
+            state = "expired" if isinstance(code, str) and "expired" in code else "invalid or revoked"
+            message = (f"The API key is {state}. Create a current workspace key in Welt → API keys "
+                       "and set WELT_API_KEY outside your code or notebook.")
+        elif response.status_code == 403:
+            cls = PermissionDeniedError
+            message = ("This key lacks permission for this operation. Use a key for the correct workspace "
+                       "with the required read/write permissions; fitting requires write permission.")
+        if api_key:
+            message = str(message).replace(api_key, "<redacted>")
+        error = _error_fields(error, api_key)
+        raise cls(message, code=code,
                   request_id=error.get("request_id"), retryable=error.get("retryable", False),
                   job_id=error.get("job_id"), status_code=response.status_code,
                   retry_after=_retry_after(response))
@@ -96,11 +122,33 @@ class _HTTP:
             raise ValueError("max_retries must be an integer from 0 to 5.")
         if not math.isfinite(max_retry_delay) or not 0 <= max_retry_delay <= 60:
             raise ValueError("max_retry_delay must be from 0 to 60 seconds.")
-        self.base_url = base_url or os.getenv("WELT_BASE_URL", "http://localhost:8080")
+        self.base_url = base_url if base_url is not None else os.getenv("WELT_BASE_URL", "https://welt.ergodic.dev")
         self.api_key = credential(secret(api_key) or os.getenv("WELT_API_KEY"))
         self.max_retries, self.max_retry_delay = max_retries, max_retry_delay
         value = secret(self.api_key)
         return {"Authorization": f"Bearer {value}"} if value else {}
+
+    def _authenticate(self, method, path):
+        # Only intentionally public catalogue reads bypass credential preflight.
+        route = httpx.URL(path).path
+        public = method.upper() == "GET" and (
+            route == "/v1/models" or route == "/v1/research-datasets" or
+            (route.startswith("/v1/research-datasets/") and route.count("/") == 3))
+        value = secret(self.api_key)
+        if not public and (not value or not value.strip()):
+            raise AuthenticationError(
+                "Set WELT_API_KEY to a workspace key from Welt → API keys before this operation. "
+                "Keep the key outside your code or notebook; fitting requires write permission.",
+                code="missing_api_key")
+
+    def _budget(self, kwargs, deadline, job_id):
+        if deadline is None:
+            return kwargs
+        remaining = _wait(deadline, job_id, float("inf"))
+        configured = httpx.Timeout(kwargs.get("timeout", self.http.timeout))
+        values = {phase: remaining if value is None else min(value, remaining)
+                  for phase, value in configured.as_dict().items()}
+        return dict(kwargs, timeout=httpx.Timeout(**values))
 
     def _delay(self, method, attempt, response=None):
         # Reads retry automatically. Mutations require caller-controlled replay.
@@ -129,20 +177,32 @@ class Client(_HTTP):
     def __exit__(self, *args):
         self.close()
 
-    def request(self, method, path, **kwargs):
+    def request(self, method, path, *, _deadline=None, _job_id=None, **kwargs):
+        self._authenticate(method, path)
+        value = secret(self.api_key)
+        if value and _job_id is not None and value in str(_job_id):
+            _job_id = None
         for attempt in range(self.max_retries + 1):
+            budgeted = self._budget(kwargs, _deadline, _job_id)
             try:
-                response = self.http.request(method, path, **kwargs)
+                response = self.http.request(method, path, **budgeted)
             except httpx.RequestError:
+                if _deadline is not None:
+                    _wait(_deadline, _job_id, float("inf"))
                 delay = self._delay(method, attempt)
                 if delay is None:
-                    raise TransportError("Could not reach Welt API; reconnect to accepted jobs.",
-                                         code="transport_error", retryable=True) from None
+                    raise TransportError("Could not reach Welt API; reconnect to accepted jobs before repeating a mutation.",
+                                         code="transport_error", retryable=True, job_id=_job_id) from None
             else:
+                if _deadline is not None:
+                    _wait(_deadline, _job_id, float("inf"))
                 delay = self._delay(method, attempt, response)
                 if delay is None:
-                    return _response(response)
-            time.sleep(delay)
+                    result = _response(response, api_key=secret(self.api_key))
+                    if _deadline is not None:
+                        _wait(_deadline, _job_id, float("inf"))
+                    return result
+            time.sleep(delay if _deadline is None else _wait(_deadline, _job_id, delay))
 
     def models(self):
         return self.request("GET", "/v1/models")["items"]
@@ -238,10 +298,10 @@ class Client(_HTTP):
             seed=seed, constraints=constraints, model_version=model_version,
             idempotency_key=idempotency_key).result(timeout=timeout)
 
-    def causal_result(self, job_id):
+    def causal_result(self, job_id, *, _deadline=None):
         from .causal import CausalResult
         from .errors import InvalidCausalResultError
-        result = CausalResult(self.request("GET", f"/v1/jobs/{_id(job_id)}/result"))
+        result = CausalResult(self.request("GET", f"/v1/jobs/{_id(job_id)}/result", _deadline=_deadline, _job_id=job_id))
         if result.job_id != str(job_id):
             raise InvalidCausalResultError("Causal result belongs to a different discovery job.", code="invalid_causal_result")
         return result
@@ -254,19 +314,24 @@ class Client(_HTTP):
     def job(self, job_id):
         return Job(self, job_id)
 
-    def predictor(self, predictor_id):
-        return self.request("GET", f"/v1/predictors/{_id(predictor_id)}")
+    def predictor(self, predictor_id, *, _deadline=None, _job_id=None):
+        return self.request("GET", f"/v1/predictors/{_id(predictor_id)}", _deadline=_deadline, _job_id=_job_id)
 
     def predict(self, predictor_id, *, columns, rows, probabilities=False):
         return self.request("POST", f"/v1/predictors/{_id(predictor_id)}/predict",
                             json=dict(columns=columns, rows=rows, probabilities=probabilities))
 
 
-def _failed(job):
+def _failed(job, api_key=None):
     if job["status"] in ("failed", "cancelled"):
         error = job.get("error") or {"code": "job_cancelled", "message": "Job was cancelled."}
+        message = str(error.get("message", "Job failed."))
+        if api_key:
+            message = message.replace(api_key, "<redacted>")
+        error = _error_fields(error, api_key)
+        job_id = job["id"] if not api_key or api_key not in str(job["id"]) else None
         cls = JobCancelledError if job["status"] == "cancelled" else ExecutionError
-        raise cls(error["message"], code=error["code"], job_id=job["id"],
+        raise cls(message, code=error["code"], job_id=job_id,
                   request_id=error.get("request_id"), retryable=error.get("retryable", False))
 
 
@@ -278,16 +343,29 @@ def _deadline(timeout, poll_interval):
     return time.monotonic() + timeout
 
 
+def _timeout(job_id):
+    from .errors import safe_id
+    display = safe_id(job_id)
+    reconnect = f"Client().job('{display}').result()" if display else "Client().job(job_id).result()"
+    return JobTimeoutError(
+        f"Waiting stopped; the server job continues. Reconnect with {reconnect} "
+        "using the same endpoint and current workspace credentials. Do not resubmit the fit.",
+        code="job_wait_timeout", job_id=job_id, retryable=True)
+
+
 def _wait(deadline, job_id, interval):
     remaining = deadline - time.monotonic()
     if remaining <= 0:
-        raise JobTimeoutError("Waiting timed out; the server job continues. Reconnect with client.job().",
-                              code="job_wait_timeout", job_id=job_id, retryable=True)
+        raise _timeout(job_id)
     return min(interval, remaining)
 
 
 class Job:
     def __init__(self, client, job_id):
+        value = secret(client.api_key)
+        if value and value in str(job_id):
+            raise WeltError("Cannot use a job identifier containing the configured credential. "
+                            "Inspect jobs before repeating a submission.", code="invalid_response")
         self.client, self.id = client, job_id
 
     def inspect(self):
@@ -297,15 +375,20 @@ class Job:
         return self.client.request("POST", f"/v1/jobs/{_id(self.id)}/cancel")
 
     def result(self, *, timeout=600, poll_interval=0.25):
+        """Wait locally, including reads/retries; timeout leaves the server job running.
+
+        HTTP phases use the remaining budget. Blocking synchronous transports
+        cannot be forcibly interrupted; elapsed time is checked after each read.
+        """
         deadline = _deadline(timeout, poll_interval)
         while True:
-            job = self.inspect()
+            job = self.client.request("GET", f"/v1/jobs/{_id(self.id)}", _deadline=deadline, _job_id=self.id)
             if job["status"] == "succeeded":
                 if job["operation"] == "discover":
-                    return self.client.causal_result(self.id)
-                return (self.client.request("GET", f"/v1/jobs/{_id(self.id)}/result")
-                        if job["operation"] == "predict" else self.client.predictor(job["predictor_id"]))
-            _failed(job)
+                    return self.client.causal_result(self.id, _deadline=deadline)
+                return (self.client.request("GET", f"/v1/jobs/{_id(self.id)}/result", _deadline=deadline, _job_id=self.id)
+                        if job["operation"] == "predict" else self.client.predictor(job["predictor_id"], _deadline=deadline, _job_id=self.id))
+            _failed(job, secret(self.client.api_key))
             time.sleep(_wait(deadline, self.id, poll_interval))
             poll_interval = min(poll_interval * 1.4, 5)
 
@@ -326,20 +409,40 @@ class AsyncClient(_HTTP):
     async def __aexit__(self, *args):
         await self.aclose()
 
-    async def request(self, method, path, **kwargs):
+    async def request(self, method, path, *, _deadline=None, _job_id=None, **kwargs):
+        self._authenticate(method, path)
+        value = secret(self.api_key)
+        if value and _job_id is not None and value in str(_job_id):
+            _job_id = None
         for attempt in range(self.max_retries + 1):
+            budgeted = self._budget(kwargs, _deadline, _job_id)
             try:
-                response = await self.http.request(method, path, **kwargs)
+                if _deadline is None:
+                    response = await self.http.request(method, path, **budgeted)
+                else:
+                    remaining = _wait(_deadline, _job_id, float("inf"))
+                    try:
+                        async with asyncio.timeout(remaining):
+                            response = await self.http.request(method, path, **budgeted)
+                    except TimeoutError:
+                        raise _timeout(_job_id) from None
             except httpx.RequestError:
+                if _deadline is not None:
+                    _wait(_deadline, _job_id, float("inf"))
                 delay = self._delay(method, attempt)
                 if delay is None:
-                    raise TransportError("Could not reach Welt API; reconnect to accepted jobs.",
-                                         code="transport_error", retryable=True) from None
+                    raise TransportError("Could not reach Welt API; reconnect to accepted jobs before repeating a mutation.",
+                                         code="transport_error", retryable=True, job_id=_job_id) from None
             else:
+                if _deadline is not None:
+                    _wait(_deadline, _job_id, float("inf"))
                 delay = self._delay(method, attempt, response)
                 if delay is None:
-                    return _response(response)
-            await asyncio.sleep(delay)
+                    result = _response(response, api_key=secret(self.api_key))
+                    if _deadline is not None:
+                        _wait(_deadline, _job_id, float("inf"))
+                    return result
+            await asyncio.sleep(delay if _deadline is None else _wait(_deadline, _job_id, delay))
 
     async def models(self):
         return (await self.request("GET", "/v1/models"))["items"]
@@ -433,10 +536,10 @@ class AsyncClient(_HTTP):
             seed=seed, constraints=constraints, model_version=model_version, idempotency_key=idempotency_key)
         return await job.result(timeout=timeout)
 
-    async def causal_result(self, job_id):
+    async def causal_result(self, job_id, *, _deadline=None):
         from .causal import CausalResult
         from .errors import InvalidCausalResultError
-        result = CausalResult(await self.request("GET", f"/v1/jobs/{_id(job_id)}/result"))
+        result = CausalResult(await self.request("GET", f"/v1/jobs/{_id(job_id)}/result", _deadline=_deadline, _job_id=job_id))
         if result.job_id != str(job_id):
             raise InvalidCausalResultError("Causal result belongs to a different discovery job.", code="invalid_causal_result")
         return result
@@ -449,8 +552,8 @@ class AsyncClient(_HTTP):
     def job(self, job_id):
         return AsyncJob(self, job_id)
 
-    async def predictor(self, predictor_id):
-        return await self.request("GET", f"/v1/predictors/{_id(predictor_id)}")
+    async def predictor(self, predictor_id, *, _deadline=None, _job_id=None):
+        return await self.request("GET", f"/v1/predictors/{_id(predictor_id)}", _deadline=_deadline, _job_id=_job_id)
 
     async def predict(self, predictor_id, *, columns, rows, probabilities=False):
         return await self.request("POST", f"/v1/predictors/{_id(predictor_id)}/predict",
@@ -459,6 +562,10 @@ class AsyncClient(_HTTP):
 
 class AsyncJob:
     def __init__(self, client, job_id):
+        value = secret(client.api_key)
+        if value and value in str(job_id):
+            raise WeltError("Cannot use a job identifier containing the configured credential. "
+                            "Inspect jobs before repeating a submission.", code="invalid_response")
         self.client, self.id = client, job_id
 
     async def inspect(self):
@@ -468,14 +575,15 @@ class AsyncJob:
         return await self.client.request("POST", f"/v1/jobs/{_id(self.id)}/cancel")
 
     async def result(self, *, timeout=600, poll_interval=0.25):
+        """Bound local polling/read awaits; timeout never cancels the server job."""
         deadline = _deadline(timeout, poll_interval)
         while True:
-            job = await self.inspect()
+            job = await self.client.request("GET", f"/v1/jobs/{_id(self.id)}", _deadline=deadline, _job_id=self.id)
             if job["status"] == "succeeded":
                 if job["operation"] == "discover":
-                    return await self.client.causal_result(self.id)
-                return (await self.client.request("GET", f"/v1/jobs/{_id(self.id)}/result")
-                        if job["operation"] == "predict" else await self.client.predictor(job["predictor_id"]))
-            _failed(job)
+                    return await self.client.causal_result(self.id, _deadline=deadline)
+                return (await self.client.request("GET", f"/v1/jobs/{_id(self.id)}/result", _deadline=deadline, _job_id=self.id)
+                        if job["operation"] == "predict" else await self.client.predictor(job["predictor_id"], _deadline=deadline, _job_id=self.id))
+            _failed(job, secret(self.client.api_key))
             await asyncio.sleep(_wait(deadline, self.id, poll_interval))
             poll_interval = min(poll_interval * 1.4, 5)

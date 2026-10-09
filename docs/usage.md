@@ -1,6 +1,7 @@
 # SDK guide
 
-`Client()` reads `WELT_BASE_URL` and `WELT_API_KEY`. Always close it or use a context
+`Client()` defaults to `https://welt.ergodic.dev`; explicit `base_url` overrides
+`WELT_BASE_URL`. Authenticated methods use `WELT_API_KEY` or an explicit key. Always close it or use a context
 manager. `Client.models()` reports actual capabilities, not blanket task support.
 
 ```python
@@ -17,7 +18,7 @@ with Client() as client:
 supports predict_proba. Labels/probabilities follow persisted class order. DataFrame
 prediction columns may be safely reordered; missing/extra names or width/type
 changes reject. Arrays follow positional order. CSV/Parquet paths are convenient
-in-memory reads today, not resumable streaming upload. `submit_fit(X,y)` returns
+in-memory reads today, not resumable streaming upload. `submit_fit(X, y)` or `submit_fit(train, target="label")` returns
 a durable Job without blocking; it owns an HTTP client, so close `job.client` in
 a finally block when finished. Blocking estimator fit closes that client internally. Explicit Client uploads permit dataset-ID reuse.
 
@@ -40,7 +41,7 @@ The full official estimator/task/version matrix, batch/resumable
 files, remaining causal engines and public Ergodic continuation remain gates.
 AsyncClient/AsyncJob and native ArrowFM/CDFM/AVICI results retain their independently
 qualified narrow boundaries; the supported notebook checks remain distinct from
-real model qualification. SDK0.6 adds the [research catalogue](research-datasets.md)
+real model qualification. SDK 0.7 retains the [research catalogue](research-datasets.md)
 without including unreleased CSV0.4 or batch0.5. No conformal uncertainty or full catalogue availability
 is claimed by this SDK release.
 

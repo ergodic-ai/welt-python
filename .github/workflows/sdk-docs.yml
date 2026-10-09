@@ -1,8 +1,13 @@
 name: SDK documentation
 on:
-  push:
-    branches: [main]
+  release:
+    types: [published]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Published SDK release to document
+        required: true
+        default: v0.7.0
 permissions:
   contents: read
 concurrency:
@@ -13,15 +18,55 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ github.event.release.tag_name || inputs.release_tag }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - run: python -m pip install uv==0.5.16
       - run: uv sync --frozen
-      - run: uv build
-      - run: uv pip install --python .venv/bin/python --reinstall --no-deps dist/*.whl
+      - name: Verify matching published release assets
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+        run: |
+          python - <<'PYCODE'
+          import json, os, tomllib, urllib.request
+          version = tomllib.load(open('pyproject.toml', 'rb'))['project']['version']
+          tag = os.environ['RELEASE_TAG']
+          if tag != 'v' + version:
+              raise SystemExit('Documentation must check out its matching release tag.')
+          request = urllib.request.Request(
+              'https://api.github.com/repos/ergodic-ai/welt-python/releases/tags/' + tag,
+              headers={'Accept': 'application/vnd.github+json', 'User-Agent': 'Welt-SDK-docs'})
+          with urllib.request.urlopen(request, timeout=30) as response:
+              release = json.load(response)
+          assets = {asset['name'] for asset in release['assets']}
+          required = {'welt_client-' + version + '-py3-none-any.whl', 'welt_client-' + version + '.tar.gz'}
+          if release['draft'] or release['tag_name'] != tag or not required <= assets:
+              raise SystemExit('Publish matching reviewed wheel and sdist before documentation.')
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write('SDK_VERSION=' + version + '\n')
+          PYCODE
+      - name: Install the published matching wheel
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+        run: uv pip install --python .venv/bin/python --reinstall --no-deps "https://github.com/ergodic-ai/welt-python/releases/download/$RELEASE_TAG/welt_client-$SDK_VERSION-py3-none-any.whl"
       - run: .venv/bin/python scripts/check_notebooks.py
+      # Preserve v0.6 URLs and corrected research archive/licence notices.
+      # This is an isolated checkout/environment: historical docs cannot inherit 0.7 APIs.
+      - uses: actions/checkout@v4
+        with:
+          ref: 1cea7d9998bf433bd4404add75ed9e2e35b2de87
+          path: .legacy-sdk
+      - run: uv sync --frozen
+        working-directory: .legacy-sdk
+      - run: uv build
+        working-directory: .legacy-sdk
+      - run: uv pip install --python .venv/bin/python --reinstall --no-deps dist/*.whl
+        working-directory: .legacy-sdk
+      - run: .venv/bin/python scripts/build_historical_docs.py --source .legacy-sdk --output site
       - run: .venv/bin/python scripts/build_docs.py
+      - run: test -f site/v0.6.0/index.html && test -f site/v0.6.0/research-datasets.html && test -f site/v0.7.0/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
