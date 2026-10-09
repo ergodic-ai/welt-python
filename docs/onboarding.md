@@ -14,11 +14,11 @@ python -m venv .venv
 # macOS/Linux:
 . .venv/bin/activate
 # Windows PowerShell: .venv\Scripts\Activate.ps1
-python -m pip install 'welt-client[parquet] @ https://github.com/ergodic-ai/welt-python/releases/download/v0.7.0/welt_client-0.7.0-py3-none-any.whl'
+python -m pip install "welt-client[parquet]==0.7.1"
 ```
 
-Download [first_request.py](https://raw.githubusercontent.com/ergodic-ai/welt-python/v0.7.0/examples/first_request.py)
-from the same reviewed release, then run:
+Download [first_request.py](https://raw.githubusercontent.com/ergodic-ai/welt-python/v0.7.1/examples/first_request.py)
+from this reviewed documentation revision, then run:
 
 ```sh
 python first_request.py
@@ -35,8 +35,9 @@ immutable version/SHA, prints its attribution and uses all four recorded feature
 and the recorded target. Its explicit stratified seed9 recipe uses 120 training
 rows and 30 query rows. It prepares the qualified `tabicl-v2` classification
 configuration and returns 30 predictions within that task's declared envelope.
-The recipe is onboarding, not a source-provided split, scientific evaluation or
-publisher benchmark. Your private fit dataset and predictor persist; the script
+It prints the DataFrame/schema, compares predictions with held-out labels, and
+reports accuracy plus per-class precision/recall/F1. These measurements describe
+your run, not a source-provided split or publisher benchmark. Your private fit dataset and predictor persist; the script
 does not delete them or silently change the full research corpus.
 
 The source asset is `asset-d839644b6de36fc5cafdda18c5daeca3`, version
@@ -60,7 +61,7 @@ from unavailable workers, capacity or revoked credentials remain actionable and
 do not produce a success celebration. No latency guarantee is implied.
 
 SDK 0.7 contains research methods and the released0.3 interfaces. It excludes the
-separate unreleased CSV0.4 and batch0.5 candidates. No PyPI release is claimed.
+separate unreleased CSV0.4 and batch0.5 candidates. Install the reviewed release shown above.
 See [Research datasets](research-datasets.md), [SDK guide](usage.md) and
 [model capabilities](capabilities.md). Broader managed signup/recovery and all-model
 completion gates remain distinct from this bounded walkthrough.

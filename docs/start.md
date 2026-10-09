@@ -1,129 +1,170 @@
-# From a DataFrame to a prediction
+# Your first prediction
 
-Use a familiar Python estimator to prepare a durable predictor in your private
-Welt workspace. Start with a complete classification or regression example.
+Let's predict a flower's class from its measurements. We will download real Iris
+observations from Welt's research inventory, inspect them, hold some back, and see
+how well a classifier predicts those unseen rows.
 
 ## Install
 
-Use Python 3.11–3.13. Create a virtual environment, activate it, and install the
-reviewed release wheel. No Git installation is required.
+Python 3.11–3.13. Use a virtual environment, then install the SDK and its Parquet reader:
 
 ```sh
-python -m venv .venv
-# macOS / Linux
-. .venv/bin/activate
-# Windows PowerShell: .venv\Scripts\Activate.ps1
-python -m pip install 'welt-client @ https://github.com/ergodic-ai/welt-python/releases/download/v0.7.0/welt_client-0.7.0-py3-none-any.whl'
+python -m pip install "welt-client[parquet]==0.7.1"
 ```
 
-## Set up your key
+## Set your key
 
-Open [Welt](https://welt.ergodic.dev), sign in, then create a key on your workspace's
-**Account** page with **Allow writes, fits and predictions** selected. The secret
-is shown once. A read-only key can browse research data but cannot fit or predict.
-
-Use a hidden prompt in your Python session so the key stays out of notebook source
-and shell history. Existing local secret configuration may provide `WELT_API_KEY`.
+Sign in at [Welt](https://welt.ergodic.dev), open Account, and create a key with
+**Allow writes, fits and predictions** enabled. Configure it locally, or run this
+hidden prompt once. Keep your key out of saved notebook cells and Git.
 
 ```python
 import getpass
 import os
 
-if not os.environ.get("WELT_API_KEY"):
-    os.environ["WELT_API_KEY"] = getpass.getpass("Welt API key (hidden): ")
+os.environ["WELT_API_KEY"] = getpass.getpass("Welt API key: ")
 ```
 
-`fit` uploads the training table to your private workspace and waits for remote
-preparation. `predict` executes remotely. Datasets and predictors persist until
-explicit deletion; closing Python does not delete them. Keep keys and outputs out
-of source control. Browser sessions and SDK keys are separate credentials.
+## Classification: predict a flower's class
 
-## Classify a table
+Iris has 150 rows, four measurements and three encoded classes. The canonical
+snapshot calls its target `__target__#0`; keep that name rather than guessing from
+a column's position. This is the eligible p10k/PMLB Iris asset, attributed to
+R. A. Fisher (1936), UCI Iris DOI10.24432/C56C76, CC BY4.0.
 
-This complete synthetic example uses seed9, 128 labelled training rows, four
-features and 32 separate query rows. The query has feature columns only.
+Run the complete example. The numbered comments follow the six steps:
 
 ```python
-import numpy as np
+from pathlib import Path
+from tempfile import mkdtemp
 import pandas as pd
-from welt import Classifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, classification_report
+from welt import Client, Classifier
 
-rng = np.random.default_rng(9)
-values = rng.normal(size=(160, 4))
-train = pd.DataFrame(values[:128], columns=["a", "b", "c", "d"])
-train["label"] = np.where(values[:128, 0] + 0.5 * values[:128, 1] > 0,
-                          "positive", "negative")
-query = pd.DataFrame(values[128:], columns=["a", "b", "c", "d"])
+# 1. Get a real table from Welt's research inventory.
+dataset_id = "asset-d839644b6de36fc5cafdda18c5daeca3"
+version = "d839644b6de36fc5cafdda18c5daeca3284a5ce8bb6169aff2fcb3fbb4a12021"
+path = Path(mkdtemp(prefix="welt-iris-")) / "iris.parquet"
+with Client() as client:
+    info = client.research_dataset(dataset_id)
+    print("Dataset:", info["name"], "— License:", info["license"])
+    for notice in info["license_notices"]:
+        print(notice)
+    client.download_research_dataset(dataset_id, path, version=version)
+data = pd.read_parquet(path)
+target = "__target__#0"  # The target recorded in this research snapshot.
+
+# 2. Look at the rows before modelling.
+print(data.head())
+print("Rows and columns:", data.shape)
+data.info()
+print(data[target].value_counts())
+
+# 3. Set aside test rows before fitting; never train on their answers.
+train, test = train_test_split(
+    data, test_size=0.2, random_state=9, stratify=data[target])
+query = test.drop(columns=target)
+y_test = test[target]
+print("Training rows:", len(train), "— Test rows:", len(test))
+
+# 4. Create a model and train it on the training table.
 model = Classifier(model="tabicl-v2", random_state=9)
-model.fit(train, target="label")
+model.fit(train, target=target)
+
+# 5. Predict the held-out rows, without passing their target column.
 predictions = model.predict(query)
-print(type(predictions).__name__, predictions.shape)
+print(pd.DataFrame({"actual": y_test.to_numpy(), "predicted": predictions}).head())
+
+# 6. Compare predictions with the answers we kept aside.
+print("Test accuracy:", accuracy_score(y_test, predictions))
+print(classification_report(y_test, predictions, zero_division=0))
+print("Keep this predictor ID:", model.predictor_id_)
 ```
 
-Expected output contract:
+You now have 120 training rows and 30 test rows. The same seed makes the split
+repeatable; stratification keeps all three classes represented. Accuracy is the
+fraction of test labels predicted correctly. The report shows precision, recall
+and F1 for each encoded class. Read it to see where mistakes occur.
 
 ```text
-ndarray (32,)
+Your run prints the first five data rows, the schema, and the first five
+actual/predicted pairs. It evaluates all 30 held-out rows for test accuracy
+and a classification report.
 ```
 
-The array contains one class label per query row in the same row order. Actual
-labels depend on the qualified model; the output above describes type and shape,
-not captured model predictions. `model.predict_proba(query)` returns a
-`(32, n_classes)` array with columns ordered like `model.classes_`. Native
-probabilities are not a calibration or coverage guarantee.
+These are your run's measurements, not a promised score or the source's benchmark.
+Do not repeatedly tune on this small test set; reserve another validation split if
+choosing configurations. `fit` uploads only the training table into your private
+workspace and waits for preparation. `predict` executes remotely; each operation
+appears in usage. Your downloaded research table is local, while the uploaded
+training dataset and fitted predictor remain retained.
 
-## Predict numeric values
+## Regression: predict a number
 
-Choose `Regressor` explicitly for a numeric target. This example preserves the
-seed42 planted recipe: 128 training rows, four features and 32 query rows.
+For a numeric outcome, use `Regressor`. This small Yacht Hydrodynamics research
+snapshot has 308 real observations and six numeric features. Its recorded target
+is residuary resistance (`__target__#0`); the selected distribution is CC0. We use
+all observations and an explicitly declared random 80/20 teaching split (246/62),
+not a source-provided benchmark split. Closely related experimental rows can make
+random-split scores optimistic; a study should choose a split matching its goal.
 
 ```python
-import numpy as np
+from pathlib import Path
+from tempfile import mkdtemp
 import pandas as pd
-from welt import Regressor
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error, root_mean_squared_error, r2_score
+from welt import Client, Regressor
 
-rng = np.random.default_rng(42)
-values = rng.normal(size=(160, 4))
-weights = rng.normal(size=4)
-train = pd.DataFrame(values[:128], columns=["a", "b", "c", "d"])
-train["target"] = values[:128] @ weights + rng.normal(scale=0.05, size=128)
-query = pd.DataFrame(values[128:], columns=["a", "b", "c", "d"])
-model = Regressor(model="tabicl-v2", random_state=42)
-model.fit(train, target="target")
+# 1. Get a real table from Welt's research inventory.
+dataset_id = "asset-bc7dddd884c5e798c1b2abfc559a36ab"
+version = "bc7dddd884c5e798c1b2abfc559a36ab79a6d09c4e2ea3e9bbd95c06539c7342"
+path = Path(mkdtemp(prefix="welt-yacht-")) / "yacht.parquet"
+with Client() as client:
+    info = client.research_dataset(dataset_id)
+    print("Dataset:", info["name"], "— License:", info["license"])
+    for notice in info["license_notices"]:
+        print(notice)
+    client.download_research_dataset(dataset_id, path, version=version)
+data = pd.read_parquet(path)
+target = "__target__#0"  # The target recorded in this research snapshot.
+
+# 2. Look at the rows before modelling.
+print(data.head())
+print("Rows and columns:", data.shape)
+data.info()
+print(data[target].describe())
+
+# 3. Set aside test rows before fitting; never train on their answers.
+train, test = train_test_split(
+    data, test_size=0.2, random_state=9)
+query = test.drop(columns=target)
+y_test = test[target]
+print("Training rows:", len(train), "— Test rows:", len(test))
+
+# 4. Create a model and train it on the training table.
+model = Regressor(model="tabicl-v2", random_state=9)
+model.fit(train, target=target)
+
+# 5. Predict the held-out rows, without passing their target column.
 predictions = model.predict(query)
-print(type(predictions).__name__, predictions.shape)
+print(pd.DataFrame({"actual": y_test.to_numpy(), "predicted": predictions}).head())
+
+# 6. Compare predictions with the answers we kept aside.
+print("Test MAE:", mean_absolute_error(y_test, predictions))
+print("Test RMSE:", root_mean_squared_error(y_test, predictions))
+print("Test R²:", r2_score(y_test, predictions))
+print("Keep this predictor ID:", model.predictor_id_)
 ```
 
-Expected output is `ndarray (32,)`: one finite mean point in target units per query
-row. This interface has no class probabilities or calibrated prediction intervals.
-Neither example is a scientific benchmark or accuracy claim.
+MAE is the average absolute error; RMSE penalizes larger misses more. Both use the
+recorded target's units. R² compares with a constant test-set-mean baseline and can
+be negative. No calibrated interval or minimum quality is promised. The task's
+qualified limits are 500 training rows, 20 features and 100 prediction rows.
 
-## Reopen your predictor
+## Keep your work
 
-Keep `model.predictor_id_` with your experiment's non-secret metadata. In another
-Python session, authenticate to the same workspace and use the matching task class:
-
-```python
-from welt import Classifier
-
-# Use the identity from your completed classification fit.
-reopened = Classifier.from_predictor(model.predictor_id_)
-repeat = reopened.predict(query)
-print(repeat.shape)  # (32,); no training-table upload or new fit
-```
-
-For the regression example, use `Regressor.from_predictor(...)`. Reopening retains
-the fitted model version, configuration, task and seed. It does not export weights
-or training context. See [Reuse a predictor](reuse.md).
-
-## Continue
-
-[Use your own DataFrame](own-data.md), [wait or recover](async-and-errors.md), or
-[download the runnable first-prediction script](https://raw.githubusercontent.com/ergodic-ai/welt-python/v0.7.0/examples/first_prediction.py).
-The script prompts safely, prints shapes and checks repeated predictions.
-
-TabICLv2's separately qualified classification and regression previews accept up
-to 500 training rows, 20 features and 100 query rows; classification supports up to
-10 classes. Current task profile and worker availability remain authoritative.
-See [Models and limits](capabilities.md) before changing the model or workload.
-SDK 0.7 does not include the held resumable CSV or large batch APIs.
+You can [reopen a predictor](reuse.md) without another fit. The same workflow also
+works with [your own table](own-data.md). For [async jobs](async-and-errors.md), keep
+the job ID before waiting. [Notebooks](notebooks.md) teach the same real-data steps.

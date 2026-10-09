@@ -1,4 +1,4 @@
-"""A real native onboarding request using pinned p10k Iris; no benchmark claim."""
+"""A real native onboarding request using pinned p10k Iris; held-out evaluation, no benchmark guarantee."""
 import argparse
 from getpass import getpass
 from hashlib import sha256
@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, classification_report
 
 from welt import Classifier, Client
 
@@ -27,15 +28,15 @@ def local_digest(path):
 
 
 def preparation(frame):
-    """Explicit seed9 stratified 120/30 recipe; no source split or accuracy metric."""
+    """Explicit seed9 stratified 120/30 recipe; an explicit teaching split, not a source benchmark."""
     if (frame.shape != (150, 5) or set(frame.columns) != set(FEATURES + [TARGET])
             or frame[FEATURES].isna().any().any() or frame[TARGET].isna().any()
             or frame[TARGET].value_counts().to_dict() != {0: 50, 1: 50, 2: 50}):
         raise RuntimeError("Pinned Iris schema/target does not match the declared onboarding recipe.")
-    X_train, X_query, y_train, _ = train_test_split(
+    X_train, X_query, y_train, y_test = train_test_split(
         frame[FEATURES], frame[TARGET], test_size=30, random_state=9,
         stratify=frame[TARGET])
-    return X_train, y_train, X_query
+    return X_train, y_train, X_query, y_test
 
 
 def main():
@@ -61,7 +62,12 @@ def main():
         print("License:", info["license"])
         for notice in info["license_notices"]:
             print(notice)
-    X_train, y_train, X_query = preparation(pd.read_parquet(args.output))
+    data = pd.read_parquet(args.output)
+    print(data.head())
+    print("Rows and columns:", data.shape)
+    data.info()
+    print(data[TARGET].value_counts())
+    X_train, y_train, X_query, y_test = preparation(data)
     model = Classifier(model="tabicl-v2", configuration="default", random_state=9,
                        base_url=ORIGIN, api_key=key)
     print("Preparing a real TabICL v2 classifier on 120 rows and four features…")
@@ -72,7 +78,11 @@ def main():
     print("Real request complete: 30 predictions received.")
     print("Predictor:", model.predictor_id_, "Model version:", model.model_version_)
     print("Return to the signed-in console and check onboarding for its server-verified milestone.")
-    print("No accuracy or publisher benchmark score is claimed by this example.")
+    predictions = details["predictions"]
+    print(pd.DataFrame({"actual": y_test.to_numpy(), "predicted": predictions}).head())
+    print("Test accuracy:", accuracy_score(y_test, predictions))
+    print(classification_report(y_test, predictions, zero_division=0))
+    print("This held-out result is your run, not a guaranteed or publisher benchmark score.")
 
 
 if __name__ == "__main__":

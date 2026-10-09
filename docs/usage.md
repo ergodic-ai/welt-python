@@ -5,20 +5,24 @@
 manager. `Client.models()` reports actual capabilities, not blanket task support.
 
 ```python
+# Continue with the real Iris train/test tables from Start.
 from welt import Client
+from sklearn.metrics import accuracy_score
 
 with Client() as client:
-    data = client.upload(columns=columns, rows=rows, target=target_name)
-    job = client.submit_fit(data['id'], model='tabicl-v2', task='classification', seed=9)
+    dataset = client.upload(columns=list(train.columns), rows=train.values.tolist(), target=target)
+    job = client.submit_fit(dataset["id"], model="tabicl-v2", task="classification", seed=9)
+    print("Keep the job ID:", job.id)
     predictor = job.result(timeout=600)
-    metadata = client.predictor(predictor['id'])
+    result = client.predict(predictor["id"], columns=list(query.columns), rows=query.values.tolist())
+print("Test accuracy:", accuracy_score(y_test, result["predictions"]))
 ```
 
 `Classifier` and `Regressor` support fit/predict and `predict_details`; Classifier
 supports predict_proba. Labels/probabilities follow persisted class order. DataFrame
 prediction columns may be safely reordered; missing/extra names or width/type
 changes reject. Arrays follow positional order. CSV/Parquet paths are convenient
-in-memory reads today, not resumable streaming upload. `submit_fit(X, y)` or `submit_fit(train, target="label")` returns
+in-memory reads today, not resumable streaming upload. `submit_fit(X, y)` or `submit_fit(train, target=target)` returns
 a durable Job without blocking; it owns an HTTP client, so close `job.client` in
 a finally block when finished. Blocking estimator fit closes that client internally. Explicit Client uploads permit dataset-ID reuse.
 
@@ -55,4 +59,6 @@ fit, so call Client.submit_fit on the existing dataset for an intentional reques
 
 The [capability boundary](capabilities.md), [onboarding guide](onboarding.md),
 [executed notebook examples](notebooks.md) and generated installed-package reference
-explain supported behavior. The source examples default to synthetic transport.
+explain supported behavior. The source examples use real research data and hosted calls; Local release checks patch transport
+only in disposable test copies with authorized pinned research files; public CI
+validates source/contracts without hosted data or model-quality claims.

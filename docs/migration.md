@@ -28,7 +28,8 @@ source, requires a directly supplied DataFrame, and removes its named target fro
 features before upload:
 
 ```python
-model.fit(train, target="churn")
+# Continue with the real train table and target name from Start.
+model.fit(train, target=target)
 ```
 
 Select `Classifier` or `Regressor` explicitly. Conflicting `y`/`target`, missing or

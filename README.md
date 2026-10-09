@@ -5,14 +5,14 @@ estimators backed by durable predictors in your private Welt workspace.
 Install `welt-client`, import `welt`. Python 3.11–3.13.
 
 [Start here](https://ergodic-ai.github.io/welt-python/) ·
-[Guides](https://ergodic-ai.github.io/welt-python/v0.7.0/own-data.html) ·
-[Reference](https://ergodic-ai.github.io/welt-python/v0.7.0/reference.html) ·
+[Guides](https://ergodic-ai.github.io/welt-python/v0.7.1/own-data.html) ·
+[Reference](https://ergodic-ai.github.io/welt-python/v0.7.1/reference.html) ·
 [Models and limits](docs/capabilities.md)
 
 ## Install
 
 ```sh
-python -m pip install 'welt-client @ https://github.com/ergodic-ai/welt-python/releases/download/v0.7.0/welt_client-0.7.0-py3-none-any.whl'
+python -m pip install "welt-client[parquet]==0.7.1"
 ```
 
 Create a workspace API key at [Welt](https://welt.ergodic.dev) with **Allow writes,
@@ -22,33 +22,63 @@ logs and shell history. SDK 0.7 defaults to `https://welt.ergodic.dev`; an expli
 `base_url` overrides `WELT_BASE_URL`, which overrides that default. Local development
 must explicitly select localhost.
 
-## Predict
+## Learn with real data
+
+Download Iris from our research inventory, look at the table, split train/test,
+fit a classifier, predict unseen rows, and measure the result:
 
 ```python
-import numpy as np
+from pathlib import Path
+from tempfile import mkdtemp
 import pandas as pd
-from welt import Classifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, classification_report
+from welt import Client, Classifier
 
-rng = np.random.default_rng(9)
-values = rng.normal(size=(160, 4))
-train = pd.DataFrame(values[:128], columns=["a", "b", "c", "d"])
-train["label"] = np.where(values[:128, 0] + 0.5 * values[:128, 1] > 0,
-                          "positive", "negative")
-query = pd.DataFrame(values[128:], columns=["a", "b", "c", "d"])
+# 1. Get a real table from Welt's research inventory.
+dataset_id = "asset-d839644b6de36fc5cafdda18c5daeca3"
+version = "d839644b6de36fc5cafdda18c5daeca3284a5ce8bb6169aff2fcb3fbb4a12021"
+path = Path(mkdtemp(prefix="welt-iris-")) / "iris.parquet"
+with Client() as client:
+    info = client.research_dataset(dataset_id)
+    print("Dataset:", info["name"], "— License:", info["license"])
+    for notice in info["license_notices"]:
+        print(notice)
+    client.download_research_dataset(dataset_id, path, version=version)
+data = pd.read_parquet(path)
+target = "__target__#0"  # The target recorded in this research snapshot.
+
+# 2. Look at the rows before modelling.
+print(data.head())
+print("Rows and columns:", data.shape)
+data.info()
+print(data[target].value_counts())
+
+# 3. Set aside test rows before fitting; never train on their answers.
+train, test = train_test_split(
+    data, test_size=0.2, random_state=9, stratify=data[target])
+query = test.drop(columns=target)
+y_test = test[target]
+print("Training rows:", len(train), "— Test rows:", len(test))
+
+# 4. Create a model and train it on the training table.
 model = Classifier(model="tabicl-v2", random_state=9)
-model.fit(train, target="label")
+model.fit(train, target=target)
+
+# 5. Predict the held-out rows, without passing their target column.
 predictions = model.predict(query)
-print(predictions.shape)  # (32,)
-reopened = Classifier.from_predictor(model.predictor_id_)
-repeat = reopened.predict(query)
+print(pd.DataFrame({"actual": y_test.to_numpy(), "predicted": predictions}).head())
+
+# 6. Compare predictions with the answers we kept aside.
+print("Test accuracy:", accuracy_score(y_test, predictions))
+print(classification_report(y_test, predictions, zero_division=0))
+print("Keep this predictor ID:", model.predictor_id_)
 ```
 
-This synthetic recipe returns one label per query row, in order; actual labels
-come from the hosted model. It is not an accuracy benchmark. Use `Regressor`
-explicitly for numeric targets; the [complete regression example](docs/start.md)
-returns one finite target-unit point per row. `fit` uploads the table and waits for
-remote preparation; `predict` executes remotely. Created datasets/predictors remain
-retained. Reopening uses the pinned identity without another fit or training upload.
+Accuracy and per-class precision/recall/F1 describe your held-out run, not a
+promised benchmark score. [Start](docs/start.md) explains each step and teaches
+numeric predictions with real Yacht data. `fit` uploads only your training rows;
+your workspace retains the resulting dataset and predictor for reuse.
 
 SDK 0.7 adds explicit DataFrame target convenience and hosted credential guidance
 while preserving `fit(X, y)`, sync/async resources, durable jobs, research downloads
@@ -78,8 +108,8 @@ uv run --frozen pytest -q
 uv build
 ```
 
-Controlled synthetic transport tests neither contact the hosted service nor execute
-foundation models. Notebook sources have cleared outputs; clean-wheel execution and
+Offline tests patch HTTP transport outside user examples; they neither contact the
+hosted service nor measure foundation-model quality. Notebook sources have cleared outputs; clean-wheel execution and
 bounded authorized live acceptance are separate evidence. CI requires no private
 backend, credentials or checkpoints.
 

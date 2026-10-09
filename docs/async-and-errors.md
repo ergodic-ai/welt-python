@@ -6,13 +6,13 @@ call chooses to observe it. Stopping the wait leaves the job running.
 ## Submit and keep the job ID
 
 For an estimator, submit instead of blocking when you want the identity immediately.
-This template uses the complete `train` DataFrame from [Start](start.md).
+This template uses the real Iris `train` DataFrame and `target` name from [Start](start.md).
 
 ```python
 from welt import Classifier, JobTimeoutError
 
 model = Classifier(model="tabicl-v2", random_state=9)
-job = model.submit_fit(train, target="label")
+job = model.submit_fit(train, target=target)
 print("Keep this job ID:", job.id)
 try:
     predictor = job.result(timeout=120)

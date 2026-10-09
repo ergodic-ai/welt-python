@@ -1,3 +1,10 @@
+# 0.7.1 — Real-data learning examples
+
+Documentation-only point release; model, API and runtime behavior are unchanged.
+Standalone examples/notebooks now download pinned Iris/Yacht research data, inspect
+DataFrames, split held-out rows, fit, predict and measure actual quality. Test
+transport stays exclusively in developer harnesses. Prior releases stay immutable.
+
 # Changelog
 
 ## 0.7.0

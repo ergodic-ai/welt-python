@@ -22,10 +22,12 @@ def table(module):
 
 def test_named_stratified_recipe_is_exact_and_repeatable_without_mutating_source():
     module=example();frame=table(module);before=frame.copy(deep=True)
-    X,y,query=module.preparation(frame)
-    other_X,other_y,other_query=module.preparation(frame)
+    X,y,query,y_test=module.preparation(frame)
+    other_X,other_y,other_query,other_test=module.preparation(frame)
     assert X.shape==(120,4) and query.shape==(30,4)
     assert y.value_counts().to_dict()=={0:40,1:40,2:40}
+    assert y_test.value_counts().to_dict()=={0:10,1:10,2:10}
+    pd.testing.assert_series_equal(y_test,frame.loc[query.index,module.TARGET])
     assert set(X.index).isdisjoint(query.index)
     assert set(X.index)|set(query.index)==set(range(150))
     pd.testing.assert_frame_equal(X,other_X);pd.testing.assert_series_equal(y,other_y)

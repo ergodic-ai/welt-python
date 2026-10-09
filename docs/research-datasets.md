@@ -18,17 +18,28 @@ with Client(base_url="https://welt.ergodic.dev",
     for item in page["items"]:
         print(item["id"], item["name"], item["availability"])
 
-    # Choose an ID from the real catalogue, rather than inventing a source URL.
-    chosen = page["items"][0]["id"]
+    # Search is discovery; choose this exact reviewed asset deliberately.
+    chosen = "asset-d839644b6de36fc5cafdda18c5daeca3"  # Reviewed Iris asset.
     info = client.research_dataset(chosen)
     print(info["license"], info["schema"], info["targets"], info["splits"])
     content = info["content"]
     print(content["media_type"], content["filename"])
     suffix = {"application/vnd.apache.parquet": ".parquet",
               "application/zip": ".zip"}[content["media_type"]]
+    from tempfile import mkdtemp
     path = client.download_research_dataset(
-        chosen, Path("research" + suffix), version=content["version"])
+        chosen, Path(mkdtemp(prefix="welt-research-")) / ("research" + suffix),
+        version="d839644b6de36fc5cafdda18c5daeca3284a5ce8bb6169aff2fcb3fbb4a12021")
+
+import pandas as pd
+data = pd.read_parquet(path)
+print(data.head())
+print(data.shape)
+data.info()
 ```
+
+Continue with [Start](start.md) to split this exact table, fit a classifier, predict
+held-out rows and measure their quality. Listing/download itself does not model.
 
 A page preserves `next_cursor`, `total`, `catalogue_version` and `facets`. Request
 the next page by passing `cursor=page["next_cursor"]`; stop when it is `None`.

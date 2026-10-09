@@ -11,22 +11,31 @@ Pass exactly one of `y` or `target`. The original sklearn form `fit(X, y)` remai
 supported, including cloning, Pipeline and cross-validation within checked bounds.
 
 ```python
-import pandas as pd
+# First run Start's real Iris walkthrough to learn the full six-step workflow.
+# For your own approved DataFrame, choose its target explicitly:
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, classification_report
 from welt import Classifier
 
-# Replace these paths with your own approved local tables.
-train = pd.read_csv("labelled_customers.csv")
-query = pd.read_csv("new_customers.csv")
+print(data.head())
+data.info()
+target = "churn"  # Replace with your own recorded label column.
+print(data[target].value_counts())
+train, test = train_test_split(data, test_size=0.2, random_state=9,
+                             stratify=data[target])
+query = test.drop(columns=target)
+y_test = test[target]
 model = Classifier(model="tabicl-v2", random_state=9)
-model.fit(train, target="churn")
+model.fit(train, target=target)
 predictions = model.predict(query)
-assert predictions.shape == (len(query),)
+print("Test accuracy:", accuracy_score(y_test, predictions))
+print(classification_report(y_test, predictions, zero_division=0))
 ```
 
-This template requires your files: `train` includes a unique string column
-`churn`; `query` includes the same feature columns and excludes `churn`.
-For a numeric target use `Regressor` explicitly. Start's [complete synthetic
-examples](start.md) run without local data files.
+This continuation expects your approved `data` DataFrame with a `churn` label.
+[Start's real research examples](start.md) are complete, requiring no local dataset.
+For numeric targets use `Regressor` and regression metrics instead. Hold back test
+answers before fitting; do not fit preprocessing on the test rows.
 
 ## Match the schema
 

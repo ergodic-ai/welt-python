@@ -25,14 +25,21 @@ types. Timeout does not cancel server work; reconnect with client.job(job_id).
 Use target-free observational datasets: discovery preserves every uploaded column
 in original order. It rejects target-labelled datasets instead of dropping their
 target. Nonempty constraints and unsupported input reject before model work.
+The [causal notebook](notebooks.md) downloads and inspects the real data first.
+Iris has no ground-truth causal graph: inspect native edges and assumptions,
+without pretending class labels evaluate a graph or establish causal truth.
+
 Capability/readiness checks come from the current /v1/models task profile, not a
 client-side list or a model being present in the catalogue.
 
 ```python
 from welt import Client
 
-# X is the user's finite observational DataFrame. Use this only after the selected
-# causal model/task is enabled and its published input bounds are satisfied.
+# Continue after downloading/inspecting the real Iris data in Start.
+# Exclude the encoded classification target; keep all four measurements/150 rows.
+X = data.drop(columns=target)
+print(X.head())
+print(X.shape)
 with Client() as client:
     profile = next(m for m in client.models() if m["id"] == "arrow")
     ready = any(p["task"] == "causal_discovery" and p["execution_available"]
@@ -91,7 +98,7 @@ an upload only if it has no retained predictor/result or queued/running job
 dependencies. AsyncClient exposes the same methods with `await`. There is no
 implicit deletion, cascade or expiry when a client closes or discovery times out.
 These explicit server routes are deployed; dependency/race/tenant contracts were
-checked against temporary local state. Live acceptance retains its synthetic
+checked against temporary local state. Earlier bounded live acceptance retains its qualification
 results and does not delete hosted state.
 
 A successful deletion returns `None`; repeat deletion of the same owned resource

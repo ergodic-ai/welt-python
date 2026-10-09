@@ -64,8 +64,8 @@ class SyntheticService:
                     labels=np.column_stack((np.ones(len(X)),X)) @ self.regression_coefficients[item['id']]
                     probs=None
                 else:
-                    labels=np.where(X[:,0]+0.5*X[:,1]>0,'positive','negative')
-                    probs=[[0.1,0.9] if label=='positive' else [0.9,0.1] for label in labels]
+                    labels=np.full(len(X), item["classes"][0])
+                    probs=[[1.0] + [0.0]*(len(item["classes"])-1) for _ in labels]
                 operation=f'query-{len(self.events)}'
                 for status in ('running','succeeded'):self.usage(operation,'predict',status,item['dataset_id'],item['id'],len(X),item['task'])
                 return httpx.Response(200,json=dict(predictions=labels.tolist(),
@@ -77,63 +77,6 @@ class SyntheticService:
         if path in resources:return httpx.Response(200,json={'items':list(resources[path].values())})
         if path=='/v1/usage':return httpx.Response(200,json={'items':self.events})
         raise AssertionError(f'Unsupported notebook fixture operation: {method} {path}')
-
-
-def notebook_options():
-    mode=os.environ.get('WELT_NOTEBOOK_MODE','fixture')
-    if mode=='fixture':
-        return dict(base_url='https://notebook.invalid',api_key='not-a-key',transport=httpx.MockTransport(SyntheticService()))
-    if mode!='live':raise ValueError('WELT_NOTEBOOK_MODE must be fixture or live.')
-    base=os.environ.get('WELT_BASE_URL','');parts=urlsplit(base)
-    if parts.scheme!='https' or not parts.netloc or parts.username or parts.password or parts.query or parts.fragment:
-        raise ValueError('Live mode requires an explicit HTTPS WELT_BASE_URL without embedded credentials.')
-    if not os.environ.get('WELT_API_KEY'):raise ValueError('Live mode requires a locally configured WELT_API_KEY.')
-    return dict(base_url=base)
-
-
-def notebook_client():
-    return Client(**notebook_options())
-
-
-def notebook_async_client():
-    return AsyncClient(**notebook_options())
-
-
-def synthetic_table():
-    rng=np.random.default_rng(9);X=rng.normal(size=(160,4))
-    labels=np.where(X[:,0]+0.5*X[:,1]>0,'positive','negative')
-    return ['feature_a','feature_b','feature_c','feature_d'],X[:128],labels[:128],X[128:]
-
-
-def prepare(client):
-    columns,train,labels,query=synthetic_table()
-    entry=next(m for m in client.models() if m['id']=='tabicl-v2')
-    if entry.get('status')!='available' or 'classification' not in entry.get('tasks',[]):
-        raise RuntimeError('The requested classifier is unavailable; no substitution is permitted.')
-    dataset=client.upload(columns=columns+['label'],rows=[r.tolist()+[y] for r,y in zip(train,labels)],target='label',name='Synthetic SDK notebook')
-    predictor=client.submit_fit(dataset['id'],model='tabicl-v2',task='classification',seed=9).result(timeout=120)
-    return columns,query,predictor
-
-
-def regression_table():
-    """Exact planted qualification fixture: seed42, support128/query32, features4."""
-    rng=np.random.default_rng(42)
-    train=rng.normal(size=(128,4));query=rng.normal(size=(32,4))
-    weights=rng.normal(size=4);target=train@weights+rng.normal(scale=0.05,size=128)
-    return ['feature_a','feature_b','feature_c','feature_d'],train,target,query
-
-
-def prepare_regression(client):
-    columns,train,target,query=regression_table()
-    entry=next(m for m in client.models() if m['id']=='tabicl-v2')
-    profile=next((p for p in entry.get('task_profiles',[]) if p['task']=='regression'),None)
-    if not profile or profile.get('status')!='available' or not profile.get('execution_available'):
-        raise RuntimeError('Qualified regression worker unavailable; no task/model substitution permitted.')
-    dataset=client.upload(columns=columns+['target'],rows=[r.tolist()+[float(y)] for r,y in zip(train,target)],target='target',name='Synthetic regression SDK notebook')
-    predictor=client.submit_fit(dataset['id'],model='tabicl-v2',task='regression',seed=42).result(timeout=120)
-    if predictor['model_version']!=profile['version']:
-        raise RuntimeError('Prepared regression version differs from the selected available profile.')
-    return columns,query,predictor
 
 
 class CausalSyntheticService(SyntheticService):
@@ -186,65 +129,59 @@ class CausalSyntheticService(SyntheticService):
         return super().__call__(request)
 
 
-def notebook_causal_client():
-    options=notebook_options()
-    if os.environ.get('WELT_NOTEBOOK_MODE','fixture')=='fixture':
-        options['transport']=httpx.MockTransport(CausalSyntheticService())
-    return Client(**options)
 
 
-def causal_table():
-    """Arrow frozen chain/isolate panel input: seed42, full128x4 observations."""
-    rng=np.random.default_rng(42)
-    values=rng.exponential(size=(128,4))-1
-    values[:,1]=1.5*values[:,0]+.25*values[:,1]
-    values[:,2]=1.1*values[:,1]+.25*values[:,2]
-    return ['z_treatment','m_mediator','a_outcome','isolated'],values
+class ResearchFixture(CausalSyntheticService):
+    """Test wire responses with authentic pinned canonical research bytes.
 
-
-def estimator_transport():
-    """Share a controlled service across real estimator calls; live opt-in unchanged."""
-    from contextlib import contextmanager
-    from unittest.mock import patch
-
-    @contextmanager
-    def session():
-        options = notebook_options()
-        if os.environ.get('WELT_NOTEBOOK_MODE', 'fixture') == 'fixture':
-            with patch('welt.estimators.Client', lambda **unused: Client(**options)):
-                yield
-        else:
-            yield
-    return session()
-
-
-class ResearchSyntheticService(SyntheticService):
-    """Verified download plumbing using labelled fixture bytes, never real Parquet."""
-    body = b'controlled research fixture bytes; not a Parquet file\n'
+    Outputs are deliberately constant test plumbing, not model-quality evidence.
+    No data is stored in Git; caller supplies a reviewed temporary fixture directory.
+    """
+    def __init__(self, directory):
+        super().__init__()
+        from pathlib import Path
+        from hashlib import sha256
+        self.research = {}
+        for name, digest in (("iris", "d839644b6de36fc5cafdda18c5daeca3284a5ce8bb6169aff2fcb3fbb4a12021"),
+                             ("yacht", "bc7dddd884c5e798c1b2abfc559a36ab79a6d09c4e2ea3e9bbd95c06539c7342")):
+            root = Path(directory)
+            detail = json.loads((root / (name + ".json")).read_text())
+            body = (root / (name + ".parquet")).read_bytes()
+            assert sha256(body).hexdigest() == digest
+            assert detail["content"]["version"] == detail["content"]["sha256"] == digest
+            assert detail["content"]["size_bytes"] == len(body)
+            self.research[detail["id"]] = (detail, body)
 
     def __call__(self, request):
-        from hashlib import sha256
-        assert request.url.host == 'notebook.invalid'
-        digest = sha256(self.body).hexdigest()
-        detail = dict(id='research-fixture', name='Controlled research fixture',
-            availability='available', license='Synthetic fixture; no source dataset',
-            schema=dict(columns=[]), targets=[], splits=[],
-            provenance=dict(source='controlled transport; no real research bytes'),
-            content=dict(version=digest, sha256=digest, size_bytes=len(self.body),
-                media_type='application/vnd.apache.parquet', filename='fixture.parquet'))
-        if request.url.path == '/v1/research-datasets':
-            return httpx.Response(200, json=dict(items=[detail], next_cursor=None,
-                total=1, catalogue_version='synthetic-v1', facets={}))
-        if request.url.path == '/v1/research-datasets/research-fixture':
+        path = request.url.path
+        if path == "/v1/research-datasets":
+            return httpx.Response(200, json=dict(items=[item[0] for item in self.research.values()],
+                total=2, next_cursor=None, catalogue_version="test-pinned-research", facets={}))
+        if path.startswith("/v1/research-datasets/"):
+            detail, body = self.research[path.split("/")[3]]
+            if path.endswith("/content"):
+                assert request.url.params["version"] == detail["content"]["version"]
+                return httpx.Response(200, stream=httpx.ByteStream(body))
             return httpx.Response(200, json=detail)
-        if request.url.path == '/v1/research-datasets/research-fixture/content':
-            assert request.url.params['version'] == digest
-            return httpx.Response(200, stream=httpx.ByteStream(self.body))
+        if path == "/v1/models":
+            prediction = super(CausalSyntheticService, self).__call__(request).json()["items"]
+            discovery = super().__call__(request).json()["items"]
+            prediction += [dict(prediction[0], id=name) for name in ("kumo-medium", "tabdpt-1.3", "mitra-v2")]
+            return httpx.Response(200, json={"items": prediction + discovery})
         return super().__call__(request)
 
 
-def notebook_research_client():
-    options = notebook_options()
-    if os.environ.get('WELT_NOTEBOOK_MODE', 'fixture') == 'fixture':
-        options['transport'] = httpx.MockTransport(ResearchSyntheticService())
-    return Client(**options)
+def patch_clients(directory):
+    """Only the test runner calls this; public examples do not import this module."""
+    from contextlib import ExitStack
+    from unittest.mock import patch
+    fixture = ResearchFixture(directory)
+    stack = ExitStack()
+    for kind in (Client, AsyncClient):
+        original = kind.__init__
+        def initialize(self, *args, _original=original, **kwargs):
+            kwargs.update(base_url="https://notebook.invalid", api_key="test-only-key",
+                          transport=httpx.MockTransport(fixture))
+            _original(self, *args, **kwargs)
+        stack.enter_context(patch.object(kind, "__init__", initialize))
+    return stack

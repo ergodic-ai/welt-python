@@ -37,48 +37,32 @@ class NotebookSelection(unittest.TestCase):
             execute.assert_not_called()
 
 
-class RegressionNotebookFixture(unittest.TestCase):
-    @staticmethod
-    def support():
-        path=Path(__file__).resolve().parents[1]/'examples/notebooks/support.py'
-        spec=importlib.util.spec_from_file_location('notebook_support',path)
-        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-        return module
+class TeachingSources(unittest.TestCase):
+    def test_notebooks_are_standalone_real_data_and_scrubbed(self):
+        import json
+        root=Path(__file__).resolve().parents[1]
+        for path in (root/'examples/notebooks').glob('*.ipynb'):
+            notebook=json.loads(path.read_text())
+            code="\n".join("".join(cell['source']) for cell in notebook['cells'] if cell['cell_type']=='code')
+            self.assertIn('research_dataset',code)
+            self.assertIn('download_research_dataset',code)
+            self.assertIn('pd.read_parquet',code)
+            self.assertIn('data.head()',code)
+            for forbidden in ('estimator_transport','from support','MockTransport','make_classification','np.random'):
+                self.assertNotIn(forbidden,code)
+            if path.stem!='causal-discovery':
+                self.assertLess(code.index('train_test_split('),code.index('model.fit(') if 'model.fit(' in code else code.index('model.submit_fit('))
+                self.assertIn('test.drop(columns=target)',code)
+                self.assertTrue('accuracy_score' in code or 'mean_absolute_error' in code)
+            for cell in notebook['cells']:
+                if cell['cell_type']=='code':
+                    self.assertEqual(cell['outputs'],[]);self.assertIsNone(cell['execution_count'])
 
-    def test_regression_points_reorder_reopen_and_task_identity(self):
-        support=self.support()
-        with patch.dict('os.environ',{'WELT_NOTEBOOK_MODE':'fixture','WELT_API_KEY':'real-key-must-not-be-read'}):
-            with support.notebook_client() as client:
-                columns,query,predictor=support.prepare_regression(client)
-                result=client.predict(predictor['id'],columns=columns,rows=query.tolist())
-                reordered=client.predict(predictor['id'],columns=columns[::-1],rows=query[:,::-1].tolist())
-                self.assertEqual(predictor['task'],'regression')
-                self.assertEqual(predictor['model_version'],'synthetic-regression-contract-v1')
-                self.assertIsNone(result['classes']);self.assertIsNone(result['probabilities'])
-                self.assertEqual(np.shape(result['predictions']),(32,))
-                self.assertTrue(np.isfinite(result['predictions']).all())
-                np.testing.assert_allclose(result['predictions'],reordered['predictions'])
-                self.assertEqual(client.predictor(predictor['id'])['model_version'],predictor['model_version'])
-                self.assertTrue(all(e['task']=='regression' for e in client.usage()))
-
-    def test_missing_regression_profile_rejects_before_upload(self):
-        support=self.support()
-        from unittest.mock import Mock
-        client=Mock();client.models.return_value=[dict(id='tabicl-v2',status='available',tasks=['classification'])]
-        with self.assertRaisesRegex(RuntimeError,'Qualified regression worker unavailable'):
-            support.prepare_regression(client)
-        client.upload.assert_not_called();client.submit_fit.assert_not_called()
-
-    def test_regression_rng_matches_frozen_planted_fixture(self):
-        support=self.support();columns,train,target,query=support.regression_table()
-        rng=np.random.default_rng(42);expected_train=rng.normal(size=(128,4));expected_query=rng.normal(size=(32,4))
-        weights=rng.normal(size=4);expected_target=expected_train@weights+rng.normal(scale=0.05,size=128)
-        self.assertEqual(len(columns),4)
-        np.testing.assert_array_equal(train,expected_train);np.testing.assert_array_equal(query,expected_query)
-        np.testing.assert_array_equal(target,expected_target)
-
-
-
+    def test_fixture_refuses_unverified_canonical_bytes(self):
+        from scripts.notebook_fixture import ResearchFixture
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);(root/'iris.json').write_text('{}');(root/'iris.parquet').write_bytes(b'not research')
+            with self.assertRaises(AssertionError):ResearchFixture(root)
 
 
 class SiteContracts(unittest.TestCase):
@@ -102,7 +86,7 @@ class SiteContracts(unittest.TestCase):
             root=Path(folder);old=root/'v0.6.0';old.mkdir();(old/'index.html').write_text('historical sentinel')
             self.build(folder)
             self.assertEqual((old/'index.html').read_text(),'historical sentinel')
-            current=root/'v0.7.0'
+            current=root/'v0.7.1'
             documents={p.resolve():Document(p.read_text()) for p in root.rglob('*.html') if p.parent!=old}
             for path,doc in documents.items():
                 for href in doc.links:
@@ -120,25 +104,23 @@ class SiteContracts(unittest.TestCase):
                 if parts.fragment:self.assertIn(parts.fragment,documents[target].ids)
             self.assertEqual(len(documents[(root/'index.html').resolve()].complete),2)
 
-    def test_landing_complete_copy_examples_execute_without_live_requests(self):
-        import contextlib, io
+    def test_landing_copy_contains_all_six_real_data_steps(self):
         from html.parser import HTMLParser
         class Examples(HTMLParser):
             def __init__(self,text):super().__init__();self.code=[];self.feed(text)
             def handle_starttag(self,tag,attrs):
                 values=dict(attrs)
                 if 'data-copy' in values:self.code.append(values['data-copy'])
-        support=RegressionNotebookFixture.support()
         with tempfile.TemporaryDirectory() as folder:
-            self.build(folder);examples=Examples((Path(folder)/'index.html').read_text()).code
+            self.build(folder)
+            examples=Examples((Path(folder)/'index.html').read_text()).code
+            self.assertEqual(len(examples),2)
             for value in examples:
-                namespace={};output=io.StringIO()
-                with support.estimator_transport(),contextlib.redirect_stdout(output):exec(value,namespace)
-                self.assertEqual(namespace['predictions'].shape,(32,))
-                self.assertEqual(output.getvalue().strip(),'ndarray (32,)')
-                self.assertEqual(namespace['model'].n_features_in_,4)
-                self.assertNotIn('label',namespace['model']._columns_)
-                self.assertNotIn('target',namespace['model']._columns_)
+                compile(value, '<copied teaching example>', 'exec')
+                for step in range(1,7):self.assertIn('# '+str(step)+'.',value)
+                self.assertIn('research_dataset(dataset_id)',value)
+                self.assertIn('test.drop(columns=target)',value)
+                self.assertTrue('accuracy_score' in value or 'mean_absolute_error' in value)
 
     def test_mutable_source_link_refuses_before_writing_site(self):
         with tempfile.TemporaryDirectory() as folder, patch.object(sys,'argv',['build_docs','--output',folder]), patch.object(build_docs,'reference',return_value='# Reference\n\n[bad](https://github.com/ergodic-ai/welt-python/blob/main/examples/x.py)'):

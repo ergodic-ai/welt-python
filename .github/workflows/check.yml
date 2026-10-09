@@ -25,5 +25,5 @@ jobs:
       - run: .venv/bin/python -m pytest -q
       - run: uv build
       - run: uv pip install --python .venv/bin/python --reinstall --no-deps dist/*.whl
-      - run: .venv/bin/python scripts/check_notebooks.py
+      - run: .venv/bin/python scripts/check_notebooks.py --check-source
       - run: .venv/bin/python scripts/build_docs.py

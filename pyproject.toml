@@ -1,6 +1,6 @@
 [project]
 name = "welt-client"
-version = "0.7.0"
+version = "0.7.1"
 description = "Welt Python client and scikit-learn estimators"
 readme = "README.md"
 license = "Apache-2.0"

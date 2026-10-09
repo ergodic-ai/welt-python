@@ -1,34 +1,28 @@
-# Regression and task-specific availability
+# Predict a number
 
-The SDK uses the same dataset/preparation/predictor lifecycle for classification
-and regression. A model family name alone does not imply both tasks are ready.
-Read its `task_profiles` entry: regression must be `available`, have a matching
-ready worker and report its exact version and limits before preparing a predictor.
-The SDK never converts regression into classification or silently selects another
-model.
+Classification predicts a label; regression predicts a numeric target. Begin with
+[the complete Yacht walkthrough](start.md#regression-predict-a-number): download the
+real research table, print its rows/schema, split train/test, fit a `Regressor`,
+predict the held-out rows, and calculate MAE, RMSE and R².
 
-The bounded TabICLv2 regression recipe returns one finite mean point per query row
-in target units. Classification classes/probabilities are absent. The underlying
-model's native quantile channels are not offered as calibrated intervals or
-conformal coverage by this point-prediction interface. Each task has its own
-checkpoint, version, qualification and fitted context; a classifier predictor
-cannot be reused as a regressor.
+```python
+# Continue after preparing the Yacht train/test tables in Start.
+from welt import Regressor
+from sklearn.metrics import mean_absolute_error, root_mean_squared_error, r2_score
 
-Use `Regressor(model="tabicl-v2")` with normal `fit(X, y)`/`predict(X)` when the
-service advertises the qualified task. It uses synchronous sklearn conventions.
-Existing estimators remain pinned; a new task, seed, configuration or model needs
-a new fit. Array inputs use positional schema; named DataFrame columns must match
-the fitted names and are safely reordered. Invalid, missing or extra features
-reject instead of being silently dropped.
+model = Regressor(model="tabicl-v2", random_state=9)
+model.fit(train, target=target)
+predictions = model.predict(query)
+print("Test MAE:", mean_absolute_error(y_test, predictions))
+print("Test RMSE:", root_mean_squared_error(y_test, predictions))
+print("Test R²:", r2_score(y_test, predictions))
+```
 
-The [regression notebook](https://github.com/ergodic-ai/welt-python/blob/v0.7.0/examples/notebooks/regression.ipynb)
-uses the frozen synthetic planted fixture: seed42, 128 training rows, four numeric
-features and 32 query rows. It checks finite point outputs, null class/probability
-fields, named-column reordering, pinned version and reopen agreement. It imposes
-no scientific accuracy threshold and does not force a worker restart. Default CI
-uses a synthetic HTTP fixture; live opt-in requires the separately qualified real
-regressor. Accepted synthetic server state remains retained.
+MAE/RMSE use recorded target units; smaller is better. R² can be negative. Compare
+actual and predicted rows to understand misses. These are held-out measurements,
+not a publisher benchmark or guarantee. Use a validation split if tuning.
 
-Other selected families, task swapping across families, larger envelopes and native
-uncertainty outputs require their own exact artifact/runtime qualification. This
-example does not complete the entire model catalogue or regression release matrix.
+A task-specific available regression profile is required; no task/model fallback
+occurs. `predict` returns finite target-unit mean points, not class probabilities,
+calibrated intervals or conformal coverage. Predictors keep their original task,
+version and configuration. The [notebook](notebooks.md) teaches the full recipe.

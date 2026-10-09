@@ -20,17 +20,16 @@ payloads, customer rows or credentials into your repository.
 
 ## Reopen in another session
 
-Configure your key again for the same workspace. Replace the example identity and
-load a feature-only query table with the same fitted names.
+Configure your key again for the same workspace. Use the identity you saved and the feature-only test table from [Start](start.md).
 
 ```python
-import pandas as pd
 from welt import Classifier
+from sklearn.metrics import accuracy_score
 
-query = pd.read_csv("new_customers.csv")
-model = Classifier.from_predictor("your-completed-predictor-id")
-predictions = model.predict(query)
-assert predictions.shape == (len(query),)
+# Continue with the feature-only Iris test rows from Start.
+reopened = Classifier.from_predictor(predictor_id)
+repeat = reopened.predict(query)
+print("Test accuracy after reopening:", accuracy_score(y_test, repeat))
 ```
 
 Use `Regressor.from_predictor(...)` for a regression predictor. A mismatched task
