@@ -9,21 +9,28 @@ how well a classifier predicts those unseen rows.
 Python 3.11–3.13. Use a virtual environment, then install the SDK and its Parquet reader:
 
 ```sh
-python -m pip install "welt-client[parquet]==0.7.1"
+python -m pip install "welt-client[parquet]==0.8.0"
 ```
 
-## Set your key
+## Connect your workspace
 
-Sign in at [Welt](https://welt.ergodic.dev), open Account, and create a key with
-**Allow writes, fits and predictions** enabled. Configure it locally, or run this
-hidden prompt once. Keep your key out of saved notebook cells and Git.
+In a terminal, run `welt login` and approve your workspace in the browser. This
+saves an origin-bound credential privately on this computer. For a notebook,
+connect explicitly in Python instead:
 
 ```python
-import getpass
-import os
+from welt import Client
 
-os.environ["WELT_API_KEY"] = getpass.getpass("Welt API key: ")
+with Client() as client:
+    client.connect()
 ```
+
+Open the printed verification link on your own computer if Python is running on
+a remote server. No callback to localhost is required. Python connection keeps
+access only in this process by default, so the next `Classifier()` works without
+copying a key. Use `client.connect(save=True)` only if you want it saved for future
+processes. [Connection details](connect.md) explains expiry and key precedence.
+Manual `WELT_API_KEY` configuration remains supported; never save a secret in code.
 
 ## Classification: predict a flower's class
 

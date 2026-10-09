@@ -1,12 +1,15 @@
 [project]
 name = "welt-client"
-version = "0.7.1"
+version = "0.8.0"
 description = "Welt Python client and scikit-learn estimators"
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.11,<3.14"
 dependencies = ["httpx>=0.28,<1", "numpy>=2,<3", "pandas>=2.2,<4", "scikit-learn>=1.6,<2"]
+
+[project.scripts]
+welt = "welt.cli:main"
 
 [project.optional-dependencies]
 parquet = ["pyarrow>=19,<30"]

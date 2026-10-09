@@ -123,7 +123,8 @@ class _HTTP:
         if not math.isfinite(max_retry_delay) or not 0 <= max_retry_delay <= 60:
             raise ValueError("max_retry_delay must be from 0 to 60 seconds.")
         self.base_url = base_url if base_url is not None else os.getenv("WELT_BASE_URL", "https://welt.ergodic.dev")
-        self.api_key = credential(secret(api_key) or os.getenv("WELT_API_KEY"))
+        from .login import selected_credential
+        self.api_key = credential(secret(api_key) or os.getenv("WELT_API_KEY") or selected_credential(self.base_url))
         self.max_retries, self.max_retry_delay = max_retries, max_retry_delay
         value = secret(self.api_key)
         return {"Authorization": f"Bearer {value}"} if value else {}
@@ -137,7 +138,7 @@ class _HTTP:
         value = secret(self.api_key)
         if not public and (not value or not value.strip()):
             raise AuthenticationError(
-                "Set WELT_API_KEY to a workspace key from Welt → API keys before this operation. "
+                "Run welt login or Client().connect() before this operation, or set WELT_API_KEY from Welt → API keys. "
                 "Keep the key outside your code or notebook; fitting requires write permission.",
                 code="missing_api_key")
 
@@ -167,6 +168,15 @@ class Client(_HTTP):
         headers = self._configure(base_url, api_key, max_retries, max_retry_delay)
         self.http = httpx.Client(base_url=self.base_url, headers=headers, timeout=timeout,
                                  transport=transport, follow_redirects=False)
+
+    def connect(self, *, timeout=600, open_browser=True, save=False):
+        """Approve browser sign-in; retain access in-process or explicitly save it.
+
+        Returns this connected Client. Constructors never open a browser. The link
+        and short code also work from remote notebooks/headless machines.
+        """
+        from .login import connect
+        return connect(self, timeout=timeout, open_browser=open_browser, save=save)
 
     def close(self):
         self.http.close()

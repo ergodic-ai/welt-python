@@ -56,7 +56,8 @@ Separate training and query rows yourself. Respect the task's
 Preprocessing belongs inside each training fold during cross-validation. Use the
 same held-out rows and metric when comparing models and keep selection separate
 from unbiased assessment. Process-based parallel CV workers reauthenticate through
-`WELT_API_KEY`; an explicit constructor key is intentionally not serialized.
+`WELT_API_KEY` or an explicitly saved origin credential; process-only connections
+are not serialized. an explicit constructor key is intentionally not serialized.
 
 ## Inspect the result
 

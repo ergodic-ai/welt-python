@@ -1,8 +1,6 @@
 """A real native onboarding request using pinned p10k Iris; held-out evaluation, no benchmark guarantee."""
 import argparse
-from getpass import getpass
 from hashlib import sha256
-import os
 from pathlib import Path
 
 import pandas as pd
@@ -43,11 +41,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=Path("research")/f"iris-{VERSION}.parquet")
     args = parser.parse_args()
-    key = os.getenv("WELT_API_KEY") or getpass("Welt read/write API key (hidden): ")
-    if not key:
-        raise SystemExit("Create a read/write key in your signed-in workspace first.")
     args.output.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    with Client(base_url=ORIGIN, api_key=key) as client:
+    with Client(base_url=ORIGIN) as client:
+        client.connect()
+        key = client.api_key  # Opaque credential; never printed or saved in this script.
         info = client.research_dataset(DATASET_ID)
         content = info.get("content") or {}
         if (content.get("version") != VERSION or content.get("sha256") != VERSION

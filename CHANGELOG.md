@@ -1,3 +1,13 @@
+# 0.8.0 — Explicit browser connection
+
+- Add Client.connect(): browser approval, remote/headless verification link,
+  process-only origin credentials by default, explicit private save=True.
+- Add welt login CLI with optional no-browser/no-save, and exact-origin saved-key
+  loading after explicit/environment credentials. Constructors never sign in.
+- Simplify the homepage to title and numbered steps; show the training DataFrame
+  before modelling. Keep the 0.7.1 route compatible with its immutable package.
+- Preserve real research teaching recipes and existing model/task semantics.
+
 # 0.7.1 — Real-data learning examples
 
 Documentation-only point release; model, API and runtime behavior are unchanged.

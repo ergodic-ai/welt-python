@@ -1,10 +1,9 @@
 # Install to your first real request
 
-Open [Welt](https://welt.ergodic.dev), sign in with Google or your verified
-email/password, and use your workspace's Account page. Google login is accepted;
-GitHub is currently paused. Create an API key with **Allow writes, fits and
-predictions** checked. Copy its secret once; it is not shown again. Read-only keys
-can browse/download research data but cannot prepare or run your first model.
+Sign in to [Welt](https://welt.ergodic.dev) with Google or verified email/password.
+GitHub sign-in is paused. The SDK's browser connection asks you to approve your
+workspace and permissions; you no longer need to copy a key for the default path.
+Manual workspace keys remain available in Account when needed.
 
 Use Python 3.11–3.13. Create a fresh environment and install the released wheel,
 including the existing Parquet reader extra. No Git executable is needed:
@@ -14,20 +13,20 @@ python -m venv .venv
 # macOS/Linux:
 . .venv/bin/activate
 # Windows PowerShell: .venv\Scripts\Activate.ps1
-python -m pip install "welt-client[parquet]==0.7.1"
+python -m pip install "welt-client[parquet]==0.8.0"
 ```
 
-Download [first_request.py](https://raw.githubusercontent.com/ergodic-ai/welt-python/v0.7.1/examples/first_request.py)
+Download [first_request.py](https://raw.githubusercontent.com/ergodic-ai/welt-python/v0.8.0/examples/first_request.py)
 from this reviewed documentation revision, then run:
 
 ```sh
 python first_request.py
 ```
 
-The script prompts for the key without echoing it or adding it to shell history.
-It also accepts an existing `WELT_API_KEY` environment value. Never paste keys into
-source, notebook cells, command URLs, logs or screenshots. Do not persist an SDK
-key in browser storage. Browser sessions and SDK keys are separate credentials.
+The script connects through the browser or its printed verification link. It also
+reuses a valid configured/saved key. No API secret is printed or written into the
+notebook/source. See [Connect](connect.md) for remote/headless use and optional
+private persistence. Browser sessions and SDK credentials remain distinct.
 
 This is a **real native request**, not a mock or metadata ping. The script downloads
 exactly one reviewed p10k Iris Parquet asset (7,332 bytes, 150 rows), checks its

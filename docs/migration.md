@@ -1,4 +1,4 @@
-# Move from SDK 0.6 to 0.7
+# Upgrade your client
 
 SDK 0.7 keeps the released supervised, research and causal interfaces and adds a
 simpler hosted setup plus explicit target-column convenience.
@@ -54,3 +54,12 @@ convenience reads still load into memory. Full all-model qualification, public
 Ergodic distribution and calibrated/conformal confidence retain their own gates.
 The [0.6 documentation](../v0.6.0/index.html) remains available with its original
 contract and pinned notebook sources.
+
+## Move from 0.7 to 0.8
+
+Install `welt-client[parquet]==0.8.0`. Run `welt login` in your terminal or call
+`Client().connect()` in a notebook. Existing explicit keys/environment keys remain
+supported and take precedence; constructors never initiate authentication. Python
+connection is process-only unless you opt into `save=True`. See [Connect](connect.md)
+for private saved-origin storage and remote/headless fallback. Model semantics,
+research bytes, targets, splits and fitted predictor formats are unchanged.

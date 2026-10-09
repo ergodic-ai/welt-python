@@ -1,7 +1,7 @@
 # Learn with real research data
 
-Each notebook is standalone: install the SDK's `parquet` extra, configure
-`WELT_API_KEY` locally, and run the cells in order. No support.py or mock context is
+Each notebook is standalone: install the SDK's `parquet` extra, approve your workspace using
+the first `Client.connect()` cell, and run the cells in order. No support.py or mock context is
 needed. Do not save keys or outputs into Git.
 
 - Classification: real Iris, inspect, seed9 stratified120/30 split, fit, predict,

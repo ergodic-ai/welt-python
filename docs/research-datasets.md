@@ -8,12 +8,10 @@ things: inspect availability, license notices, schema, recorded targets/splits
 and provenance before using a dataset. Missing source information stays missing.
 
 ```python
-import os
 from pathlib import Path
 from welt import Client
 
-with Client(base_url="https://welt.ergodic.dev",
-            api_key=os.environ["WELT_API_KEY"]) as client:
+with Client() as client:  # Connect once using welt login or Client.connect().
     page = client.research_datasets(q="iris", availability="available", limit=10)
     for item in page["items"]:
         print(item["id"], item["name"], item["availability"])

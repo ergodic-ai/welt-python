@@ -7,7 +7,7 @@ on:
       release_tag:
         description: Published SDK release to document
         required: true
-        default: v0.7.1
+        default: v0.8.0
 permissions:
   contents: read
 concurrency:
@@ -75,8 +75,18 @@ jobs:
       - run: uv pip install --python .venv/bin/python --reinstall --no-deps "https://github.com/ergodic-ai/welt-python/releases/download/v0.7.0/welt_client-0.7.0-py3-none-any.whl"
         working-directory: .legacy-sdk07
       - run: .venv/bin/python scripts/build_historical_docs.py --source .legacy-sdk07 --version 0.7.0 --output site
+      # Old 0.7.1 package/guides remain immutable; requested landing correction only.
+      - uses: actions/checkout@v4
+        with:
+          ref: a14e880ea17fa4114bacf7b269283c4db8327678
+          path: .legacy-sdk071
+      - run: uv sync --frozen
+        working-directory: .legacy-sdk071
+      - run: uv pip install --python .venv/bin/python --reinstall --no-deps "https://github.com/ergodic-ai/welt-python/releases/download/v0.7.1/welt_client-0.7.1-py3-none-any.whl"
+        working-directory: .legacy-sdk071
+      - run: .venv/bin/python scripts/build_historical_docs.py --source .legacy-sdk071 --version 0.7.1 --output site
       - run: .venv/bin/python scripts/build_docs.py
-      - run: test -f site/v0.6.0/index.html && test -f site/v0.6.0/research-datasets.html && test -f site/v0.7.0/index.html && test -f site/v0.7.1/index.html
+      - run: test -f site/v0.6.0/index.html && test -f site/v0.6.0/research-datasets.html && test -f site/v0.7.0/index.html && test -f site/v0.7.1/index.html && test -f site/v0.8.0/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -5,22 +5,30 @@ estimators backed by durable predictors in your private Welt workspace.
 Install `welt-client`, import `welt`. Python 3.11–3.13.
 
 [Start here](https://ergodic-ai.github.io/welt-python/) ·
-[Guides](https://ergodic-ai.github.io/welt-python/v0.7.1/own-data.html) ·
-[Reference](https://ergodic-ai.github.io/welt-python/v0.7.1/reference.html) ·
+[Guides](https://ergodic-ai.github.io/welt-python/v0.8.0/own-data.html) ·
+[Reference](https://ergodic-ai.github.io/welt-python/v0.8.0/reference.html) ·
 [Models and limits](docs/capabilities.md)
 
 ## Install
 
 ```sh
-python -m pip install "welt-client[parquet]==0.7.1"
+python -m pip install "welt-client[parquet]==0.8.0"
 ```
 
-Create a workspace API key at [Welt](https://welt.ergodic.dev) with **Allow writes,
-fits and predictions** enabled. Configure `WELT_API_KEY` through local secret
-configuration or a hidden `getpass` prompt. Keep the secret out of source, notebooks,
-logs and shell history. SDK 0.7 defaults to `https://welt.ergodic.dev`; an explicit
-`base_url` overrides `WELT_BASE_URL`, which overrides that default. Local development
-must explicitly select localhost.
+Run `welt login` and approve your workspace in the browser. This saves a private,
+origin-bound credential for later Python sessions. In a notebook, connect once:
+
+```python
+from welt import Client
+
+with Client() as client:
+    client.connect()
+```
+
+Open its printed verification link on your own computer if Python is remote.
+Python connection stays in this process; use `save=True` explicitly to persist it.
+Constructors never open a browser. Explicit keys and `WELT_API_KEY` still work and
+have precedence over connected/saved credentials. [Connection guide](docs/connect.md).
 
 ## Learn with real data
 

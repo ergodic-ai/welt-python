@@ -16,3 +16,6 @@
 .article{overflow-wrap:anywhere}
 
 .copy-fallback{display:block;width:100%;max-width:100%;padding:18px;background:var(--panel);border:1px solid var(--border);font:12px/1.75 monospace;white-space:pre;overflow:auto;resize:vertical}
+
+/* API-072: title followed directly by a quiet numbered walkthrough. */
+.home .hero{display:block;max-width:950px;margin:auto}.home .hero>h1{margin-bottom:32px}.home .quickstart{max-width:none;padding:32px 38px}.home .quickstart .step{font-size:15px;margin:24px 0 12px}.home .quickstart .step:first-of-type{margin-top:12px}.home .home-bottom{max-width:950px;margin:48px auto 0}.home .intro{margin-bottom:24px}@media(max-width:520px){.home .quickstart{padding:22px 17px}.home .hero>h1{margin-bottom:24px}.home .quickstart .step{font-size:13px}}

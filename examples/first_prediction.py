@@ -1,11 +1,9 @@
 """Learn classification or regression with real Welt research data.
 
-Run with WELT_API_KEY configured, or enter a key at the hidden prompt.
+Run after welt login, or approve the printed browser connection link.
 Requires welt-client[parquet]. Each run retains its hosted training dataset/predictor.
 """
 import argparse
-import getpass
-import os
 
 
 def run(task="classification"):
@@ -109,8 +107,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--task", choices=("classification", "regression"), default="classification")
     args = parser.parse_args()
-    if not os.environ.get("WELT_API_KEY"):
-        os.environ["WELT_API_KEY"] = getpass.getpass("Welt API key: ")
+    from welt import Client
+    with Client() as client:
+        client.connect()
     run(args.task)
 
 

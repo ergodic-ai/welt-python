@@ -154,6 +154,8 @@ class ResearchFixture(CausalSyntheticService):
 
     def __call__(self, request):
         path = request.url.path
+        if path == "/v1/workspace":
+            return httpx.Response(200, json={"id": "workspace-fixture"})
         if path == "/v1/research-datasets":
             return httpx.Response(200, json=dict(items=[item[0] for item in self.research.values()],
                 total=2, next_cursor=None, catalogue_version="test-pinned-research", facets={}))
