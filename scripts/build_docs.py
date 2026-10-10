@@ -48,7 +48,8 @@ METHODS = {
  'cancel': ('Explicitly request remote cancellation of this job.', 'Server job metadata dictionary (await for AsyncJob).', 'Authentication, permissions, NotFoundError or job conflict; cancellation races with completion.'),
  'research_datasets': ('Search the research catalogue without uploading or fitting data.', 'Page dictionary: items, next_cursor, total, catalogue_version, facets.', 'Invalid filters/limit, authentication, permission or transport errors.'),
  'research_dataset': ('Inspect licence, schema, recorded targets/splits and eligible content before download.', 'Full research detail dictionary; content=None means bytes are not eligible.', 'Authentication/permission or NotFoundError; never infer redistribution rights from catalogue presence.'),
- 'download_research_dataset': ('Download version-pinned canonical bytes with exact size/SHA verification to a caller-chosen new path.', 'pathlib.Path after atomic verified publication. No automatic extraction or upload.', 'FileExistsError for existing destination/symlink; invalid size/version, integrity or TransportError. Interrupted downloads leave no destination.'),
+ 'download_research_dataset': ('Download version-pinned canonical bytes with exact size/SHA verification to a caller-chosen new path. metadata=True also writes the catalogue detail to <path>.metadata.json after the verified file.', 'pathlib.Path after atomic verified publication (default). metadata=True: frozen ResearchDownload with path, metadata_path, version, sha256 and the detail dictionary. No automatic extraction or upload.', 'FileExistsError for existing destination/symlink (with metadata=True, either file is checked before any request); invalid size/version, integrity or TransportError. Interrupted downloads leave no destination.'),
+ 'load_research_dataset': ('Download verified content into a private temporary directory and read it as a pandas DataFrame; version=None uses the current content version. Requires the welt-client[research] extra.', 'pandas.DataFrame, or (DataFrame, ResearchMetadata) with metadata=True. A notice ZIP also exposes license_text/attribution_text and emits ResearchNoticeWarning. No file is left behind.', 'OptionalDependencyError (an ImportError) without pandas/pyarrow; content unavailable, version mismatch or size above max_bytes before download; invalid_research_archive for unexpected ZIP members; integrity or TransportError.'),
  'datasets': ('List private workspace datasets visible to the current key.', 'List of dataset dictionaries.', 'Authentication, permission or transport errors.'),
  'predictors': ('List durable fitted predictors in the current workspace.', 'List of predictor dictionaries.', 'Authentication, permission or transport errors.'),
  'jobs': ('List durable jobs in the current workspace.', 'List of job dictionaries.', 'Authentication, permission or transport errors.'),
@@ -92,7 +93,7 @@ def reference():
             purpose, returns, errors = METHODS[key]
             parts += [f'### {name}.{key}', purpose, f'```python\n{name}.{key}{public_signature(method)}\n```', f'**Returns:** {returns}', f'**Errors and limits:** {errors}']
     parts += ['## Error types', 'All remote errors inherit `WeltError`. Table/schema validation may raise ordinary `ValueError` before upload. Do not catch every error and silently fit again.', '| Type | Next action |', '| --- | --- |']
-    types = {'AuthenticationError': 'Configure a missing key locally; replace an invalid, expired or revoked key in Account.', 'PermissionDeniedError': 'Use a key with the required workspace write/fit/predict permission.', 'InvalidInputError': 'Check the named schema, explicit target and task limits.', 'ModelUnavailableError': 'Inspect current task_profiles and worker readiness; no automatic model fallback.', 'CapacityError / RateLimitError': 'Respect retry_after and workspace admission limits; inspect existing work.', 'JobTimeoutError / PredictionPendingError': 'Retain job_id and reconnect; local timeout does not cancel.', 'ExecutionError / JobCancelledError': 'Inspect the durable job and safe request/job IDs; intentional retry needs a new decision.', 'NotFoundError / ConflictError': 'Check workspace ownership and resource dependencies.', 'TransportError': 'Inspect existing job state before replaying a mutation; GET retries are bounded.', 'ResultExpiredError / ResultDeletedError': 'Temporary access expiry and explicit primary deletion are distinct.', 'InvalidCausalResultError': 'Reject malformed native payload without repair.', 'UnsupportedGraphConversionError / OptionalDependencyError': 'Preserve native graph; convert declared DAGs only with approved local co-release dependency.'}
+    types = {'AuthenticationError': 'Configure a missing key locally; replace an invalid, expired or revoked key in Account.', 'PermissionDeniedError': 'Use a key with the required workspace write/fit/predict permission.', 'InvalidInputError': 'Check the named schema, explicit target and task limits.', 'ModelUnavailableError': 'Inspect current task_profiles and worker readiness; no automatic model fallback.', 'CapacityError / RateLimitError': 'Respect retry_after and workspace admission limits; inspect existing work.', 'JobTimeoutError / PredictionPendingError': 'Retain job_id and reconnect; local timeout does not cancel.', 'ExecutionError / JobCancelledError': 'Inspect the durable job and safe request/job IDs; intentional retry needs a new decision.', 'NotFoundError / ConflictError': 'Check workspace ownership and resource dependencies.', 'TransportError': 'Inspect existing job state before replaying a mutation; GET retries are bounded.', 'ResultExpiredError / ResultDeletedError': 'Temporary access expiry and explicit primary deletion are distinct.', 'InvalidCausalResultError': 'Reject malformed native payload without repair.', 'UnsupportedGraphConversionError / OptionalDependencyError': 'Preserve native graph; convert declared DAGs only with approved local co-release dependency. For load_research_dataset, install welt-client[research].'}
     parts += [f'| `{name}` | {meaning} |' for name, meaning in types.items()]
     return '\n\n'.join(parts[:-len(types)-2]) + '\n\n' + '\n'.join(parts[-len(types)-2:])
 
@@ -118,16 +119,21 @@ def render_markdown(text):
     return body, renderer.toc_tokens
 
 
+def browser_connect_release(version):
+    """Releases from 0.8.0 onward document Client.connect() and the notebook landing."""
+    return tuple(int(part) for part in version.split('.')[:3]) >= (0, 8, 0)
+
+
 def shell(body, name, title, version, prefix='', outline='', home=False):
     def link(page): return prefix + ('index.html' if page == 'index' else page + '.html')
     group = 'Start' if name in ('index', 'start', 'onboarding', 'notebooks', 'connect') else 'Reference' if name == 'reference' else 'Models' if name == 'capabilities' else 'Guides'
     nav = ''.join(f'<a href="{link(page)}"' + (' aria-current="page"' if label == group else '') + f'>{label}</a>' for label, page in NAV)
-    guide_groups = [(label, [(text,page) for text,page in pages if page != 'connect' or version == '0.8.0']) for label,pages in GUIDES]
+    guide_groups = [(label, [(text,page) for text,page in pages if page != 'connect' or browser_connect_release(version)]) for label,pages in GUIDES]
     sidebar = ''.join(f'<p>{label}</p>' + ''.join(f'<a href="{link(page)}"' + (' aria-current="page"' if page == name else '') + f'>{text}</a>' for text,page in pages) for label,pages in guide_groups)
     versions = f'<option value="{prefix}index.html">v{version}</option><option value="{"../" if prefix == "" else ""}v0.6.0/">v0.6.0</option>'
-    if version in ("0.7.1", "0.8.0"):
+    if version == "0.7.1" or browser_connect_release(version):
         versions += f'<option value="{"../" if prefix == "" else ""}v0.7.0/">v0.7.0</option>'
-    if version == "0.8.0":
+    if browser_connect_release(version):
         versions += f'<option value="{"../" if prefix == "" else ""}v0.7.1/">v0.7.1</option>'
     css = prefix+'assets/docs.css'; js = prefix+'assets/docs.js'
     canonical = PUBLIC + ('/' if home and prefix else f'/v{version}/' + ('index.html' if name == 'index' else name+'.html'))
@@ -192,7 +198,7 @@ weighted avg       1.00      1.00      1.00        30'''
 
 
 def home_body(start, prefix='', sdk_version='0.7.1', browser_connect=False):
-    if browser_connect and sdk_version == '0.8.0':
+    if browser_connect and browser_connect_release(sdk_version):
         return notebook_home(prefix, sdk_version)
     blocks = re.findall(r'```(\w+)\n(.*?)```', start, re.S)
     install = blocks[0][1].splitlines()[-1]
@@ -246,8 +252,8 @@ def main():
             plain=re.sub(r'[`#*|\[\]()]','',re.sub(r'<[^>]+>','',section));plain=' '.join(plain.split())
             search.append(dict(title=f'{title} · {heading}',text=plain,href=name+'.html'+('#'+slug if section!=sections[0] else '')))
     (out/'search-index.json').write_text(json.dumps(search,ensure_ascii=False,indent=2)+'\n')
-    home=home_body(pages['start'],sdk_version=version,browser_connect=version=='0.8.0');(out/'index.html').write_text(shell(home,'index','From a DataFrame to a prediction',version,home=True))
-    prefix=f'v{version}/';(base/'index.html').write_text(shell(home_body(pages['start'],prefix,sdk_version=version,browser_connect=version=='0.8.0'),'index','From a DataFrame to a prediction',version,prefix=prefix,home=True))
+    home=home_body(pages['start'],sdk_version=version,browser_connect=browser_connect_release(version));(out/'index.html').write_text(shell(home,'index','From a DataFrame to a prediction',version,home=True))
+    prefix=f'v{version}/';(base/'index.html').write_text(shell(home_body(pages['start'],prefix,sdk_version=version,browser_connect=browser_connect_release(version)),'index','From a DataFrame to a prediction',version,prefix=prefix,home=True))
     (base/'.nojekyll').write_text('')
     urls=[PUBLIC+'/',PUBLIC+f'/v{version}/']+[PUBLIC+f'/v{version}/{name}.html' for name in pages]
     if (base/'v0.7.1/index.html').exists():urls += [PUBLIC+'/v0.7.1/']+[PUBLIC+'/v0.7.1/'+p.name for p in (base/'v0.7.1').glob('*.html')]

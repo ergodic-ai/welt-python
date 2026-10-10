@@ -4,6 +4,7 @@ import importlib.util
 
 import numpy as np
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -86,7 +87,7 @@ class SiteContracts(unittest.TestCase):
             root=Path(folder);old=root/'v0.6.0';old.mkdir();(old/'index.html').write_text('historical sentinel')
             self.build(folder)
             self.assertEqual((old/'index.html').read_text(),'historical sentinel')
-            current=root/'v0.8.0'
+            current=root/('v'+tomllib.loads((build_docs.ROOT/'pyproject.toml').read_text())['project']['version'])
             documents={p.resolve():Document(p.read_text()) for p in root.rglob('*.html') if p.parent!=old}
             for path,doc in documents.items():
                 for href in doc.links:

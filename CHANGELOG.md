@@ -1,3 +1,27 @@
+# 0.9.0 (2026-10-10) — Research dataset metadata (API-078)
+
+- `download_research_dataset(..., metadata=True)` also writes the catalogue detail
+  to `<path>.metadata.json`, create-only after the verified data file, and returns a
+  frozen `ResearchDownload` (path, metadata_path, version, sha256, metadata). Both
+  destinations are refused before any request when either exists. The default
+  `metadata=False` behavior and `pathlib.Path` return are unchanged.
+- Add `load_research_dataset(dataset_id, *, version=None, metadata=False,
+  max_bytes=64 MiB)` on `Client` and `AsyncClient`: verified download into a
+  private temporary directory, read with pandas/pyarrow, returning a DataFrame or
+  `(DataFrame, ResearchMetadata)`. Notice-bearing ZIPs must contain exactly
+  `dataset.parquet`, `LICENSE.txt` and `ATTRIBUTION.txt`; notices are exposed as
+  `license_text`/`attribution_text` with a `ResearchNoticeWarning`.
+- Add the `research` extra (`welt-client[research]`: pandas, pyarrow). Missing
+  dependencies raise `OptionalDependencyError` (an `ImportError`) naming it.
+- `version=` on `download_research_dataset`/`load_research_dataset` accepts the
+  current version or any version listed in the detail's `previous_content`; the SDK
+  requests exactly that version and verifies it against that descriptor's size and
+  SHA-256. Other versions still raise `research_version_mismatch` before any download.
+- Notice ZIP tables are checked against `provenance.delivery.table_sha256` for a
+  current restored-header archive, otherwise `provenance.canonical_sha256`.
+- Detail fields such as `display_name`, `summary`, `tags`, column descriptions and
+  `enrichment` are passed through unchanged; unknown future fields are tolerated.
+
 # 0.8.0 — Explicit browser connection
 
 - Add Client.connect(): browser approval, remote/headless verification link,

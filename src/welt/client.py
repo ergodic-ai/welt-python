@@ -229,13 +229,52 @@ class Client(_HTTP):
         return self.request("GET", f"/v1/research-datasets/{research_id(dataset_id)}")
 
     def download_research_dataset(self, dataset_id, path, *, version=None,
-                                  max_bytes=64 * 1024 * 1024):
-        """Download pinned bytes to a new file; verify size/SHA before publication."""
+                                  max_bytes=64 * 1024 * 1024, metadata=False):
+        """Download pinned bytes to a new file; verify size/SHA before publication.
+
+        Returns the path. With metadata=True, also writes the catalogue detail to
+        ``<path>.metadata.json`` and returns a ResearchDownload.
+        """
         from pathlib import Path
-        from .research import destination, download_metadata, research_id
+        from .research import (ResearchDownload, download_metadata, metadata_destination,
+                               publish_metadata, refuse_existing, research_id)
+        if type(metadata) is not bool:
+            raise ValueError("metadata must be True or False.")
         dataset_id = research_id(dataset_id)
-        pinned, digest, size = download_metadata(self.research_dataset(dataset_id), dataset_id,
-                                                  version, max_bytes)
+        if metadata:  # Refuse either destination before any request or partial write.
+            refuse_existing(path, metadata_destination(path))
+        detail = self.research_dataset(dataset_id)
+        pinned, digest, size = download_metadata(detail, dataset_id, version, max_bytes)
+        self._stream_research(dataset_id, path, pinned, digest, size)
+        if not metadata:
+            return Path(path)
+        sidecar = publish_metadata(metadata_destination(path), detail)
+        return ResearchDownload(Path(path), sidecar, pinned, digest, detail)
+
+    def load_research_dataset(self, dataset_id, *, version=None, metadata=False,
+                              max_bytes=64 * 1024 * 1024):
+        """Download verified content privately and return it as a pandas DataFrame.
+
+        Returns a DataFrame, or (DataFrame, ResearchMetadata) with metadata=True.
+        Needs the ``welt-client[research]`` extra; no file is left behind.
+        """
+        import tempfile
+        from pathlib import Path
+        from .research import download_metadata, read_table, require_table_extra, research_id
+        if type(metadata) is not bool:
+            raise ValueError("metadata must be True or False.")
+        pandas = require_table_extra()
+        dataset_id = research_id(dataset_id)
+        detail = self.research_dataset(dataset_id)
+        pinned, digest, size = download_metadata(detail, dataset_id, version, max_bytes)
+        with tempfile.TemporaryDirectory(prefix="welt-research-") as folder:
+            path = Path(folder) / "content"
+            self._stream_research(dataset_id, path, pinned, digest, size)
+            frame, info = read_table(pandas, path, detail, dataset_id, pinned, digest, max_bytes)
+        return (frame, info) if metadata else frame
+
+    def _stream_research(self, dataset_id, path, pinned, digest, size):
+        from .research import destination
         try:
             with destination(path, digest, size) as writer:
                 with self.http.stream("GET", f"/v1/research-datasets/{dataset_id}/content",
@@ -259,7 +298,6 @@ class Client(_HTTP):
         except httpx.RequestError:
             raise TransportError("Research download interrupted; no destination was published.",
                                  code="transport_error", retryable=True) from None
-        return Path(path)
 
     def datasets(self):
         return self.request("GET", "/v1/datasets")["items"]
@@ -468,12 +506,44 @@ class AsyncClient(_HTTP):
         return await self.request("GET", f"/v1/research-datasets/{research_id(dataset_id)}")
 
     async def download_research_dataset(self, dataset_id, path, *, version=None,
-                                        max_bytes=64 * 1024 * 1024):
+                                        max_bytes=64 * 1024 * 1024, metadata=False):
+        """Async Client.download_research_dataset with the same contract."""
         from pathlib import Path
-        from .research import destination, download_metadata, research_id
+        from .research import (ResearchDownload, download_metadata, metadata_destination,
+                               publish_metadata, refuse_existing, research_id)
+        if type(metadata) is not bool:
+            raise ValueError("metadata must be True or False.")
         dataset_id = research_id(dataset_id)
-        pinned, digest, size = download_metadata(await self.research_dataset(dataset_id), dataset_id,
-                                                  version, max_bytes)
+        if metadata:  # Refuse either destination before any request or partial write.
+            refuse_existing(path, metadata_destination(path))
+        detail = await self.research_dataset(dataset_id)
+        pinned, digest, size = download_metadata(detail, dataset_id, version, max_bytes)
+        await self._stream_research(dataset_id, path, pinned, digest, size)
+        if not metadata:
+            return Path(path)
+        sidecar = publish_metadata(metadata_destination(path), detail)
+        return ResearchDownload(Path(path), sidecar, pinned, digest, detail)
+
+    async def load_research_dataset(self, dataset_id, *, version=None, metadata=False,
+                                    max_bytes=64 * 1024 * 1024):
+        """Async Client.load_research_dataset with the same contract."""
+        import tempfile
+        from pathlib import Path
+        from .research import download_metadata, read_table, require_table_extra, research_id
+        if type(metadata) is not bool:
+            raise ValueError("metadata must be True or False.")
+        pandas = require_table_extra()
+        dataset_id = research_id(dataset_id)
+        detail = await self.research_dataset(dataset_id)
+        pinned, digest, size = download_metadata(detail, dataset_id, version, max_bytes)
+        with tempfile.TemporaryDirectory(prefix="welt-research-") as folder:
+            path = Path(folder) / "content"
+            await self._stream_research(dataset_id, path, pinned, digest, size)
+            frame, info = read_table(pandas, path, detail, dataset_id, pinned, digest, max_bytes)
+        return (frame, info) if metadata else frame
+
+    async def _stream_research(self, dataset_id, path, pinned, digest, size):
+        from .research import destination
         try:
             with destination(path, digest, size) as writer:
                 async with self.http.stream("GET", f"/v1/research-datasets/{dataset_id}/content",
@@ -497,7 +567,6 @@ class AsyncClient(_HTTP):
         except httpx.RequestError:
             raise TransportError("Research download interrupted; no destination was published.",
                                  code="transport_error", retryable=True) from None
-        return Path(path)
 
     async def datasets(self):
         return (await self.request("GET", "/v1/datasets"))["items"]

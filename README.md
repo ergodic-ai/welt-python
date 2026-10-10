@@ -88,6 +88,28 @@ promised benchmark score. [Start](docs/start.md) explains each step and teaches
 numeric predictions with real Yacht data. `fit` uploads only your training rows;
 your workspace retains the resulting dataset and predictor for reuse.
 
+### Research metadata and one-step loading
+
+Keep the catalogue detail (licence, schema and column descriptions, provenance)
+beside a download with `metadata=True`, or load a table directly with the
+`research` extra (`pip install "welt-client[research]"`):
+
+```python
+with Client() as client:
+    saved = client.download_research_dataset(
+        dataset_id, path.with_name("iris-2.parquet"), version=version, metadata=True)
+    # saved.path, saved.metadata_path ("iris-2.parquet.metadata.json"), saved.metadata
+    data, meta = client.load_research_dataset(dataset_id, version=version, metadata=True)
+print(meta.name, meta.column_descriptions)
+```
+
+Without `metadata=True` the download still returns the path, unchanged. The pinned
+Iris `version` keeps working if a newer (restored-header) version becomes current:
+the SDK downloads any version listed in the detail's `previous_content`.
+`load_research_dataset` removes its private temporary file; for notice-bearing ZIP
+content it warns that `meta.license_text`/`meta.attribution_text` apply. See
+[Research datasets](docs/research-datasets.md).
+
 SDK 0.7 adds explicit DataFrame target convenience and hosted credential guidance
 while preserving `fit(X, y)`, sync/async resources, durable jobs, research downloads
 and native causal objects. Available hosted tasks and workers follow the service

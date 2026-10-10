@@ -1,6 +1,6 @@
 [project]
 name = "welt-client"
-version = "0.8.0"
+version = "0.9.0"
 description = "Welt Python client and scikit-learn estimators"
 readme = "README.md"
 license = "Apache-2.0"
@@ -13,9 +13,10 @@ welt = "welt.cli:main"
 
 [project.optional-dependencies]
 parquet = ["pyarrow>=19,<30"]
+research = ["pandas>=2.2,<4", "pyarrow>=19,<30"]
 
 [dependency-groups]
-dev = ["pytest>=8,<10", "nbformat>=5,<6", "nbclient>=0.10,<1", "ipykernel>=6,<8", "markdown>=3.7,<4"]
+dev = ["pytest>=8,<10", "nbformat>=5,<6", "nbclient>=0.10,<1", "ipykernel>=6,<8", "markdown>=3.7,<4", "pyarrow>=19,<30"]
 
 [build-system]
 requires = ["hatchling"]

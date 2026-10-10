@@ -16,6 +16,7 @@ from .errors import (
 from .estimators import Classifier, Regressor
 from .causal import CausalDiscovery, CausalResult
 from .errors import InvalidCausalResultError, OptionalDependencyError, UnsupportedGraphConversionError
+from .research import ResearchDownload, ResearchMetadata, ResearchNoticeWarning
 
 __all__ = [
     "AsyncClient", "AsyncJob", "Credential", "ConflictError", "JobCancelledError",
@@ -33,5 +34,6 @@ __all__ = [
     "WeltError",
     "CausalDiscovery", "CausalResult", "InvalidCausalResultError",
     "OptionalDependencyError", "UnsupportedGraphConversionError",
+    "ResearchDownload", "ResearchMetadata", "ResearchNoticeWarning",
 ]
-__version__ = "0.8.0"
+__version__ = "0.9.0"
