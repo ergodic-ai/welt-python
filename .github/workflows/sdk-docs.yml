@@ -8,6 +8,10 @@ on:
         description: Published SDK release to document
         required: true
         default: v0.8.0
+      docs_presentation_ref:
+        description: Optional exact reviewed documentation-only commit (SDK0.8 only)
+        required: false
+        default: ""
 permissions:
   contents: read
 concurrency:
@@ -19,10 +23,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: refs/tags/${{ github.event.release.tag_name || inputs.release_tag }}
+          ref: ${{ inputs.docs_presentation_ref || format('refs/tags/{0}', github.event.release.tag_name || inputs.release_tag) }}
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Guard exact documentation presentation source
+        if: inputs.docs_presentation_ref != ''
+        env:
+          DOCS_PRESENTATION_REF: ${{ inputs.docs_presentation_ref }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: python scripts/verify_docs_presentation.py
       - run: python -m pip install uv==0.5.16
       - run: uv sync --frozen --extra parquet
       - name: Verify matching published release assets
@@ -51,7 +62,22 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
         run: uv pip install --python .venv/bin/python --reinstall --no-deps "https://github.com/ergodic-ai/welt-python/releases/download/$RELEASE_TAG/welt_client-$SDK_VERSION-py3-none-any.whl"
+      - name: Verify frozen installed SDK presentation bytes
+        if: inputs.docs_presentation_ref != ''
+        run: |
+          .venv/bin/python - <<'PYCODE'
+          import pathlib, sysconfig, zipfile
+          root = pathlib.Path(sysconfig.get_path('purelib'))
+          with zipfile.ZipFile('/tmp/welt-docs-presentation-wheel.whl') as wheel:
+              for name in wheel.namelist():
+                  if not name.endswith('/') and not name.endswith('.dist-info/RECORD'):
+                      assert (root / name).read_bytes() == wheel.read(name), name
+          PYCODE
       - run: .venv/bin/python scripts/check_notebooks.py --check-source
+      - name: Test docs-only presentation gate
+        if: inputs.docs_presentation_ref != ''
+        run: |
+          .venv/bin/python -m pytest scripts/test_docs_presentation_guard.py scripts/test_homepage_presentation.py scripts/test_learning_materials.py -q
       # Preserve v0.6 URLs and corrected research archive/licence notices.
       # This is an isolated checkout/environment: historical docs cannot inherit 0.7 APIs.
       - uses: actions/checkout@v4
@@ -84,9 +110,21 @@ jobs:
         working-directory: .legacy-sdk071
       - run: uv pip install --python .venv/bin/python --reinstall --no-deps "https://github.com/ergodic-ai/welt-python/releases/download/v0.7.1/welt_client-0.7.1-py3-none-any.whl"
         working-directory: .legacy-sdk071
+      - uses: actions/checkout@v4
+        if: inputs.docs_presentation_ref != ''
+        with:
+          ref: 49699b14ebc10bcb093c9cf208518dd5ea3a0c46
+          path: .presentation-baseline
+      - name: Render immutable accepted 0.7.1 presentation
+        if: inputs.docs_presentation_ref != ''
+        run: .venv/bin/python .presentation-baseline/scripts/build_historical_docs.py --source .legacy-sdk071 --version 0.7.1 --output site
       - run: .venv/bin/python scripts/build_historical_docs.py --source .legacy-sdk071 --version 0.7.1 --output site
+        if: inputs.docs_presentation_ref == ''
       - run: .venv/bin/python scripts/build_docs.py
       - run: test -f site/v0.6.0/index.html && test -f site/v0.6.0/research-datasets.html && test -f site/v0.7.0/index.html && test -f site/v0.7.1/index.html && test -f site/v0.8.0/index.html
+      - name: Bind documentation presentation proof
+        if: inputs.docs_presentation_ref != ''
+        run: cp /tmp/welt-docs-presentation-proof.json site/docs-presentation-proof.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

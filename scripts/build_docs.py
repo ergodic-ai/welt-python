@@ -135,7 +135,65 @@ def shell(body, name, title, version, prefix='', outline='', home=False):
     return f'''<!doctype html><html lang="en" data-theme="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Welt Python SDK {version}: DataFrame prediction, reusable predictors, research datasets and native causal discovery."><meta name="color-scheme" content="dark light"><title>{html.escape(title)} · Welt Python SDK {version}</title><link rel="canonical" href="{canonical}"><link rel="icon" type="image/svg+xml" href="{prefix}assets/ergodic-mark-dark.svg"><link rel="stylesheet" href="{css}"><script defer src="{js}"></script></head><body data-search="{prefix}search-index.json"><a class="skip" href="#main">Skip to content</a><header class="header"><a class="brand" href="{link('index')}"><img class="logo-dark" src="{prefix}assets/ergodic-mark-dark.svg" alt="" width="30" height="30"><img class="logo-light" src="{prefix}assets/ergodic-mark-light.svg" alt="" width="30" height="30"><strong>Welt</strong><span>Python SDK</span></a><nav class="topnav" aria-label="Main navigation">{nav}</nav><div class="tools"><select id="version" class="version" aria-label="Documentation version">{versions}</select><button id="search" type="button" aria-haspopup="dialog"><span class="search-label">Search</span><span aria-hidden="true"> ⌕</span><span class="sr-only">Search documentation</span></button><button id="theme" type="button">Light</button><button id="menu" class="menu-button" type="button" aria-haspopup="dialog">Menu</button></div></header>{main}<footer class="footer"><span>Welt by Ergodic · Python SDK {version}</span><span><a href="https://welt.ergodic.dev">Workspace ↗</a> &nbsp; <a href="https://github.com/ergodic-ai/welt-python/tree/v{version}">Release source ↗</a></span></footer><dialog id="navigation" class="nav-dialog" aria-labelledby="navigation-title"><header><strong id="navigation-title">Documentation</strong><button type="button" data-close aria-label="Close navigation">Close</button></header><nav aria-label="Mobile guide navigation">{nav}{sidebar}</nav></dialog><dialog id="search-dialog" aria-labelledby="search-title"><header><strong id="search-title">Search SDK {version}</strong><button type="button" data-close aria-label="Close search">Close</button></header><label for="search-input">Task, method or error</label><input id="search-input" type="search" autocomplete="off" placeholder="Try reopen, target or JobTimeoutError"><ul id="search-results"></ul><p id="search-empty">Search this SDK version by task, method or error.</p></dialog><div id="announcement" class="sr-only" role="status" aria-live="polite"></div></body></html>'''
 
 
+def notebook_home(prefix='', sdk_version='0.8.0'):
+    """API-075: prepared DataFrame continuation; no hidden setup in copied cells.
+
+    Displayed Iris rows and report bind API-071's recorded seed9 holdout, not a
+    fresh benchmark. Friendly column labels rename only the canonical headers.
+    """
+    def link(page): return prefix + page + '.html'
+    def code(value, lang='python'): return render_markdown(f'```{lang}\n{value}\n```')[0]
+    def tabs(group, label, entries):
+        buttons=[];panels=[]
+        for index,(name,body) in enumerate(entries):
+            key=f'{group}-{index}'
+            buttons.append(f'<button id="{key}-tab" type="button" role="tab" aria-selected="{str(index == 0).lower()}" aria-controls="{key}-panel" tabindex="{0 if index == 0 else -1}">{name}</button>')
+            panels.append(f'<div id="{key}-panel" role="tabpanel" aria-labelledby="{key}-tab" tabindex="0"' + (' hidden' if index else '') + f'>{body}</div>')
+        return f'<div class="task-tabs" role="tablist" aria-label="{label}">' + ''.join(buttons) + '</div>' + ''.join(panels)
+    install=tabs('install','Install command',[
+        ('uv',code("uv pip install 'welt-client[parquet]'",'sh')),
+        ('pip',code("pip install 'welt-client[parquet]'",'sh'))])
+    connect=tabs('connect','Connection method',[
+        ('Notebook',code('from welt import Client\n\nClient().connect()') + '<p class="card-note">Approve the code, workspace and permissions in your browser. Running remotely? Open the printed link on your own computer. Access stays in this Python process.</p>'),
+        ('Terminal',code('welt login','sh') + '<p class="card-note">Approve in your browser. The CLI saves access privately for this API origin. Run Python on the same computer.</p>'),
+        ('API key',code('import os\nfrom getpass import getpass\n\nos.environ["WELT_API_KEY"] = getpass("Welt API key: ")') + '<p class="card-note">Use your own read/write key from <a href="https://welt.ergodic.dev">Workspace → API keys</a>. The key stays in this Python process environment; it is never saved in code.</p>')])
+    program='''from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
+from welt import Classifier
+
+train, test = train_test_split(
+    df, test_size=0.2, random_state=9, stratify=df["label"]
+)
+X_train, y_train = train.drop(columns="label"), train["label"]
+X_test, y_test = test.drop(columns="label"), test["label"]
+
+model = Classifier(model="tabicl-v2", random_state=9)
+model.fit(X_train, y_train)
+predictions = model.predict(X_test)
+
+print(classification_report(y_test, predictions, zero_division=0))'''
+    rows=[[0,0,1.0,.2,4.6,3.6],[1,0,1.1,.1,4.3,3.0],[2,0,1.2,.2,5.0,3.2],[3,0,1.2,.2,5.8,4.0],[4,0,1.3,.2,4.4,3.0]]
+    headers=['','label','petal_length','petal_width','sepal_length','sepal_width']
+    table='<div class="dataframe-output" tabindex="0" role="region" aria-label="First five prepared Iris rows"><table><thead><tr>' + ''.join(f'<th scope="col">{name if name else "<span class=sr-only>Row</span>"}</th>' for name in headers) + '</tr></thead><tbody>'
+    for row in rows:
+        table+='<tr><th scope="row">'+str(row[0])+'</th>' + ''.join(f'<td>{value}</td>' for value in row[1:])+'</tr>'
+    table+='</tbody></table></div>'
+    report='''              precision    recall  f1-score   support
+
+           0       1.00      1.00      1.00        10
+           1       1.00      1.00      1.00        10
+           2       1.00      1.00      1.00        10
+
+    accuracy                           1.00        30
+   macro avg       1.00      1.00      1.00        30
+weighted avg       1.00      1.00      1.00        30'''
+    notebook=f'<div class="notebook-cell"><span class="cell-prompt" aria-hidden="true">In [1]</span>{code("df.head()")}</div><div class="notebook-output"><span class="cell-prompt" aria-hidden="true">Out [1]</span>{table}</div><div class="notebook-cell"><span class="cell-prompt" aria-hidden="true">In [2]</span>{code(program)}</div><div class="notebook-output"><span class="cell-prompt" aria-hidden="true">Out [2]</span><pre class="report-output" tabindex="0" aria-label="Recorded classification report">{html.escape(report)}</pre></div>'
+    return f'''<div class="hero home-v080"><h1>From a DataFrame<br><span>to a prediction.</span></h1><p class="home-meta">Python 3.11–3.13 · SDK {sdk_version}</p><div class="quickstart-cards"><section class="start-card" aria-labelledby="install-title"><header class="card-heading"><span class="card-number" aria-hidden="true">01</span><h2 id="install-title">Install</h2><a href="{link('start')}#install">Setup guide ↗</a></header>{install}</section><section class="start-card" aria-labelledby="connect-title"><header class="card-heading"><span class="card-number" aria-hidden="true">02</span><h2 id="connect-title">Connect</h2><a href="{link('connect')}">Connection guide ↗</a></header>{connect}</section><section class="start-card notebook-card" aria-labelledby="predict-title"><header class="card-heading"><span class="card-number" aria-hidden="true">03</span><h2 id="predict-title">Train, predict, evaluate</h2><a href="{link('start')}">Full walkthrough ↗</a></header><p class="card-note prepared-data">Start with your already-loaded pandas DataFrame <code>df</code> and its <code>label</code> column. These cells do not load data. Shown here: Iris, 150 rows, four features, classes 0–2.</p>{notebook}<p class="card-note output-provenance">Recorded Iris run · TabICL v2 · seed 9 · 120 training / 30 held-out rows. This report is one observed result, not a promised score. Fit uploads the training table; prediction runs remotely.</p><p class="card-note">For your own table, replace <code>label</code> with your target column.</p></section></div></div><section class="home-bottom" aria-label="Continue learning"><div><a href="{link('own-data')}">Use your own table ↗</a><p>Choose the label you want to predict.</p></div><div><a href="{link('regression')}">Predict a number ↗</a><p>Continue with a regression example.</p></div><div><a href="{link('reuse')}">Reuse your predictor ↗</a><p>Predict again without another fit.</p></div></section>'''
+
+
 def home_body(start, prefix='', sdk_version='0.7.1', browser_connect=False):
+    if browser_connect and sdk_version == '0.8.0':
+        return notebook_home(prefix, sdk_version)
     blocks = re.findall(r'```(\w+)\n(.*?)```', start, re.S)
     install = blocks[0][1].splitlines()[-1]
     key = blocks[1][1]
@@ -199,7 +257,7 @@ def main():
     (base/'robots.txt').write_text('User-agent: *\nAllow: /\nSitemap: '+PUBLIC+'/sitemap.xml\n')
     manifest=dict(sdk_version=version,pages=sorted(pages),source_tag='v'+version,supported_notebooks=sorted(p.stem for p in downloads.glob('*.ipynb')),historical_versions=[v for v in ['0.6.0','0.7.0','0.7.1'] if (base/('v'+v)/'index.html').exists()],scope='bounded qualified preview; full-model/SDK closure gates pending')
     (out/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
-    print(f'Built {len(pages)} guides plus landing for SDK {version}; no credentials or model outputs included')
+    print(f'Built {len(pages)} guides plus landing for SDK {version}; no credentials or live model execution')
 
 
 if __name__=='__main__':main()

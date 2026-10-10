@@ -102,25 +102,23 @@ class SiteContracts(unittest.TestCase):
                 parts=urlsplit(item['href']);target=(current/parts.path).resolve()
                 self.assertIn(target,documents)
                 if parts.fragment:self.assertIn(parts.fragment,documents[target].ids)
-            self.assertEqual(len(documents[(root/'index.html').resolve()].complete),2)
+            self.assertEqual(len(documents[(root/'index.html').resolve()].complete),0)
 
-    def test_landing_copy_contains_all_six_real_data_steps(self):
-        from html.parser import HTMLParser
-        class Examples(HTMLParser):
-            def __init__(self,text):super().__init__();self.code=[];self.feed(text)
-            def handle_starttag(self,tag,attrs):
-                values=dict(attrs)
-                if 'data-copy' in values:self.code.append(values['data-copy'])
+    def test_landing_copy_is_visible_prepared_dataframe_continuation(self):
+        from scripts.test_homepage_presentation import NotebookPage
         with tempfile.TemporaryDirectory() as folder:
             self.build(folder)
-            examples=Examples((Path(folder)/'index.html').read_text()).code
-            self.assertEqual(len(examples),2)
-            for value in examples:
-                compile(value, '<copied teaching example>', 'exec')
-                for step in range(1,7):self.assertIn('# '+str(step)+'.',value)
-                self.assertIn('research_dataset(dataset_id)',value)
-                self.assertIn('test.drop(columns=target)',value)
-                self.assertTrue('accuracy_score' in value or 'mean_absolute_error' in value)
+            body=(Path(folder)/'index.html').read_text()
+            parsed=NotebookPage();parsed.feed(body)
+            self.assertNotIn('data-copy=',body)
+            self.assertIn('already-loaded pandas DataFrame',body)
+            program=next(value for value in parsed.code if 'train, test = train_test_split' in value)
+            compile(program,'visible copied cell','exec')
+            self.assertIn('model.fit(X_train, y_train)',program)
+            self.assertIn('model.predict(X_test)',program)
+            self.assertIn('classification_report',program)
+            self.assertNotIn('download_research_dataset',program)
+            self.assertIn('df.head()\n',parsed.code)
 
     def test_mutable_source_link_refuses_before_writing_site(self):
         with tempfile.TemporaryDirectory() as folder, patch.object(sys,'argv',['build_docs','--output',folder]), patch.object(build_docs,'reference',return_value='# Reference\n\n[bad](https://github.com/ergodic-ai/welt-python/blob/main/examples/x.py)'):
