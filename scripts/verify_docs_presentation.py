@@ -27,7 +27,7 @@ def main():
     ref = os.environ['DOCS_PRESENTATION_REF']
     if not re.fullmatch('[0-9a-f]{40}', ref) or os.environ['RELEASE_TAG'] != 'v0.8.0':
         raise SystemExit('Presentation mode requires an exact reviewed commit and SDK0.8 tag.')
-    if git('rev-parse', 'HEAD') != ref or git('rev-parse', 'refs/tags/v0.8.0') != BASELINE:
+    if git('rev-parse', 'HEAD') != ref or git('rev-parse', 'refs/tags/v0.8.0^{commit}') != BASELINE:
         raise SystemExit('Presentation checkout or immutable SDK tag differs.')
     subprocess.run(['git', 'merge-base', '--is-ancestor', BASELINE, ref], check=True)
     changes = git('diff', '--name-status', BASELINE, ref).splitlines()
