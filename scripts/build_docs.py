@@ -119,9 +119,26 @@ def render_markdown(text):
     return body, renderer.toc_tokens
 
 
+# Published historical documentation folders (v<version>/), oldest first.
+HISTORICAL_VERSIONS = ('0.6.0', '0.7.0', '0.7.1', '0.8.0')
+
+
+def release_tuple(version):
+    """Numeric (major, minor, patch) of a release, tolerating pre-release/local suffixes such as 0.9.0rc1."""
+    match = re.match(r'^(\d+)\.(\d+)(?:\.(\d+))?', version)
+    if not match:
+        raise ValueError(f'Unrecognised SDK version: {version!r}')
+    return tuple(int(part or 0) for part in match.groups())
+
+
 def browser_connect_release(version):
     """Releases from 0.8.0 onward document Client.connect() and the notebook landing."""
-    return tuple(int(part) for part in version.split('.')[:3]) >= (0, 8, 0)
+    return release_tuple(version) >= (0, 8, 0)
+
+
+def older_versions(version):
+    """Historical documentation versions older than this release, newest first."""
+    return [old for old in reversed(HISTORICAL_VERSIONS) if release_tuple(old) < release_tuple(version)]
 
 
 def shell(body, name, title, version, prefix='', outline='', home=False):
@@ -130,11 +147,8 @@ def shell(body, name, title, version, prefix='', outline='', home=False):
     nav = ''.join(f'<a href="{link(page)}"' + (' aria-current="page"' if label == group else '') + f'>{label}</a>' for label, page in NAV)
     guide_groups = [(label, [(text,page) for text,page in pages if page != 'connect' or browser_connect_release(version)]) for label,pages in GUIDES]
     sidebar = ''.join(f'<p>{label}</p>' + ''.join(f'<a href="{link(page)}"' + (' aria-current="page"' if page == name else '') + f'>{text}</a>' for text,page in pages) for label,pages in guide_groups)
-    versions = f'<option value="{prefix}index.html">v{version}</option><option value="{"../" if prefix == "" else ""}v0.6.0/">v0.6.0</option>'
-    if version == "0.7.1" or browser_connect_release(version):
-        versions += f'<option value="{"../" if prefix == "" else ""}v0.7.0/">v0.7.0</option>'
-    if browser_connect_release(version):
-        versions += f'<option value="{"../" if prefix == "" else ""}v0.7.1/">v0.7.1</option>'
+    versions = f'<option value="{prefix}index.html">v{version}</option>' + ''.join(
+        f'<option value="{"../" if prefix == "" else ""}v{old}/">v{old}</option>' for old in older_versions(version))
     css = prefix+'assets/docs.css'; js = prefix+'assets/docs.js'
     canonical = PUBLIC + ('/' if home and prefix else f'/v{version}/' + ('index.html' if name == 'index' else name+'.html'))
     main = f'<main id="main" tabindex="-1" class="home">{body}</main>' if home else f'<div class="layout"><aside class="sidebar" aria-label="Guide navigation">{sidebar}</aside><main id="main" tabindex="-1" class="article">{body}</main><aside class="outline" aria-label="On this page">{outline}</aside></div>'
@@ -256,12 +270,11 @@ def main():
     prefix=f'v{version}/';(base/'index.html').write_text(shell(home_body(pages['start'],prefix,sdk_version=version,browser_connect=browser_connect_release(version)),'index','From a DataFrame to a prediction',version,prefix=prefix,home=True))
     (base/'.nojekyll').write_text('')
     urls=[PUBLIC+'/',PUBLIC+f'/v{version}/']+[PUBLIC+f'/v{version}/{name}.html' for name in pages]
-    if (base/'v0.7.1/index.html').exists():urls += [PUBLIC+'/v0.7.1/']+[PUBLIC+'/v0.7.1/'+p.name for p in (base/'v0.7.1').glob('*.html')]
-    if (base/'v0.7.0/index.html').exists():urls += [PUBLIC+'/v0.7.0/']+[PUBLIC+'/v0.7.0/'+p.name for p in (base/'v0.7.0').glob('*.html')]
-    if (base/'v0.6.0/index.html').exists():urls += [PUBLIC+'/v0.6.0/']+[PUBLIC+'/v0.6.0/'+p.name for p in (base/'v0.6.0').glob('*.html')]
+    historical=[old for old in older_versions(version) if (base/f'v{old}'/'index.html').exists()]
+    for old in historical:urls += [PUBLIC+f'/v{old}/']+[PUBLIC+f'/v{old}/'+p.name for p in sorted((base/f'v{old}').glob('*.html'))]
     (base/'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+''.join(f'<url><loc>{url}</loc></url>' for url in urls)+'</urlset>')
     (base/'robots.txt').write_text('User-agent: *\nAllow: /\nSitemap: '+PUBLIC+'/sitemap.xml\n')
-    manifest=dict(sdk_version=version,pages=sorted(pages),source_tag='v'+version,supported_notebooks=sorted(p.stem for p in downloads.glob('*.ipynb')),historical_versions=[v for v in ['0.6.0','0.7.0','0.7.1'] if (base/('v'+v)/'index.html').exists()],scope='bounded qualified preview; full-model/SDK closure gates pending')
+    manifest=dict(sdk_version=version,pages=sorted(pages),source_tag='v'+version,supported_notebooks=sorted(p.stem for p in downloads.glob('*.ipynb')),historical_versions=sorted(historical,key=release_tuple),scope='bounded qualified preview; full-model/SDK closure gates pending')
     (out/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     print(f'Built {len(pages)} guides plus landing for SDK {version}; no credentials or live model execution')
 

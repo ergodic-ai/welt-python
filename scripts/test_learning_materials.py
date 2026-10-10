@@ -105,6 +105,35 @@ class SiteContracts(unittest.TestCase):
                 if parts.fragment:self.assertIn(parts.fragment,documents[target].ids)
             self.assertEqual(len(documents[(root/'index.html').resolve()].complete),0)
 
+    def test_release_versions_tolerate_prereleases_and_list_every_older_historical_site(self):
+        self.assertEqual(build_docs.release_tuple('0.9.0rc1'),(0,9,0))
+        self.assertEqual(build_docs.release_tuple('1.0.0.dev2+local'),(1,0,0))
+        self.assertTrue(build_docs.browser_connect_release('0.9.0rc1'))
+        self.assertTrue(build_docs.browser_connect_release('0.10.0'))
+        self.assertFalse(build_docs.browser_connect_release('0.7.1'))
+        self.assertEqual(build_docs.older_versions('0.9.0'),['0.8.0','0.7.1','0.7.0','0.6.0'])
+        self.assertEqual(build_docs.older_versions('0.8.0'),['0.7.1','0.7.0','0.6.0'])
+        self.assertEqual(build_docs.older_versions('0.7.1'),['0.7.0','0.6.0'])
+        with self.assertRaises(ValueError):build_docs.release_tuple('latest')
+        page=build_docs.shell('<p>x</p>','start','Start','0.9.0')
+        self.assertIn('<option value="../v0.8.0/">v0.8.0</option>',page)
+        self.assertNotIn('v0.9.0/">',page)
+
+    def test_historical_v080_folder_is_in_sitemap_and_manifest(self):
+        import json
+        version=tomllib.loads((build_docs.ROOT/'pyproject.toml').read_text())['project']['version']
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            for old in ('0.6.0','0.8.0'):
+                (root/f'v{old}').mkdir();(root/f'v{old}'/'index.html').write_text('historical sentinel')
+            self.build(folder)
+            sitemap=(root/'sitemap.xml').read_text()
+            manifest=json.loads((root/f'v{version}'/'manifest.json').read_text())
+            expected=[old for old in ('0.6.0','0.8.0') if build_docs.release_tuple(old)<build_docs.release_tuple(version)]
+            self.assertEqual(manifest['historical_versions'],expected)
+            for old in expected:self.assertIn(f'/v{old}/</loc>',sitemap)
+            self.assertNotIn('/v0.7.0/',sitemap)
+
     def test_landing_copy_is_visible_prepared_dataframe_continuation(self):
         from scripts.test_homepage_presentation import NotebookPage
         with tempfile.TemporaryDirectory() as folder:
