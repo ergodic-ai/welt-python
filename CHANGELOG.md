@@ -14,7 +14,7 @@
   destinations are refused before any request when either exists. The default
   `metadata=False` behavior and `pathlib.Path` return are unchanged.
 - Add `load_research_dataset(dataset_id, *, version=None, metadata=False,
-  max_bytes=64 MiB)` (128 MiB since 0.9.1) on `Client` and `AsyncClient`: verified download into a
+  max_bytes=64 MiB)` on `Client` and `AsyncClient`: verified download into a
   private temporary directory, read with pandas/pyarrow, returning a DataFrame or
   `(DataFrame, ResearchMetadata)`. Notice-bearing ZIPs must contain exactly
   `dataset.parquet`, `LICENSE.txt` and `ATTRIBUTION.txt`; notices are exposed as
