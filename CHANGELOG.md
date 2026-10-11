@@ -1,3 +1,11 @@
+# 0.9.1 (2026-10-11) — Research downloads up to the service bound
+
+- `download_research_dataset` and `load_research_dataset` (`Client` and `AsyncClient`)
+  default to `max_bytes=128 MiB`, the service's per-file research download bound, so
+  every catalogue file downloads without an explicit limit (previously 64 MiB; the
+  four largest catalogue files needed `max_bytes`). Explicit `max_bytes` behaves as
+  before (up to 2 GiB); content larger than the limit is still refused before download.
+
 # 0.9.0 (2026-10-10) — Research dataset metadata (API-078)
 
 - `download_research_dataset(..., metadata=True)` also writes the catalogue detail
@@ -6,7 +14,7 @@
   destinations are refused before any request when either exists. The default
   `metadata=False` behavior and `pathlib.Path` return are unchanged.
 - Add `load_research_dataset(dataset_id, *, version=None, metadata=False,
-  max_bytes=64 MiB)` on `Client` and `AsyncClient`: verified download into a
+  max_bytes=64 MiB)` (128 MiB since 0.9.1) on `Client` and `AsyncClient`: verified download into a
   private temporary directory, read with pandas/pyarrow, returning a DataFrame or
   `(DataFrame, ResearchMetadata)`. Notice-bearing ZIPs must contain exactly
   `dataset.parquet`, `LICENSE.txt` and `ATTRIBUTION.txt`; notices are exposed as

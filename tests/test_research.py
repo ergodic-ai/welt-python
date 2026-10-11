@@ -602,3 +602,20 @@ def test_async_restored_and_previous_version_parity(tmp_path):
     assert error.code == 'research_version_mismatch' and invalid.code == 'invalid_research_archive'
     assert versions == [sha256(RESTORED_ZIP).hexdigest(), previous, previous]
     assert sorted(p.name for p in tmp_path.iterdir()) == ['old.zip']
+
+
+def test_default_limit_covers_the_service_research_download_bound():
+    # The service serves research files up to 128 MiB; the default must not refuse any of them.
+    import inspect
+    from welt.research import DEFAULT_MAX_BYTES, download_metadata
+    bound = 128 * 1024 * 1024
+    assert DEFAULT_MAX_BYTES == bound
+    for cls in (Client, AsyncClient):
+        for name in ('download_research_dataset', 'load_research_dataset'):
+            assert inspect.signature(getattr(cls, name)).parameters['max_bytes'].default == bound
+    detail = dict(DETAIL, content=dict(DETAIL['content'], size_bytes=bound))
+    assert download_metadata(detail, DETAIL['id'], None, DEFAULT_MAX_BYTES)[2] == bound
+    over = dict(DETAIL, content=dict(DETAIL['content'], size_bytes=bound + 1))
+    with pytest.raises(InvalidInputError) as e:
+        download_metadata(over, DETAIL['id'], None, DEFAULT_MAX_BYTES)
+    assert e.value.code == 'research_download_limit'
