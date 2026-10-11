@@ -73,3 +73,25 @@ apply after successful connection; authentication does not qualify every model.
 Process-only connection credentials are not serialized into child processes.
 For process-based parallel cross-validation, configure `WELT_API_KEY` in workers
 or explicitly save a private origin credential first. Never pickle a secret.
+
+
+## Multiple workspaces (source candidate)
+
+```python
+from welt import Client, AsyncClient
+
+client = Client().connect(workspace="acme-research")
+# Explicitly persist a revocable workspace credential only when desired:
+client.connect(workspace="acme-research", save=True)
+
+with Client(workspace="acme-research") as selected:
+    print(selected.workspace())
+# Async resources use the same saved selection; browser connection itself is sync.
+async_client = AsyncClient(workspace="acme-research")
+```
+
+`workspace` accepts an exact ID or slug. Login requests that workspace and rejects
+another approval. Constructors select an existing credential without starting
+login; missing credentials fail with login guidance. A manual/environment key
+keeps precedence, and must match the selected tenant before private operations.
+See [CLI commands and agent workflows](cli.md) for profile selection and recovery.

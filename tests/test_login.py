@@ -74,7 +74,7 @@ def test_precedence_after_explicit_connection(monkeypatch):
 def test_explicit_save_uses_private_atomic_origin_file_then_fresh_process(monkeypatch):
     transport,_=service([httpx.Response(200,json=connected())])
     with Client(base_url=BASE,transport=transport) as client:login.connect(client,save=True,open_browser=False,output=io.StringIO())
-    folder=Path(os.environ['WELT_CONFIG_DIR']); files=list(folder.iterdir())
+    folder=Path(os.environ['WELT_CONFIG_DIR']); files=list(folder.glob('*.json'))
     assert folder.stat().st_mode & 0o777 == 0o700
     assert len(files)==1 and files[0].stat().st_mode & 0o777 == 0o600
     assert json.loads(files[0].read_text())['origin']==BASE
@@ -141,7 +141,7 @@ def test_permission_error_on_existing_key_does_not_start_browser_flow():
 def test_expired_saved_key_ignored_and_unsafe_file_rejected():
     login.save_credential(BASE,KEY,(datetime.now(timezone.utc)-timedelta(seconds=1)).isoformat())
     assert login.load_saved(BASE) is None
-    path=next(Path(os.environ['WELT_CONFIG_DIR']).iterdir());path.chmod(0o644)
+    path=next(Path(os.environ['WELT_CONFIG_DIR']).glob('*.json'));path.chmod(0o644)
     with pytest.raises(AuthenticationError,match='private regular files'):login.load_saved(BASE)
 
 
@@ -195,7 +195,7 @@ def test_cli_success_saves_without_exposing_secrets(monkeypatch,capsys):
     assert cli.main(['login','--no-browser'])==0
     assert login.load_saved(BASE)==KEY
     captured=capsys.readouterr()
-    assert CODE in captured.out and KEY not in captured.out+captured.err and DEVICE not in captured.out+captured.err
+    assert CODE in captured.err and KEY not in captured.out+captured.err and DEVICE not in captured.out+captured.err
 
 
 def test_cli_cancel_has_bounded_plain_error(monkeypatch,capsys):

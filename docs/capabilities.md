@@ -31,3 +31,21 @@ formats/tasks or the complete 1.6–<2 matrix. Version retirement requires an ex
 migration path; existing predictors remain pinned and a changed model needs a new
 fit. Cache presence is derived execution state, distinct from durable predictor
 ownership and cold restoration.
+
+
+## Resource completion (source candidate)
+
+Both `Client` and `AsyncClient` now have `workspace()`, `pricing()`,
+`create_upload(format=..., size_bytes=..., sha256=..., target=None, schema=None)`,
+`upload_session(id)`, `put_upload_chunk(id, index, bytes)`, `complete_upload(id)`,
+`upload_file(path, target=None, schema=None, format=None, upload_id=None)`,
+`submit_batch_predict(predictor_id, dataset_id, probabilities=False, idempotency_key=None)`,
+`job_result(job_id)` and `batch_payload(job_id, result_reference=None)`.
+Async equivalents are awaited, including upload/file and batch submission.
+`Job.result()`/`AsyncJob.result()` return batch manifests with explicit partial
+row ranges; `batch_payload()` retrieves authenticated JSON until expiry. Keep
+upload IDs before sending bytes for recovery. File reads/hashing in the async
+helper are local blocking I/O; low-level chunk methods let callers schedule disk
+I/O independently. These methods require server support and do not qualify held
+formats/models. Account and payment controls remain browser-authorized.
+See the [agent CLI reference](cli.md).

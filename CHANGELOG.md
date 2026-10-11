@@ -70,3 +70,12 @@ transport stays exclusively in developer harnesses. Prior releases stay immutabl
 
 No new large-file, resumable-upload or Parquet batch API is included in this release.
 Existing in-memory CSV/Parquet estimator input behavior is retained.
+
+
+## Unreleased — workspace and agent CLI source candidate
+
+- Exact workspace login/selection, multiple origin-bound saved credentials and local logout.
+- JSON CLI for existing modelling/resource/job/research operations; browser entry points for account controls.
+- Sync/async resumable upload and batch manifest/payload methods; partial batch wait support.
+- Workspace verification before private input and cross-origin request rejection.
+- Login diagnostics move to stderr; successful CLI commands emit JSON on stdout.

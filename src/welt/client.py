@@ -2,6 +2,8 @@
 import asyncio
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+import hashlib
+from pathlib import Path
 import math
 import os
 import time
@@ -116,24 +118,65 @@ def _discovery(dataset_id, model, configuration, seed, constraints, model_versio
                 dict(required_edges=[], forbidden_edges=[], temporal_order=[]))
 
 
+def _file_spec(path, target, schema, format):
+    path = Path(path)
+    format = format or path.suffix.lower().lstrip('.')
+    if format not in ('csv', 'parquet'): raise ValueError('File format must be csv or parquet.')
+    digest = hashlib.sha256()
+    size = 0
+    with path.open('rb') as source:
+        for block in iter(lambda: source.read(1024 * 1024), b''):
+            size += len(block)
+            digest.update(block)
+    if not size: raise ValueError('Upload file must not be empty.')
+    return dict(format=format, size_bytes=size, sha256=digest.hexdigest(), target=target, schema=schema)
+
+
+def _check_upload(upload, spec):
+    if not isinstance(upload, dict) or any(upload.get(k) != v for k, v in spec.items()):
+        raise ValueError('Upload metadata does not match this file, schema and target; nothing was uploaded.')
+    chunk = upload.get('chunk_bytes')
+    received = upload.get('received_indices')
+    if (type(chunk) is not int or not 1 <= chunk <= 64 * 1024 * 1024
+            or not isinstance(received, list) or any(type(i) is not int or i < 0 for i in received)):
+        raise WeltError('Invalid upload response.', code='invalid_response')
+    if upload.get('status') not in ('uploading', 'complete'):
+        raise ValueError('Upload is not writable. Start a new upload.')
+    return chunk, set(received)
+
+
 class _HTTP:
-    def _configure(self, base_url, api_key, max_retries, max_retry_delay):
+    def _configure(self, base_url, api_key, max_retries, max_retry_delay, workspace=None):
         if type(max_retries) is not int or not 0 <= max_retries <= 5:
             raise ValueError("max_retries must be an integer from 0 to 5.")
         if not math.isfinite(max_retry_delay) or not 0 <= max_retry_delay <= 60:
             raise ValueError("max_retry_delay must be from 0 to 60 seconds.")
         self.base_url = base_url if base_url is not None else os.getenv("WELT_BASE_URL", "https://welt.ergodic.dev")
-        from .login import selected_credential
-        self.api_key = credential(secret(api_key) or os.getenv("WELT_API_KEY") or selected_credential(self.base_url))
+        from .login import selected_credential, validate_workspace
+        self.workspace_selector = validate_workspace(workspace if workspace is not None else os.getenv('WELT_WORKSPACE'))
+        self._workspace_verified = False
+        self._verified_key = None
+        self._verified_workspace = None
+        self.api_key = credential(secret(api_key) or os.getenv("WELT_API_KEY") or selected_credential(self.base_url, self.workspace_selector))
         self.max_retries, self.max_retry_delay = max_retries, max_retry_delay
         value = secret(self.api_key)
         return {"Authorization": f"Bearer {value}"} if value else {}
 
-    def _authenticate(self, method, path):
+    def _authenticate(self, method, path, headers=None, auth=None):
+        configured = httpx.URL(self.base_url)
+        actual = self.http.base_url
+        destination = httpx.URL(path)
+        identity = lambda url: (url.scheme, url.host, url.port)
+        if identity(actual) != identity(configured) or (destination.is_absolute_url and identity(destination) != identity(configured)):
+            raise AuthenticationError('The HTTP transport origin does not match the requested API origin.', code='unsafe_request_origin')
+        expected = 'Bearer ' + secret(self.api_key) if secret(self.api_key) else None
+        effective = httpx.Headers(headers or {}).get('Authorization', self.http.headers.get('Authorization'))
+        if effective != expected or (expected and (auth is not None or self.http.auth is not None)):
+            raise AuthenticationError('Authorization overrides cannot change the configured workspace credential.', code='workspace_credential_override')
         # Only intentionally public catalogue reads bypass credential preflight.
         route = httpx.URL(path).path
         public = method.upper() == "GET" and (
-            route == "/v1/models" or route == "/v1/research-datasets" or
+            route in ("/v1/models", "/v1/billing/pricing") or route == "/v1/research-datasets" or
             (route.startswith("/v1/research-datasets/") and route.count("/") == 3))
         value = secret(self.api_key)
         if not public and (not value or not value.strip()):
@@ -164,19 +207,19 @@ class _HTTP:
 
 class Client(_HTTP):
     def __init__(self, base_url=None, api_key=None, *, timeout=60, transport=None,
-                 max_retries=2, max_retry_delay=5):
-        headers = self._configure(base_url, api_key, max_retries, max_retry_delay)
+                 max_retries=2, max_retry_delay=5, workspace=None):
+        headers = self._configure(base_url, api_key, max_retries, max_retry_delay, workspace)
         self.http = httpx.Client(base_url=self.base_url, headers=headers, timeout=timeout,
                                  transport=transport, follow_redirects=False)
 
-    def connect(self, *, timeout=600, open_browser=True, save=False):
+    def connect(self, *, timeout=600, open_browser=True, save=False, workspace=None):
         """Approve browser sign-in; retain access in-process or explicitly save it.
 
         Returns this connected Client. Constructors never open a browser. The link
         and short code also work from remote notebooks/headless machines.
         """
         from .login import connect
-        return connect(self, timeout=timeout, open_browser=open_browser, save=save)
+        return connect(self, timeout=timeout, open_browser=open_browser, save=save, workspace=workspace)
 
     def close(self):
         self.http.close()
@@ -187,8 +230,15 @@ class Client(_HTTP):
     def __exit__(self, *args):
         self.close()
 
-    def request(self, method, path, *, _deadline=None, _job_id=None, **kwargs):
-        self._authenticate(method, path)
+    def request(self, method, path, *, _deadline=None, _job_id=None, _workspace_probe=False, **kwargs):
+        self._authenticate(method, path, kwargs.get("headers"), kwargs.get("auth"))
+        if not _workspace_probe and self.workspace_selector and (not self._workspace_verified or self._verified_key != self.api_key or self._verified_workspace != self.workspace_selector) and not (method.upper() == "GET" and (httpx.URL(path).path in ("/v1/models", "/v1/billing/pricing", "/v1/research-datasets") or (httpx.URL(path).path.startswith("/v1/research-datasets/") and httpx.URL(path).path.count("/") == 3))):
+            current = self.request("GET", "/v1/workspace", _workspace_probe=True, _deadline=_deadline, _job_id=_job_id)
+            if self.workspace_selector not in (current.get('id'), current.get('slug')):
+                raise AuthenticationError('Credential does not belong to the selected workspace.', code='workspace_mismatch')
+            self._workspace_verified = True
+            self._verified_key = self.api_key
+            self._verified_workspace = self.workspace_selector
         value = secret(self.api_key)
         if value and _job_id is not None and value in str(_job_id):
             _job_id = None
@@ -213,6 +263,62 @@ class Client(_HTTP):
                         _wait(_deadline, _job_id, float("inf"))
                     return result
             time.sleep(delay if _deadline is None else _wait(_deadline, _job_id, delay))
+
+    def workspace(self):
+        """Inspect the credential's tenant, role, limits and resource capacity."""
+        return self.request("GET", "/v1/workspace")
+
+    def pricing(self):
+        """Read the public rate card and available packs/plans; does not purchase."""
+        return self.request("GET", "/v1/billing/pricing")
+
+    def create_upload(self, *, format, size_bytes, sha256, target=None, schema=None):
+        return self.request("POST", "/v1/uploads", json=dict(
+            format=format, size_bytes=size_bytes, sha256=sha256, target=target, schema=schema))
+
+    def upload_session(self, upload_id):
+        return self.request("GET", f"/v1/uploads/{_id(upload_id)}")
+
+    def put_upload_chunk(self, upload_id, index, content):
+        if type(index) is not int or index < 0 or not isinstance(content, bytes):
+            raise ValueError('A nonnegative chunk index and bytes content are required.')
+        return self.request("PUT", f"/v1/uploads/{_id(upload_id)}/chunks/{index}", content=content,
+            headers={"Content-Type": "application/octet-stream", "X-Chunk-SHA256": hashlib.sha256(content).hexdigest()})
+
+    def complete_upload(self, upload_id):
+        return self.request("POST", f"/v1/uploads/{_id(upload_id)}/complete")
+
+    def upload_file(self, path, *, target=None, schema=None, format=None, upload_id=None):
+        """Upload bounded chunks; resume only against matching immutable file metadata.
+
+        Keep upload_id from create_upload() for recovery after a transport failure.
+        No mutation is silently retried. Completion is server-side checksum/schema validated.
+        """
+        spec = _file_spec(path, target, schema, format)
+        upload = self.upload_session(upload_id) if upload_id else self.create_upload(**spec)
+        chunk, received = _check_upload(upload, spec)
+        if upload['status'] == 'complete': return self.dataset(upload['dataset_id'])
+        with Path(path).open('rb') as source:
+            for index in range((spec['size_bytes'] + chunk - 1) // chunk):
+                body = source.read(chunk)
+                if index not in received: self.put_upload_chunk(upload['id'], index, body)
+        return self.complete_upload(upload['id'])
+
+    def submit_batch_predict(self, predictor_id, dataset_id, *, probabilities=False, idempotency_key=None):
+        result = self.request("POST", "/v1/batch-predictions",
+            json=dict(predictor_id=predictor_id, dataset_id=dataset_id, probabilities=probabilities),
+            headers={"Idempotency-Key": idempotency_key or uuid4().hex})
+        return Job(self, result['id'])
+
+    def job_result(self, job_id):
+        """Retrieve a completed result without polling; not-ready/expired errors stay explicit."""
+        return self.request("GET", f"/v1/jobs/{_id(job_id)}/result")
+
+    def batch_payload(self, job_id, *, result_reference=None):
+        """Retrieve JSON payload through the authenticated API, never a third-party URL."""
+        if result_reference is None:
+            result_reference = self.job_result(job_id)['result_reference']
+        return self.request("GET", f"/v1/jobs/{_id(job_id)}/result/payload", params=dict(result_reference=result_reference))
 
     def models(self):
         return self.request("GET", "/v1/models")["items"]
@@ -431,11 +537,13 @@ class Job:
         deadline = _deadline(timeout, poll_interval)
         while True:
             job = self.client.request("GET", f"/v1/jobs/{_id(self.id)}", _deadline=deadline, _job_id=self.id)
-            if job["status"] == "succeeded":
+            if job["status"] in ("succeeded", "partially_completed"):
+                if job["status"] == "partially_completed" and job["operation"] != "batch_predict":
+                    raise WeltError("Unexpected partial result for this job type.", code="invalid_response")
                 if job["operation"] == "discover":
                     return self.client.causal_result(self.id, _deadline=deadline)
                 return (self.client.request("GET", f"/v1/jobs/{_id(self.id)}/result", _deadline=deadline, _job_id=self.id)
-                        if job["operation"] == "predict" else self.client.predictor(job["predictor_id"], _deadline=deadline, _job_id=self.id))
+                        if job["operation"] in ("predict", "batch_predict") else self.client.predictor(job["predictor_id"], _deadline=deadline, _job_id=self.id))
             _failed(job, secret(self.client.api_key))
             time.sleep(_wait(deadline, self.id, poll_interval))
             poll_interval = min(poll_interval * 1.4, 5)
@@ -443,8 +551,8 @@ class Job:
 
 class AsyncClient(_HTTP):
     def __init__(self, base_url=None, api_key=None, *, timeout=60, transport=None,
-                 max_retries=2, max_retry_delay=5):
-        headers = self._configure(base_url, api_key, max_retries, max_retry_delay)
+                 max_retries=2, max_retry_delay=5, workspace=None):
+        headers = self._configure(base_url, api_key, max_retries, max_retry_delay, workspace)
         self.http = httpx.AsyncClient(base_url=self.base_url, headers=headers, timeout=timeout,
                                       transport=transport, follow_redirects=False)
 
@@ -457,8 +565,15 @@ class AsyncClient(_HTTP):
     async def __aexit__(self, *args):
         await self.aclose()
 
-    async def request(self, method, path, *, _deadline=None, _job_id=None, **kwargs):
-        self._authenticate(method, path)
+    async def request(self, method, path, *, _deadline=None, _job_id=None, _workspace_probe=False, **kwargs):
+        self._authenticate(method, path, kwargs.get("headers"), kwargs.get("auth"))
+        if not _workspace_probe and self.workspace_selector and (not self._workspace_verified or self._verified_key != self.api_key or self._verified_workspace != self.workspace_selector) and not (method.upper() == "GET" and (httpx.URL(path).path in ("/v1/models", "/v1/billing/pricing", "/v1/research-datasets") or (httpx.URL(path).path.startswith("/v1/research-datasets/") and httpx.URL(path).path.count("/") == 3))):
+            current = await self.request("GET", "/v1/workspace", _workspace_probe=True, _deadline=_deadline, _job_id=_job_id)
+            if self.workspace_selector not in (current.get('id'), current.get('slug')):
+                raise AuthenticationError('Credential does not belong to the selected workspace.', code='workspace_mismatch')
+            self._workspace_verified = True
+            self._verified_key = self.api_key
+            self._verified_workspace = self.workspace_selector
         value = secret(self.api_key)
         if value and _job_id is not None and value in str(_job_id):
             _job_id = None
@@ -491,6 +606,62 @@ class AsyncClient(_HTTP):
                         _wait(_deadline, _job_id, float("inf"))
                     return result
             await asyncio.sleep(delay if _deadline is None else _wait(_deadline, _job_id, delay))
+
+    async def workspace(self):
+        """Inspect the credential's tenant, role, limits and resource capacity."""
+        return await self.request("GET", "/v1/workspace")
+
+    async def pricing(self):
+        """Read the public rate card and available packs/plans; does not purchase."""
+        return await self.request("GET", "/v1/billing/pricing")
+
+    async def create_upload(self, *, format, size_bytes, sha256, target=None, schema=None):
+        return await self.request("POST", "/v1/uploads", json=dict(
+            format=format, size_bytes=size_bytes, sha256=sha256, target=target, schema=schema))
+
+    async def upload_session(self, upload_id):
+        return await self.request("GET", f"/v1/uploads/{_id(upload_id)}")
+
+    async def put_upload_chunk(self, upload_id, index, content):
+        if type(index) is not int or index < 0 or not isinstance(content, bytes):
+            raise ValueError('A nonnegative chunk index and bytes content are required.')
+        return await self.request("PUT", f"/v1/uploads/{_id(upload_id)}/chunks/{index}", content=content,
+            headers={"Content-Type": "application/octet-stream", "X-Chunk-SHA256": hashlib.sha256(content).hexdigest()})
+
+    async def complete_upload(self, upload_id):
+        return await self.request("POST", f"/v1/uploads/{_id(upload_id)}/complete")
+
+    async def upload_file(self, path, *, target=None, schema=None, format=None, upload_id=None):
+        """Upload bounded chunks; resume only against matching immutable file metadata.
+
+        Keep upload_id from create_upload() for recovery after a transport failure.
+        No mutation is silently retried. Completion is server-side checksum/schema validated.
+        """
+        spec = _file_spec(path, target, schema, format)
+        upload = await self.upload_session(upload_id) if upload_id else await self.create_upload(**spec)
+        chunk, received = _check_upload(upload, spec)
+        if upload['status'] == 'complete': return await self.dataset(upload['dataset_id'])
+        with Path(path).open('rb') as source:
+            for index in range((spec['size_bytes'] + chunk - 1) // chunk):
+                body = source.read(chunk)
+                if index not in received: await self.put_upload_chunk(upload['id'], index, body)
+        return await self.complete_upload(upload['id'])
+
+    async def submit_batch_predict(self, predictor_id, dataset_id, *, probabilities=False, idempotency_key=None):
+        result = await self.request("POST", "/v1/batch-predictions",
+            json=dict(predictor_id=predictor_id, dataset_id=dataset_id, probabilities=probabilities),
+            headers={"Idempotency-Key": idempotency_key or uuid4().hex})
+        return AsyncJob(self, result['id'])
+
+    async def job_result(self, job_id):
+        """Retrieve a completed result without polling; not-ready/expired errors stay explicit."""
+        return await self.request("GET", f"/v1/jobs/{_id(job_id)}/result")
+
+    async def batch_payload(self, job_id, *, result_reference=None):
+        """Retrieve JSON payload through the authenticated API, never a third-party URL."""
+        if result_reference is None:
+            result_reference = (await self.job_result(job_id))['result_reference']
+        return await self.request("GET", f"/v1/jobs/{_id(job_id)}/result/payload", params=dict(result_reference=result_reference))
 
     async def models(self):
         return (await self.request("GET", "/v1/models"))["items"]
@@ -658,11 +829,13 @@ class AsyncJob:
         deadline = _deadline(timeout, poll_interval)
         while True:
             job = await self.client.request("GET", f"/v1/jobs/{_id(self.id)}", _deadline=deadline, _job_id=self.id)
-            if job["status"] == "succeeded":
+            if job["status"] in ("succeeded", "partially_completed"):
+                if job["status"] == "partially_completed" and job["operation"] != "batch_predict":
+                    raise WeltError("Unexpected partial result for this job type.", code="invalid_response")
                 if job["operation"] == "discover":
                     return await self.client.causal_result(self.id, _deadline=deadline)
                 return (await self.client.request("GET", f"/v1/jobs/{_id(self.id)}/result", _deadline=deadline, _job_id=self.id)
-                        if job["operation"] == "predict" else await self.client.predictor(job["predictor_id"], _deadline=deadline, _job_id=self.id))
+                        if job["operation"] in ("predict", "batch_predict") else await self.client.predictor(job["predictor_id"], _deadline=deadline, _job_id=self.id))
             _failed(job, secret(self.client.api_key))
             await asyncio.sleep(_wait(deadline, self.id, poll_interval))
             poll_interval = min(poll_interval * 1.4, 5)

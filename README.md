@@ -145,3 +145,5 @@ backend, credentials or checkpoints.
 
 Apache 2.0: see [LICENSE](LICENSE). Model weights and hosted service are separate
 from this SDK licence.
+
+Agent workflows, workspace selection and the full source-candidate command reference: [CLI](docs/cli.md).

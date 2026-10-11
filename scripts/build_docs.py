@@ -26,7 +26,7 @@ GUIDES = [('Start', [('First prediction', 'start'), ('Connect your workspace', '
                       ('Select a model', 'model-selection'), ('Research datasets', 'research-datasets'),
                       ('Wait and recover', 'async-and-errors'), ('Discover a graph', 'causal-discovery')]),
           ('Explore', [('SDK resources', 'usage'), ('Regression', 'regression'),
-                       ('Reference', 'reference'), ('Models and limits', 'capabilities'),
+                       ('Agent CLI', 'cli'), ('Reference', 'reference'), ('Models and limits', 'capabilities'),
                        ('Install and accounts', 'onboarding'), ('Migrate to 0.7', 'migration')])]
 # Every documented method gets a return contract and an actionable error boundary.
 METHODS = {
@@ -70,6 +70,8 @@ METHODS = {
  'close': ('Close the synchronous HTTP client; retained remote resources remain.', 'None.', 'Closing is local, not deletion or cancellation.'),
  'aclose': ('Close the asynchronous HTTP client.', 'Awaited None.', 'Closing is local, not deletion or cancellation.'),
 }
+
+METHODS.update({'workspace': ('Inspect the credential workspace, role, metadata and resolved limits.', 'Workspace dictionary (await for AsyncClient).', 'Missing/invalid credential or workspace selection mismatch; no account-wide authority.'), 'pricing': ('Read public pricing without purchasing.', 'Public pricing dictionary (await for AsyncClient).', 'Transport/server availability; no payment authority.'), 'create_upload': ('Declare immutable file format/size/checksum/schema/target before sending chunks.', 'Upload session dictionary with ID and chunk_bytes; save its ID for recovery.', 'Server envelope/capacity/parser availability; no automatic mutation replay.'), 'upload_session': ('Inspect an owned upload and acknowledged chunks.', 'Upload metadata/progress dictionary.', 'NotFoundError for another tenant; explicit expired/failed status.'), 'put_upload_chunk': ('Send bytes with SHA256 for an explicit chunk index.', 'Updated upload progress dictionary.', 'ValueError for invalid index/bytes; conflicts for changed content; transport errors do not silently retry.'), 'complete_upload': ('Validate owned chunks/checksum/schema and create immutable dataset.', 'Dataset dictionary.', 'Incomplete/invalid/expired uploads and workload/parser limits; inspect before retrying.'), 'upload_file': ('Hash a local CSV/Parquet file, verify resume metadata, skip acknowledged chunks and complete.', 'Dataset dictionary; uses bounded chunk memory.', 'Local file/metadata ValueError; remote errors. Use create_upload and retain its ID for recovery. Async local hashing/reads are blocking disk I/O.'), 'submit_batch_predict': ('Submit durable prediction on an owned dataset using a pinned predictor.', 'Job/AsyncJob with durable ID.', 'Availability/envelope/capacity and idempotency conflicts; does not silently resubmit.'), 'job_result': ('Read ready job result without waiting.', 'Fit/prediction/native graph/batch result dictionary.', 'Not-ready, expired/deleted/not-owned errors retain typed code.'), 'batch_payload': ('Retrieve retained batch JSON through the same authenticated origin.', 'Payload dictionary with ordered predictions/errors/provenance.', 'Not-ready/not-owned/expired result or wrong reference; no third-party URL fetching.')})
 
 
 def public_signature(obj):
