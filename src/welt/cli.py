@@ -46,6 +46,11 @@ def _parser():
     ws['create'].add_argument('--no-browser', action='store_true')
     models = group('models', 'Inspect available model capabilities', dict(list='List catalogue', get='Inspect a model from catalogue'))
     models['get'].add_argument('id')
+    run = command('run', 'Submit one hidden-model run (tabular, causal or forecasting)')
+    run.add_argument('--input', required=True, help='Task request JSON file or - for stdin')
+    run.add_argument('--idempotency-key')
+    runs = group('model-runs', 'Testing model run lifecycle', dict(delete='Delete terminal input/result; retain metadata and usage'))
+    runs['delete'].add_argument('id'); runs['delete'].add_argument('--yes', required=True, action='store_true')
     datasets = group('datasets', 'Private dataset lifecycle', dict(list='List datasets', get='Inspect dataset', upload='Upload table JSON (columns, rows, target, name)', delete='Delete one dataset without dependents'))
     datasets['get'].add_argument('id'); datasets['delete'].add_argument('id'); datasets['delete'].add_argument('--yes', required=True, action='store_true')
     datasets['upload'].add_argument('--input', required=True, help='JSON file or - for stdin')
@@ -144,12 +149,15 @@ def _run(args, client):
     if command == 'whoami': return client.workspace()
     if command == 'pricing': return client.pricing()
     if command == 'models':
-        items = client.models()
-        if action == 'list': return {'items': items}
-        from .errors import NotFoundError
-        item = next((m for m in items if m['id'] == args.id), None)
-        if item is None: raise NotFoundError('Model not found in current catalogue.', code='not_found')
-        return item
+        return {'items': client.models()} if action == 'list' else client.model(args.id)
+    if command == 'model-runs':
+        return client.delete_model_run(args.id)
+    if command == 'run':
+        key = args.idempotency_key or uuid4().hex
+        args.idempotency_key = key
+        print(json.dumps({'submission': {'idempotency_key': key}}), file=sys.stderr)
+        job = client.submit_model_run(_json_input(args.input), idempotency_key=key)
+        return {'job_id': job.id, 'idempotency_key': key}
     if command == 'datasets':
         if action == 'list': return {'items': client.datasets()}
         if action == 'get': return client.dataset(args.id)

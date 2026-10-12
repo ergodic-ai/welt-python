@@ -310,6 +310,23 @@ class Client(_HTTP):
             headers={"Idempotency-Key": idempotency_key or uuid4().hex})
         return Job(self, result['id'])
 
+    def submit_model_run(self, payload, *, idempotency_key=None):
+        """Submit one bounded hidden-model run; payload follows the API task schema."""
+        result = self.request("POST", "/v1/model-runs", json=payload,
+            headers={"Idempotency-Key": idempotency_key or uuid4().hex})
+        return Job(self, result["id"])
+
+    def delete_model_run(self, job_id):
+        """Explicitly remove one terminal run's input/result; retain usage and job metadata."""
+        return self.request("DELETE", f"/v1/model-runs/{_id(job_id)}")
+
+    def model(self, model_id):
+        """Look up explicit hidden IDs without including them in the main catalogue."""
+        for item in self.models():
+            if item["id"] == model_id:
+                return item
+        return self.request("GET", f"/v1/models/{_id(model_id)}")
+
     def job_result(self, job_id):
         """Retrieve a completed result without polling; not-ready/expired errors stay explicit."""
         return self.request("GET", f"/v1/jobs/{_id(job_id)}/result")
@@ -543,7 +560,7 @@ class Job:
                 if job["operation"] == "discover":
                     return self.client.causal_result(self.id, _deadline=deadline)
                 return (self.client.request("GET", f"/v1/jobs/{_id(self.id)}/result", _deadline=deadline, _job_id=self.id)
-                        if job["operation"] in ("predict", "batch_predict") else self.client.predictor(job["predictor_id"], _deadline=deadline, _job_id=self.id))
+                        if job["operation"] in ("predict", "batch_predict", "model_run") else self.client.predictor(job["predictor_id"], _deadline=deadline, _job_id=self.id))
             _failed(job, secret(self.client.api_key))
             time.sleep(_wait(deadline, self.id, poll_interval))
             poll_interval = min(poll_interval * 1.4, 5)
@@ -652,6 +669,23 @@ class AsyncClient(_HTTP):
             json=dict(predictor_id=predictor_id, dataset_id=dataset_id, probabilities=probabilities),
             headers={"Idempotency-Key": idempotency_key or uuid4().hex})
         return AsyncJob(self, result['id'])
+
+    async def submit_model_run(self, payload, *, idempotency_key=None):
+        """Submit one bounded hidden-model run; payload follows the API task schema."""
+        result = await self.request("POST", "/v1/model-runs", json=payload,
+            headers={"Idempotency-Key": idempotency_key or uuid4().hex})
+        return AsyncJob(self, result["id"])
+
+    async def delete_model_run(self, job_id):
+        """Explicitly remove one terminal run's input/result; retain usage and job metadata."""
+        return await self.request("DELETE", f"/v1/model-runs/{_id(job_id)}")
+
+    async def model(self, model_id):
+        """Look up explicit hidden IDs without including them in the main catalogue."""
+        for item in await self.models():
+            if item["id"] == model_id:
+                return item
+        return await self.request("GET", f"/v1/models/{_id(model_id)}")
 
     async def job_result(self, job_id):
         """Retrieve a completed result without polling; not-ready/expired errors stay explicit."""
@@ -835,7 +869,7 @@ class AsyncJob:
                 if job["operation"] == "discover":
                     return await self.client.causal_result(self.id, _deadline=deadline)
                 return (await self.client.request("GET", f"/v1/jobs/{_id(self.id)}/result", _deadline=deadline, _job_id=self.id)
-                        if job["operation"] in ("predict", "batch_predict") else await self.client.predictor(job["predictor_id"], _deadline=deadline, _job_id=self.id))
+                        if job["operation"] in ("predict", "batch_predict", "model_run") else await self.client.predictor(job["predictor_id"], _deadline=deadline, _job_id=self.id))
             _failed(job, secret(self.client.api_key))
             await asyncio.sleep(_wait(deadline, self.id, poll_interval))
             poll_interval = min(poll_interval * 1.4, 5)

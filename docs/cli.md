@@ -133,3 +133,19 @@ failed ranges and payload errors rather than counting missing rows as prediction
 An entirely failed/cancelled job raises its terminal error. Manifests remain
 inspectable after payload retention expires; payload retrieval returns explicit
 expiry errors. Use the server's `expires_at` and version fields.
+
+## Hidden model runs and forecasting
+
+```sh
+welt models get chronos-2
+welt run --input forecast.json --idempotency-key forecast-00000001
+welt jobs wait job_returned --timeout 600
+welt model-runs delete job_returned --yes
+```
+
+`forecast.json` uses the task payload in [Hidden model runs](model-runs.html).
+`models list` stays curated; inspect a hidden model using its exact ID. Licence
+scope is enforced by the server's workspace policy. `run` returns a durable job;
+`jobs wait` returns its native task-specific JSON result. These bounded runs create
+no reusable fitted predictor. Deleting a terminal run explicitly purges both its
+private input and result, while job, replay and usage metadata remain.

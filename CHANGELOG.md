@@ -1,3 +1,13 @@
+# 0.10.0 (2026-10-12) — Workspace-aware agent CLI and hidden model runs
+
+- Workspace connection profiles and workspace-targeted browser/CLI login; complete
+  authenticated resource commands from API-089/090.
+- Explicit hidden model lookup, `submit_model_run`, terminal `delete_model_run`,
+  synchronous/async Job.result support for one-shot tabular, causal and forecast
+  results. CLI `welt run --input` and `welt model-runs delete --yes`.
+- Main model listing stays unchanged; hidden availability and internal research
+  access are decided by the API's qualified deployment and workspace rights.
+
 # 0.9.1 (2026-10-11) — Research downloads up to the service bound
 
 - `download_research_dataset` and `load_research_dataset` (`Client` and `AsyncClient`)

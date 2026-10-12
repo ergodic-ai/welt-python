@@ -147,3 +147,35 @@ Apache 2.0: see [LICENSE](LICENSE). Model weights and hosted service are separat
 from this SDK licence.
 
 Agent workflows, workspace selection and the full source-candidate command reference: [CLI](docs/cli.md).
+
+## Explicit hidden-model runs
+
+With SDK 0.10, `client.model("chronos-2")` inspects an explicit hidden ID while
+`client.models()` keeps the main catalogue. `client.submit_model_run(payload,
+idempotency_key="your-key")` returns a durable Job; `job.result()` returns the
+native task result. AsyncClient has matching methods. The payload follows the
+API's tabular support/query, causal table or univariate forecasting contract;
+check the model metadata for enabled tasks, limits and licence access.
+
+```python
+from welt import Client
+with Client() as client:
+    job = client.submit_model_run({
+        "model_id": "chronos-2", "task": "univariate_forecasting",
+        "series": {"values": [float(i) for i in range(48)],
+                   "start": "2026-01-01T00:00:00Z", "frequency_seconds": 3600},
+        "horizon": 12,
+    }, idempotency_key="forecast-example-1")
+    result = job.result()
+    print(result["predictions"])
+```
+
+CLI equivalents: `welt models get chronos-2`, `welt run --input request.json`,
+`welt jobs wait JOB_ID`. Use `welt model-runs delete JOB_ID --yes` or
+`client.delete_model_run(id)` to explicitly remove a terminal run's input/result.
+Deleting keeps the idempotency/usage record; a new run needs a fresh key. Native
+model libraries remain server-side. Restricted models need an internal testing
+workspace; hidden status alone does not grant serving rights. TabSTAR's trained
+state stays alive for the single run, and these runs do not publish reusable
+support-only fitted predictors. LimiX query splitting can change its transductive
+results. API errors, cancellation and timeouts retain existing typed semantics.
