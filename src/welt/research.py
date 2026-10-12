@@ -13,7 +13,7 @@ import zipfile
 
 from .errors import InvalidInputError, OptionalDependencyError, WeltError
 
-DEFAULT_MAX_BYTES = 64 * 1024 * 1024
+DEFAULT_MAX_BYTES = 128 * 1024 * 1024  # the service's per-file research download bound
 MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024
 
 

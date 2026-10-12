@@ -102,7 +102,7 @@ DataFrame, or `(DataFrame, ResearchMetadata)` with `metadata=True`.
 Pinned versions keep working after the catalogue publishes a newer one (for example
 a restored-header table), as long as the detail lists them in `previous_content`;
 `meta.version` and `meta.media_type` describe the version you actually loaded. Content
-whose declared size exceeds `max_bytes` (default 64 MiB) is refused before
+whose declared size exceeds `max_bytes` (default 128 MiB, the service's per-file bound) is refused before
 download. Without pandas/pyarrow the call raises `OptionalDependencyError`, an
 `ImportError` naming `welt-client[research]`, before any request.
 
@@ -130,7 +130,7 @@ permission or a model-compatible training recipe.
 Downloads request only the service's canonical content endpoint, with an explicit
 version pinned to its SHA-256. The SDK checks exact byte size and digest, rejects
 redirects and content encodings, and streams at most 64 KiB per write. The default
-64 MiB file limit covers each file in the canonical snapshot; callers may choose
+128 MiB file limit (64 MiB before 0.9.1) equals the service's per-file research bound, so it covers every catalogue file; callers may choose
 `max_bytes` up to 2 GiB after inspecting the size. This is a per-file safety limit,
 not permission to fetch arbitrary URLs or an automatic bulk download.
 

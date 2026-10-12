@@ -335,7 +335,7 @@ class Client(_HTTP):
         return self.request("GET", f"/v1/research-datasets/{research_id(dataset_id)}")
 
     def download_research_dataset(self, dataset_id, path, *, version=None,
-                                  max_bytes=64 * 1024 * 1024, metadata=False):
+                                  max_bytes=128 * 1024 * 1024, metadata=False):
         """Download pinned bytes to a new file; verify size/SHA before publication.
 
         Returns the path. With metadata=True, also writes the catalogue detail to
@@ -358,7 +358,7 @@ class Client(_HTTP):
         return ResearchDownload(Path(path), sidecar, pinned, digest, detail)
 
     def load_research_dataset(self, dataset_id, *, version=None, metadata=False,
-                              max_bytes=64 * 1024 * 1024):
+                              max_bytes=128 * 1024 * 1024):
         """Download verified content privately and return it as a pandas DataFrame.
 
         Returns a DataFrame, or (DataFrame, ResearchMetadata) with metadata=True.
@@ -677,7 +677,7 @@ class AsyncClient(_HTTP):
         return await self.request("GET", f"/v1/research-datasets/{research_id(dataset_id)}")
 
     async def download_research_dataset(self, dataset_id, path, *, version=None,
-                                        max_bytes=64 * 1024 * 1024, metadata=False):
+                                        max_bytes=128 * 1024 * 1024, metadata=False):
         """Async Client.download_research_dataset with the same contract."""
         from pathlib import Path
         from .research import (ResearchDownload, download_metadata, metadata_destination,
@@ -696,7 +696,7 @@ class AsyncClient(_HTTP):
         return ResearchDownload(Path(path), sidecar, pinned, digest, detail)
 
     async def load_research_dataset(self, dataset_id, *, version=None, metadata=False,
-                                    max_bytes=64 * 1024 * 1024):
+                                    max_bytes=128 * 1024 * 1024):
         """Async Client.load_research_dataset with the same contract."""
         import tempfile
         from pathlib import Path
