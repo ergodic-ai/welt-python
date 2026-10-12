@@ -120,8 +120,41 @@ jobs:
         run: .venv/bin/python .presentation-baseline/scripts/build_historical_docs.py --source .legacy-sdk071 --version 0.7.1 --output site
       - run: .venv/bin/python scripts/build_historical_docs.py --source .legacy-sdk071 --version 0.7.1 --output site
         if: inputs.docs_presentation_ref == ''
+      # Retain all intervening released guides in their matching environments.
+      # 0.8 uses the accepted docs-only presentation revision; published runtime
+      # still comes from its immutable release wheel.
+      - uses: actions/checkout@v4
+        with:
+          ref: 6c11653b89367b51fb6c872af52882ad1621d6b8
+          path: .legacy-sdk08
+      - run: uv sync --frozen
+        working-directory: .legacy-sdk08
+      - run: uv pip install --python .venv/bin/python --reinstall --no-deps "https://github.com/ergodic-ai/welt-python/releases/download/v0.8.0/welt_client-0.8.0-py3-none-any.whl"
+        working-directory: .legacy-sdk08
+      - run: .venv/bin/python scripts/build_docs.py --output ../site
+        working-directory: .legacy-sdk08
+      - uses: actions/checkout@v4
+        with:
+          ref: 2363f780c4475c1a47ba8bd4a094bddc49a158f9
+          path: .legacy-sdk09
+      - run: uv sync --frozen
+        working-directory: .legacy-sdk09
+      - run: uv pip install --python .venv/bin/python --reinstall --no-deps "https://github.com/ergodic-ai/welt-python/releases/download/v0.9.0/welt_client-0.9.0-py3-none-any.whl"
+        working-directory: .legacy-sdk09
+      - run: .venv/bin/python scripts/build_docs.py --output ../site
+        working-directory: .legacy-sdk09
+      - uses: actions/checkout@v4
+        with:
+          ref: 8c0b26550442b89a286b0a07c7a7fe00a1d4cd91
+          path: .legacy-sdk091
+      - run: uv sync --frozen
+        working-directory: .legacy-sdk091
+      - run: uv pip install --python .venv/bin/python --reinstall --no-deps "https://github.com/ergodic-ai/welt-python/releases/download/v0.9.1/welt_client-0.9.1-py3-none-any.whl"
+        working-directory: .legacy-sdk091
+      - run: .venv/bin/python scripts/build_docs.py --output ../site
+        working-directory: .legacy-sdk091
       - run: .venv/bin/python scripts/build_docs.py
-      - run: test -f site/v0.6.0/index.html && test -f site/v0.6.0/research-datasets.html && test -f site/v0.7.0/index.html && test -f site/v0.7.1/index.html && test -f site/v0.8.0/index.html
+      - run: test -f site/v0.6.0/index.html && test -f site/v0.6.0/research-datasets.html && test -f site/v0.7.0/index.html && test -f site/v0.7.1/index.html && test -f site/v0.8.0/index.html && test -f site/v0.9.0/index.html && test -f site/v0.9.1/index.html
       - name: Bind documentation presentation proof
         if: inputs.docs_presentation_ref != ''
         run: cp /tmp/welt-docs-presentation-proof.json site/docs-presentation-proof.json
