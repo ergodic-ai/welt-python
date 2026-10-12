@@ -1,3 +1,17 @@
+# 0.11.0 — Forecast estimator (pending publication)
+
+- Add zero-shot `Forecast.fit`, `predict`, `predict_quantiles`, `predict_details`
+  and `submit_predict` with owned regular UTC history and frozen workspace/model/
+  configuration identities. Fit creates no remote predictor or training job.
+- Add immutable `ForecastResult`, typed durable `ForecastJob` and
+  `AsyncForecastJob`, explicit cancellation, timeout/reconnect support and
+  client-ownership rules. Native medians/quantiles are validated without repair.
+- Add paired model/configuration expectation headers to sync/async low-level
+  model-run submission; scientific JSON/digests and generic jobs remain compatible.
+  The estimator requires the server guard capability; older servers fail closed.
+- Document chronological inputs, shapes, provenance, retention and recovery.
+  Dependencies, model weights/configurations and evaluation protocols are unchanged.
+
 # 0.10.1 (2026-10-12) — Current documentation and runnable examples
 
 - Correct the package README, causal CLI recipe, workspace credit guidance and

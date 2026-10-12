@@ -92,6 +92,10 @@ class InvalidCausalResultError(WeltError, ValueError):
     pass
 
 
+class InvalidForecastResultError(WeltError, ValueError):
+    pass
+
+
 class UnsupportedGraphConversionError(WeltError, ValueError):
     pass
 

@@ -177,3 +177,14 @@ workspace; hidden status alone does not grant execution access. TabSTAR's traine
 state stays alive for the single run, and these runs do not publish reusable
 support-only fitted predictors. LimiX query splitting can change its transductive
 results. API errors, cancellation and timeouts retain existing typed semantics.
+
+## Forecast a time series
+
+`Forecast` snapshots regular timezone-aware history and submits guarded zero-shot
+Chronos-2 runs. Requires SDK0.11 and the matching server capability:
+
+
+
+Supply your own 16–512 finite observations; horizon1–64. Fit uploads no history;
+each prediction call creates one run. Native quantiles are not calibrated
+intervals. [Forecast guide](https://ergodic-ai.github.io/welt-python/forecasting.html).

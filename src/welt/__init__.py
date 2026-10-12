@@ -14,6 +14,8 @@ from .errors import (
     ResultExpiredError, ResultDeletedError, TransportError,
 )
 from .estimators import Classifier, Regressor
+from .forecast import Forecast, ForecastJob, AsyncForecastJob, ForecastResult
+from .errors import InvalidForecastResultError
 from .causal import CausalDiscovery, CausalResult
 from .errors import InvalidCausalResultError, OptionalDependencyError, UnsupportedGraphConversionError
 from .research import ResearchDownload, ResearchMetadata, ResearchNoticeWarning
@@ -25,6 +27,7 @@ __all__ = [
     "AuthenticationError",
     "CapacityError",
     "Classifier",
+    "Forecast", "ForecastJob", "AsyncForecastJob", "ForecastResult", "InvalidForecastResultError",
     "Client",
     "ExecutionError",
     "InvalidInputError",
@@ -36,4 +39,4 @@ __all__ = [
     "OptionalDependencyError", "UnsupportedGraphConversionError",
     "ResearchDownload", "ResearchMetadata", "ResearchNoticeWarning",
 ]
-__version__ = "0.10.1"
+__version__ = "0.11.0"

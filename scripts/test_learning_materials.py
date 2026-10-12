@@ -179,3 +179,18 @@ class SiteContracts(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+
+
+def test_forecast_reference_describes_zero_shot_context_and_typed_ownership():
+    text = build_docs.reference()
+    section = text.split('### Forecast.fit',1)[1].split('###',1)[0]
+    assert 'No history upload, predictor or training job' in section
+    assert 'new immutable predictor' not in section
+    assert '### Forecast.predict_quantiles' in text
+    assert '### AsyncForecastJob.result' in text
+    assert 'ForecastJob owning its new client' in text
+    assert 'Reconnected handles borrow' in text
+    assert 'InvalidForecastResultError' in text
+    guide = (build_docs.ROOT/'docs/forecasting.md').read_text()
+    assert 'cannot reconstruct' in guide and 'not calibrated' in guide
+    assert any(slug == 'forecasting' for _, group in build_docs.GUIDES for _, slug in group)

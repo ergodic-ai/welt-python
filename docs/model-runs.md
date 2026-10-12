@@ -6,6 +6,9 @@ Seven entries permit authenticated workspaces; LimiX-1_2M, FoundCause and LCM ne
 operator-approved internal testing access. Availability requires an active native
 worker as well as permission. A listed checkpoint is not an accuracy guarantee.
 
+For the high-level `Forecast` estimator, native arrays and typed durable results,
+see [forecast a time series](forecasting.md).
+
 ## Exact model IDs
 
 | Model ID | Tasks | Access |

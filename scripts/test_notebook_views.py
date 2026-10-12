@@ -120,5 +120,7 @@ class NotebookViews(TestCase):
                 self.assertNotIn('http-equiv="refresh"', redirected)
             self.assertEqual((root/'downloads/classification.ipynb').read_bytes(),
                              (old/'downloads/classification.ipynb').read_bytes())
+            self.assertTrue((root/'downloads/forecasting.py').exists())
+            self.assertFalse((old/'downloads/forecasting.py').exists())
             self.assertTrue((root/'research-datasets.html').exists())
             self.assertTrue((root/'assets/docs.js').exists())

@@ -21,11 +21,11 @@ import welt
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = "https://ergodic-ai.github.io/welt-python"
 REQUIRED = ('Client', 'Job', 'Classifier', 'Regressor', 'AsyncClient', 'AsyncJob',
-            'CausalDiscovery', 'CausalResult')
+            'CausalDiscovery', 'CausalResult', 'Forecast', 'ForecastResult', 'ForecastJob', 'AsyncForecastJob')
 NAV = [('Start', 'index'), ('Guides', 'own-data'), ('Reference', 'reference'), ('Models', 'capabilities')]
 GUIDES = [('Start', [('First prediction', 'start'), ('Connect your workspace', 'connect'), ('Notebook examples', 'notebooks')]),
           ('Guides', [('Use your own table', 'own-data'), ('Reuse a predictor', 'reuse'),
-                      ('Select a model', 'model-selection'), ('Hidden model runs and forecasting', 'model-runs'), ('Research datasets', 'research-datasets'),
+                      ('Select a model', 'model-selection'), ('Forecast a time series', 'forecasting'), ('Hidden model runs', 'model-runs'), ('Research datasets', 'research-datasets'),
                       ('Wait and recover', 'async-and-errors'), ('Discover a graph', 'causal-discovery')]),
           ('Explore', [('SDK resources', 'usage'), ('Regression', 'regression'),
                        ('Agent CLI', 'cli'), ('Reference', 'reference'), ('Models and limits', 'capabilities'),
@@ -81,6 +81,23 @@ METHODS.update({
  'delete_model_run': ('Explicitly purge an owned terminal model run input and result.', 'Deletion dictionary {id, deleted: true}; job identity, idempotency and usage remain.', 'NotFoundError for foreign/missing/non-model-run jobs; conflict for an active run. Subsequent result retrieval is NotFoundError.')})
 
 
+METHODS.update({
+ 'forecast_job': ('Reconnect to a typed forecast run without submitting work; a regular factory on both clients.', 'ForecastJob or AsyncForecastJob borrowing this client; typed ForecastResult after waiting.', 'Task/identity/provenance validation on inspect/result/cancel; authorization and remote errors. Reconnect cannot reconstruct the original request context.'),
+ 'predict_quantiles': ('Submit one guarded zero-shot forecast run with owned history and native quantile levels.', 'numpy.ndarray, shape (horizon, n_quantiles), in requested level order.', 'Unfitted or changed context/connection, invalid horizon/levels, version conflicts, availability, capacity, execution, JobTimeoutError or InvalidForecastResultError.'),
+ 'to_frame': ('Copy native future UTC rows into a DataFrame; no remote call.', 'pandas.DataFrame with median and q_<level> columns.', 'No result repair, calibrated coverage or evaluation claim.'),
+ 'to_dict': ('Return an independent JSON-compatible copy of the native result.', 'Dictionary preserving native result fields; job_id remains a separate property.', 'No remote call; mutations do not affect the immutable result.')})
+FORECAST_METHODS = {
+ 'fit': ('Copy and validate local univariate history, then resolve workspace/model versions. No history upload, predictor or training job.', 'The same fitted Forecast (self); zero-shot context only.', 'ValueError before transport for invalid history/time/parameters; authentication, metadata or unsupported-capability errors. Failed refit clears old context.'),
+ 'predict': ('Submit one guarded run with copied history; wait within timeout.', 'numpy.ndarray, shape (horizon,), containing native medians.', METHODS['predict_quantiles'][2]),
+ 'predict_details': ('Submit one guarded run, wait and validate native provenance and exact request expectations.', 'Immutable ForecastResult; properties and conversions share this one run.', METHODS['predict_quantiles'][2]),
+ 'submit_predict': ('Submit one guarded durable forecast without waiting; retain job.id.', 'ForecastJob owning its new client; close explicitly or use a context manager.', METHODS['predict_quantiles'][2])}
+TYPED_FORECAST_METHODS = {
+ 'result': ('Wait within a local budget, validate durable task/version/result identities and preserve native values.', 'ForecastResult (await for AsyncForecastJob). Estimator jobs also validate exact submitted context/horizon/future times/levels; reconnects cannot reconstruct missing original context.', 'Typed remote errors, JobTimeoutError retaining job_id, or InvalidForecastResultError. No resubmission, repair or implicit cancellation.'),
+ 'cancel': ('Validate the forecast task/identity before explicitly requesting remote cancellation.', 'Validated server job metadata (await for AsyncForecastJob).', 'Task/version/provenance validation, authentication, permission, NotFoundError or job conflict; cancellation may race completion.'),
+ 'close': ('Close an estimator-submitted job’s owned client. Reconnected handles borrow and leave their client open.', 'None; no cancellation or deletion.', 'Local cleanup only.'),
+ 'aclose': ('Finish a reconnected async handle; its borrowed AsyncClient remains open.', 'Awaited None; no cancellation or deletion.', 'Local cleanup only.')}
+
+
 def public_signature(obj):
     signature = inspect.signature(obj)
     return signature.replace(parameters=[parameter for name, parameter in signature.parameters.items()
@@ -94,16 +111,22 @@ def reference():
         parts += [f'## {name}', f'```python\n{name}{inspect.signature(obj)}\n```']
         if name == 'CausalResult':
             parts.append('Immutable native result. Read `id`, `dataset_id`, `job_id`, `variables`, `edge_marks`, `native_graph_type`, `model_version`, `configuration_version`, `score_reference`, `decoder`, `assumptions` and `diagnostics`. The result retains no HTTP client or credentials. Scores remain a separate authenticated read.')
+        if name == 'Forecast':
+            parts.append('Zero-shot local history context, not a durable Predictor. See [forecasting](forecasting.md) for input/time/version/ownership rules; no score or automatic cross-validation contract.')
+        if name == 'ForecastResult':
+            parts.append('Immutable native result with job_id, model_id, model_version, configuration, timestamps, predictions, quantile_levels and quantiles properties. Arrays/dictionaries are owned copies; native medians and quantiles carry no calibrated coverage claim.')
         for key, method in inspect.getmembers(obj, inspect.isroutine):
             supported_inherited_score = name in ('Classifier', 'Regressor') and key == 'score'
             if key.startswith('_') or not (method.__module__.startswith('welt') or supported_inherited_score):
                 continue
-            if key not in METHODS:
+            overrides = FORECAST_METHODS if name == 'Forecast' else TYPED_FORECAST_METHODS if name in ('ForecastJob', 'AsyncForecastJob') else {}
+            if key not in METHODS and key not in overrides:
                 raise SystemExit(f'Missing annotated method contract: {name}.{key}')
-            purpose, returns, errors = METHODS[key]
+            purpose, returns, errors = overrides[key] if key in overrides else METHODS[key]
             parts += [f'### {name}.{key}', purpose, f'```python\n{name}.{key}{public_signature(method)}\n```', f'**Returns:** {returns}', f'**Errors and limits:** {errors}']
     parts += ['## Error types', 'All remote errors inherit `WeltError`. Table/schema validation may raise ordinary `ValueError` before upload. Do not catch every error and silently fit again.', '| Type | Next action |', '| --- | --- |']
     types = {'AuthenticationError': 'Configure a missing key locally; replace an invalid, expired or revoked key in Account.', 'PermissionDeniedError': 'Use a key with the required workspace write/fit/predict permission.', 'InvalidInputError': 'Check the named schema, explicit target and task limits.', 'ModelUnavailableError': 'Inspect current task_profiles and worker readiness; no automatic model fallback.', 'CapacityError / RateLimitError': 'Respect retry_after and workspace admission limits; inspect existing work.', 'JobTimeoutError / PredictionPendingError': 'Retain job_id and reconnect; local timeout does not cancel.', 'ExecutionError / JobCancelledError': 'Inspect the durable job and safe request/job IDs; intentional retry needs a new decision.', 'NotFoundError / ConflictError': 'Check workspace ownership and resource dependencies.', 'TransportError': 'Inspect existing job state before replaying a mutation; GET retries are bounded.', 'ResultExpiredError / ResultDeletedError': 'Temporary access expiry and explicit primary deletion are distinct.', 'InvalidCausalResultError': 'Reject malformed native payload without repair.', 'UnsupportedGraphConversionError / OptionalDependencyError': 'Preserve native graph; convert declared DAGs only with approved local co-release dependency. For load_research_dataset, install welt-client[research].'}
+    types['InvalidForecastResultError'] = 'Reject malformed, crossed or mismatched native forecast payload without repair.'
     types['WeltError (HTTP 402)'] = 'Inspect status_code and code: insufficient_credits, spend_cap_reached or plan_past_due. Open Workspace Billing to review available credits and pending reservations, the spend cap or unpaid plan. Resolve the cause before intentionally retrying; this is not an automatic backoff or SDK payment operation.'
     parts += [f'| `{name}` | {meaning} |' for name, meaning in types.items()]
     return '\n\n'.join(parts[:-len(types)-2]) + '\n\n' + '\n'.join(parts[-len(types)-2:])
@@ -169,7 +192,7 @@ def current_redirect(page):
 
 
 # Published historical documentation folders (v<version>/), oldest first.
-HISTORICAL_VERSIONS = ('0.6.0', '0.7.0', '0.7.1', '0.8.0', '0.9.1', '0.10.0')
+HISTORICAL_VERSIONS = ('0.6.0', '0.7.0', '0.7.1', '0.8.0', '0.9.1', '0.10.0', '0.10.1')
 
 
 def release_tuple(version):
@@ -358,7 +381,7 @@ def main():
     downloads=out/'downloads'; downloads.mkdir(exist_ok=True)
     for source in (ROOT/'examples/notebooks').glob('*'):
         if source.suffix in ('.ipynb','.py','.md'):shutil.copy2(source,downloads/source.name)
-    for name in ('first_prediction.py', 'first_request.py'):
+    for name in ('first_prediction.py', 'first_request.py', 'forecasting.py'):
         shutil.copy2(ROOT/'examples'/name, downloads/name)
     search=[]
     for name,text in pages.items():
@@ -402,7 +425,8 @@ def main():
             path.write_text(current_redirect(path.name))
     if (base/'v0.8.0/downloads').exists():
         for source in downloads.iterdir():
-            if source.is_file():shutil.copy2(source, base/'v0.8.0/downloads'/source.name)
+            if source.is_file() and source.name != 'forecasting.py':
+                shutil.copy2(source, base/'v0.8.0/downloads'/source.name)
     print(f'Built {len(pages)} guides plus landing for SDK {version}; no credentials or live model execution')
 
 

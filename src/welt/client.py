@@ -17,6 +17,18 @@ from .errors import (AuthenticationError, CapacityError, ConflictError, Executio
     ResultExpiredError, ResultDeletedError, TransportError, WeltError, safe_id)
 
 
+def _model_run_headers(key, model_version, configuration_version):
+    if (model_version is None) != (configuration_version is None):
+        raise ValueError("Supply both model and configuration version expectations.")
+    headers = {"Idempotency-Key": key or uuid4().hex}
+    if model_version is not None:
+        if any(safe_id(v) is None for v in (model_version, configuration_version)):
+            raise ValueError("Version expectations must be bounded opaque identifiers.")
+        headers.update({"X-Welt-Model-Version": model_version,
+                        "X-Welt-Configuration-Version": configuration_version})
+    return headers
+
+
 def _retry_after(response):
     value = response.headers.get("Retry-After")
     if value is None:
@@ -310,10 +322,11 @@ class Client(_HTTP):
             headers={"Idempotency-Key": idempotency_key or uuid4().hex})
         return Job(self, result['id'])
 
-    def submit_model_run(self, payload, *, idempotency_key=None):
+    def submit_model_run(self, payload, *, idempotency_key=None,
+                         expected_model_version=None, expected_configuration_version=None):
         """Submit one bounded hidden-model run; payload follows the API task schema."""
         result = self.request("POST", "/v1/model-runs", json=payload,
-            headers={"Idempotency-Key": idempotency_key or uuid4().hex})
+            headers=_model_run_headers(idempotency_key, expected_model_version, expected_configuration_version))
         return Job(self, result["id"])
 
     def delete_model_run(self, job_id):
@@ -481,6 +494,11 @@ class Client(_HTTP):
         from .causal import validated_scores
         result = self.causal_result(job_id)
         return validated_scores(result, self.request("GET", f"/v1/jobs/{_id(job_id)}/result/scores"))
+
+    def forecast_job(self, job_id):
+        """Reconnect to one forecast run, borrowing this client; validates durable provenance."""
+        from .forecast import ForecastJob
+        return ForecastJob(self.job(job_id))
 
     def job(self, job_id):
         return Job(self, job_id)
@@ -670,10 +688,11 @@ class AsyncClient(_HTTP):
             headers={"Idempotency-Key": idempotency_key or uuid4().hex})
         return AsyncJob(self, result['id'])
 
-    async def submit_model_run(self, payload, *, idempotency_key=None):
+    async def submit_model_run(self, payload, *, idempotency_key=None,
+                               expected_model_version=None, expected_configuration_version=None):
         """Submit one bounded hidden-model run; payload follows the API task schema."""
         result = await self.request("POST", "/v1/model-runs", json=payload,
-            headers={"Idempotency-Key": idempotency_key or uuid4().hex})
+            headers=_model_run_headers(idempotency_key, expected_model_version, expected_configuration_version))
         return AsyncJob(self, result["id"])
 
     async def delete_model_run(self, job_id):
@@ -832,6 +851,11 @@ class AsyncClient(_HTTP):
         from .causal import validated_scores
         result = await self.causal_result(job_id)
         return validated_scores(result, await self.request("GET", f"/v1/jobs/{_id(job_id)}/result/scores"))
+
+    def forecast_job(self, job_id):
+        """Reconnect borrowing this client; await the typed job's result()."""
+        from .forecast import AsyncForecastJob
+        return AsyncForecastJob(self.job(job_id))
 
     def job(self, job_id):
         return AsyncJob(self, job_id)
