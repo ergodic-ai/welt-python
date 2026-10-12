@@ -9,7 +9,7 @@ how well a classifier predicts those unseen rows.
 Python 3.11–3.13. Use a virtual environment, then install the SDK and its Parquet reader:
 
 ```sh
-python -m pip install "welt-client[parquet]==0.8.0"
+python -m pip install "welt-client[parquet]"
 ```
 
 ## Connect your workspace
@@ -34,10 +34,8 @@ Manual `WELT_API_KEY` configuration remains supported; never save a secret in co
 
 ## Classification: predict a flower's class
 
-Iris has 150 rows, four measurements and three encoded classes. The canonical
-snapshot calls its target `__target__#0`; keep that name rather than guessing from
-a column's position. This is the eligible p10k/PMLB Iris asset, attributed to
-R. A. Fisher (1936), UCI Iris DOI10.24432/C56C76, CC BY4.0.
+Iris has 150 rows, four measurements and three encoded classes. The outcome
+column is named `target`.
 
 Run the complete example. The numbered comments follow the six steps:
 
@@ -51,16 +49,13 @@ from welt import Client, Classifier
 
 # 1. Get a real table from Welt's research inventory.
 dataset_id = "asset-d839644b6de36fc5cafdda18c5daeca3"
-version = "d839644b6de36fc5cafdda18c5daeca3284a5ce8bb6169aff2fcb3fbb4a12021"
 path = Path(mkdtemp(prefix="welt-iris-")) / "iris.parquet"
 with Client() as client:
     info = client.research_dataset(dataset_id)
-    print("Dataset:", info["name"], "— License:", info["license"])
-    for notice in info["license_notices"]:
-        print(notice)
-    client.download_research_dataset(dataset_id, path, version=version)
+    print("Dataset:", info["name"])
+    client.download_research_dataset(dataset_id, path)
 data = pd.read_parquet(path)
-target = "__target__#0"  # The target recorded in this research snapshot.
+target = "target"  # The outcome column in this table.
 
 # 2. Look at the rows before modelling.
 print(data.head())
@@ -111,7 +106,7 @@ training dataset and fitted predictor remain retained.
 
 For a numeric outcome, use `Regressor`. This small Yacht Hydrodynamics research
 snapshot has 308 real observations and six numeric features. Its recorded target
-is residuary resistance (`__target__#0`); the selected distribution is CC0. We use
+is `Residuary.resistance`. We use
 all observations and an explicitly declared random 80/20 teaching split (246/62),
 not a source-provided benchmark split. Closely related experimental rows can make
 random-split scores optimistic; a study should choose a split matching its goal.
@@ -126,16 +121,13 @@ from welt import Client, Regressor
 
 # 1. Get a real table from Welt's research inventory.
 dataset_id = "asset-bc7dddd884c5e798c1b2abfc559a36ab"
-version = "bc7dddd884c5e798c1b2abfc559a36ab79a6d09c4e2ea3e9bbd95c06539c7342"
 path = Path(mkdtemp(prefix="welt-yacht-")) / "yacht.parquet"
 with Client() as client:
     info = client.research_dataset(dataset_id)
-    print("Dataset:", info["name"], "— License:", info["license"])
-    for notice in info["license_notices"]:
-        print(notice)
-    client.download_research_dataset(dataset_id, path, version=version)
+    print("Dataset:", info["name"])
+    client.download_research_dataset(dataset_id, path)
 data = pd.read_parquet(path)
-target = "__target__#0"  # The target recorded in this research snapshot.
+target = "Residuary.resistance"  # The outcome column in this table.
 
 # 2. Look at the rows before modelling.
 print(data.head())

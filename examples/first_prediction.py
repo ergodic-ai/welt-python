@@ -17,16 +17,13 @@ def run(task="classification"):
 
         # 1. Get a real table from Welt's research inventory.
         dataset_id = "asset-d839644b6de36fc5cafdda18c5daeca3"
-        version = "d839644b6de36fc5cafdda18c5daeca3284a5ce8bb6169aff2fcb3fbb4a12021"
         path = Path(mkdtemp(prefix="welt-iris-")) / "iris.parquet"
         with Client() as client:
             info = client.research_dataset(dataset_id)
-            print("Dataset:", info["name"], "— License:", info["license"])
-            for notice in info["license_notices"]:
-                print(notice)
-            client.download_research_dataset(dataset_id, path, version=version)
+            print("Dataset:", info["name"])
+            client.download_research_dataset(dataset_id, path)
         data = pd.read_parquet(path)
-        target = "__target__#0"  # The target recorded in this research snapshot.
+        target = "target"  # The outcome column in this table.
 
         # 2. Look at the rows before modelling.
         print(data.head())
@@ -63,16 +60,13 @@ def run(task="classification"):
 
         # 1. Get a real table from Welt's research inventory.
         dataset_id = "asset-bc7dddd884c5e798c1b2abfc559a36ab"
-        version = "bc7dddd884c5e798c1b2abfc559a36ab79a6d09c4e2ea3e9bbd95c06539c7342"
         path = Path(mkdtemp(prefix="welt-yacht-")) / "yacht.parquet"
         with Client() as client:
             info = client.research_dataset(dataset_id)
-            print("Dataset:", info["name"], "— License:", info["license"])
-            for notice in info["license_notices"]:
-                print(notice)
-            client.download_research_dataset(dataset_id, path, version=version)
+            print("Dataset:", info["name"])
+            client.download_research_dataset(dataset_id, path)
         data = pd.read_parquet(path)
-        target = "__target__#0"  # The target recorded in this research snapshot.
+        target = "Residuary.resistance"  # The outcome column in this table.
 
         # 2. Look at the rows before modelling.
         print(data.head())

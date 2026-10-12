@@ -45,9 +45,16 @@ class TeachingSources(unittest.TestCase):
         for path in (root/'examples/notebooks').glob('*.ipynb'):
             notebook=json.loads(path.read_text())
             code="\n".join("".join(cell['source']) for cell in notebook['cells'] if cell['cell_type']=='code')
+            first = next(cell for cell in notebook['cells'] if cell['cell_type'] == 'code')
+            self.assertEqual(first['source'], '!pip install "welt-client[parquet]"')
+            self.assertNotIn('__target__#0', code)
+            self.assertNotIn('version=', code)
+            self.assertNotIn('license_notices', code)
             self.assertIn('research_dataset',code)
             self.assertIn('download_research_dataset',code)
             self.assertIn('pd.read_parquet',code)
+            expected_target = 'Residuary.resistance' if path.stem == 'regression' else 'target'
+            self.assertIn('target = "' + expected_target + '"', code)
             self.assertIn('data.head()',code)
             for forbidden in ('estimator_transport','from support','MockTransport','make_classification','np.random'):
                 self.assertNotIn(forbidden,code)

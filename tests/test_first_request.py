@@ -32,13 +32,16 @@ def test_named_stratified_recipe_is_exact_and_repeatable_without_mutating_source
     assert set(X.index)|set(query.index)==set(range(150))
     pd.testing.assert_frame_equal(X,other_X);pd.testing.assert_series_equal(y,other_y)
     pd.testing.assert_frame_equal(query,other_query);pd.testing.assert_frame_equal(frame,before)
-    assert module.DATASET_ID=='asset-'+module.VERSION[:32] and module.SIZE_BYTES==7332
+    assert module.DATASET_ID=='asset-d839644b6de36fc5cafdda18c5daeca3'
+    assert module.TARGET=='target'
+    assert list(X.columns)==['petal-length','petal-width','sepal-length','sepal-width']
 
 
-@pytest.mark.parametrize('mutation', ['missing_column','missing_value','wrong_rows','wrong_classes'])
+@pytest.mark.parametrize('mutation', ['missing_column','renamed_column','missing_value','wrong_rows','wrong_classes'])
 def test_recipe_refuses_drift_without_sampling_or_inference(mutation):
     module=example();frame=table(module)
     if mutation=='missing_column':frame=frame.drop(columns=module.FEATURES[0])
+    elif mutation=='renamed_column':frame=frame.rename(columns={module.FEATURES[0]:'other'})
     elif mutation=='missing_value':frame.loc[0,module.FEATURES[0]]=np.nan
     elif mutation=='wrong_rows':frame=frame.iloc[:149]
     else:frame[module.TARGET]=0

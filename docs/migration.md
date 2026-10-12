@@ -57,7 +57,7 @@ contract and pinned notebook sources.
 
 ## Move from 0.7 to 0.8
 
-Install `welt-client[parquet]==0.8.0`. Run `welt login` in your terminal or call
+Install `welt-client[parquet]`. Run `welt login` in your terminal or call
 `Client().connect()` in a notebook. Existing explicit keys/environment keys remain
 supported and take precedence; constructors never initiate authentication. Python
 connection is process-only unless you opt into `save=True`. See [Connect](connect.md)

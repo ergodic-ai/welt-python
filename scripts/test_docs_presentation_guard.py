@@ -55,4 +55,29 @@ class Boundaries(TestCase):
     def test_delete_rejected(self):self.run_guard('D\tdocs/assets/docs.css')
     def test_rename_rejected(self):self.run_guard('R100\tdocs/assets/docs.css\tdocs/assets/other.css')
 
+    def test_current_learning_release_accepts_reviewed_notebook_changes(self):
+        baseline = guard.RELEASES['0.10.0'][0]
+        def git(*args):
+            return {
+                ('rev-parse','HEAD'): 'a'*40,
+                ('rev-parse','refs/tags/v0.10.0^{commit}'): baseline,
+                ('diff','--name-status',baseline,'a'*40): 'M\texamples/notebooks/classification.ipynb',
+                ('status','--porcelain'): '',
+            }[args]
+        with patch.dict(os.environ, RELEASE_TAG='v0.10.0'), patch.object(guard,'git',side_effect=git), patch.object(guard.subprocess,'run'), patch.object(guard.urllib.request,'urlopen',side_effect=RuntimeError('published-wheel check')):
+            with self.assertRaisesRegex(RuntimeError,'published-wheel check'):guard.main()
+
+    def test_current_learning_release_refuses_runtime_and_dependency_changes(self):
+        baseline = guard.RELEASES['0.10.0'][0]
+        for name in ('src/welt/client.py','pyproject.toml','uv.lock','LICENSE'):
+            def git(*args):
+                return {
+                    ('rev-parse','HEAD'): 'a'*40,
+                    ('rev-parse','refs/tags/v0.10.0^{commit}'): baseline,
+                    ('diff','--name-status',baseline,'a'*40): 'M\t'+name,
+                }[args]
+            with patch.dict(os.environ, RELEASE_TAG='v0.10.0'), patch.object(guard,'git',side_effect=git), patch.object(guard.subprocess,'run'), patch.object(guard.urllib.request,'urlopen') as network:
+                with self.assertRaisesRegex(SystemExit,'allowlist'):guard.main()
+                network.assert_not_called()
+
 if __name__=='__main__':main()

@@ -7,9 +7,9 @@ on:
       release_tag:
         description: Published SDK release to document
         required: true
-        default: v0.8.0
+        default: v0.10.0
       docs_presentation_ref:
-        description: Optional exact reviewed documentation-only commit (SDK0.8 only)
+        description: Optional exact reviewed documentation-only commit (SDK0.8 or SDK0.10)
         required: false
         default: ""
 permissions:
@@ -77,7 +77,7 @@ jobs:
       - name: Test docs-only presentation gate
         if: inputs.docs_presentation_ref != ''
         run: |
-          .venv/bin/python -m pytest scripts/test_docs_presentation_guard.py scripts/test_homepage_presentation.py scripts/test_learning_materials.py -q
+          .venv/bin/python -m pytest scripts/test_docs_presentation_guard.py scripts/test_homepage_presentation.py scripts/test_learning_materials.py scripts/test_notebook_views.py -q
       # Preserve v0.6 URLs and corrected research archive/licence notices.
       # This is an isolated checkout/environment: historical docs cannot inherit 0.7 APIs.
       - uses: actions/checkout@v4
@@ -113,7 +113,7 @@ jobs:
       - uses: actions/checkout@v4
         if: inputs.docs_presentation_ref != ''
         with:
-          ref: 49699b14ebc10bcb093c9cf208518dd5ea3a0c46
+          ref: ${{ inputs.release_tag == 'v0.8.0' && '49699b14ebc10bcb093c9cf208518dd5ea3a0c46' || 'f41f37e1b69f178969707f8b31e58b85e71fb158' }}
           path: .presentation-baseline
       - name: Render immutable accepted 0.7.1 presentation
         if: inputs.docs_presentation_ref != ''
@@ -144,6 +144,8 @@ jobs:
       - run: .venv/bin/python scripts/build_docs.py --output ../site
         working-directory: .legacy-sdk091
       - run: .venv/bin/python scripts/build_docs.py
+        env:
+          DOCS_NOTEBOOK_REF: ${{ inputs.docs_presentation_ref || github.sha }}
       - run: test -f site/v0.6.0/index.html && test -f site/v0.6.0/research-datasets.html && test -f site/v0.7.0/index.html && test -f site/v0.7.1/index.html && test -f site/v0.8.0/index.html && test -f site/v0.9.1/index.html
       - name: Bind documentation presentation proof
         if: inputs.docs_presentation_ref != ''

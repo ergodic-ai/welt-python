@@ -1,7 +1,6 @@
 # Hidden model runs and univariate forecasting
 
-Hidden models are available by exact ID where the deployed workspace licence
-policy permits. They do not appear in `Client.models()` or the console catalogue.
+Hidden models are available by exact ID where your workspace has access. They do not appear in `Client.models()` or the console catalogue.
 Inspect `client.model(ID)` for tasks, limits, pinned configuration and readiness.
 Seven entries permit authenticated workspaces; LimiX-1_2M, FoundCause and LCM need
 operator-approved internal testing access. Availability requires an active native
@@ -72,7 +71,7 @@ support and query are submitted together; the API retains no reusable native fit
 Query labels must be absent. Preserve chronological/held-out assessment yourself;
 these calls do not implement model selection or benchmark ranking.
 
-## Privacy, retention and licences
+## Privacy and retention
 
 Inputs/results remain private to the credential's workspace. The bounded preview
 allows up to100 retained runs per workspace, with the shared queued-job limit.
@@ -84,21 +83,6 @@ idempotency and usage metadata. Retrieving a purged result returns404; replay re
 use a new replay key for a deliberate new run.
 
 Model/version/configuration identities are pinned at submission. Hidden status
-controls discovery, while licence/workspace checks control execution. Inspect
-returned rights and attribution notices before using outputs. FoundCause/LCM
+controls discovery; workspace access controls execution. FoundCause/LCM
 scores retain their scientific semantics and cannot be converted to an invented
 certain graph through `CausalResult.to_ergodic()`.
-
-## TabSTAR attribution
-
-TabSTAR: A Foundation Tabular Model With Semantically Target-Aware Representations,
-by Alan Arazi, Eilam Shapira and Roi Reichart. Copyright (c)2025 Alan Arazi; the
-[pinned model card](https://huggingface.co/alana89/TabSTAR/blob/73560fb23d34307f4b6fa849f38f8299a8980a4a/README.md)
-credits MIT © Alan Arazi et al. Its card metadata declares
-[CC BY4.0](https://creativecommons.org/licenses/by/4.0/), which Welt conservatively
-applies to the weights; [source code is MIT](https://github.com/alanarazi7/TabSTAR/blob/32b232243e06018f3d3f86f006d9337de68ac15b/LICENSE).
-Welt uses verified offline local weights and native per-run LoRA fine-tuning for
-up to10epochs with patience3. Adapted weights remain private and transient.
-The auxiliary [intfloat/e5-small-v2](https://huggingface.co/intfloat/e5-small-v2)
-uses MIT terms. No endorsement is implied; preserve upstream licence, copyright
-and disclaimer notices. Explicit model metadata includes these notices as well.

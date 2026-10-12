@@ -31,6 +31,9 @@ def main():
     for path in paths:
         if args.notebook and path.stem!=args.notebook:continue
         notebook=nbformat.read(path,as_version=4);nbformat.validate(notebook)
+        first_code = next((cell for cell in notebook.cells if cell.cell_type == 'code'), None)
+        if first_code is None or first_code.source != '!pip install "welt-client[parquet]"':
+            raise SystemExit(f'Notebook must start with the SDK install command: {path.name}')
         for cell in notebook.cells:
             if cell.cell_type=='code' and (cell.outputs or cell.execution_count is not None):
                 raise SystemExit(f'Notebook source must be scrubbed: {path.name}')
@@ -44,6 +47,17 @@ def main():
                 if not fixture_dir:
                     raise SystemExit("Offline execution requires WELT_NOTEBOOK_FIXTURE_DIR with reviewed SHA-pinned research bytes; use --check-source for source checks.")
                 shutil.copy(ROOT/'scripts/notebook_fixture.py', folder/'notebook_fixture.py')
+                # Offline fixture runs execute the visible shell command through a
+                # temporary pip stub; real clean installation is qualified separately.
+                stub_folder = folder/'install-check';stub_folder.mkdir()
+                pip = stub_folder/'pip'
+                pip.write_text('#!' + sys.executable + '\n'
+                    'import sys\nfrom pathlib import Path\n'
+                    'import welt, pyarrow\n'
+                    'assert sys.argv[1:] == ["install", "welt-client[parquet]"]\n'
+                    'Path(' + repr(str(folder/'install-command-checked')) + ').touch()\n')
+                pip.chmod(0o700)
+                env['PATH'] = str(stub_folder) + os.pathsep + env.get('PATH', '')
                 setup = nbformat.v4.new_code_cell(
                     "from notebook_fixture import patch_clients\n"
                     "import os\n_fixture = patch_clients(os.environ['WELT_NOTEBOOK_FIXTURE_DIR'])")
@@ -54,6 +68,8 @@ def main():
             try:
                 NotebookClient(notebook,km=manager,timeout=150,startup_timeout=60,
                     store_widget_state=False,record_timing=False).execute(cwd=str(folder),env=env,cleanup_kc=True)
+                if not args.live and not (folder/'install-command-checked').exists():
+                    raise AssertionError('Visible notebook installation command was not executed.')
             except Exception:
                 # CellExecutionError can contain values. Keep diagnostics bounded and private.
                 raise SystemExit(f'Notebook failed: {path.name}; inspect locally without committing outputs.') from None

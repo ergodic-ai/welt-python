@@ -45,9 +45,7 @@ The full official estimator/task/version matrix, batch/resumable
 files, remaining causal engines and public Ergodic continuation remain gates.
 AsyncClient/AsyncJob and native ArrowFM/CDFM/AVICI results retain their independently
 qualified narrow boundaries; the supported notebook checks remain distinct from
-real model qualification. SDK 0.7 retains the [research catalogue](research-datasets.md)
-without including unreleased CSV0.4 or batch0.5. No conformal uncertainty or full catalogue availability
-is claimed by this SDK release.
+real model qualification. See the [research catalogue](research-datasets.md) for tables to try.
 
 Safe metadata GET requests have bounded automatic retries (default two,
 maximum five), respecting Retry-After up to the configured wait bound; a larger

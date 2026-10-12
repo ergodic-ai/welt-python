@@ -1,7 +1,7 @@
 # Learn with real research data
 
-Each notebook is standalone: install the SDK's `parquet` extra, approve your workspace using
-the first `Client.connect()` cell, and run the cells in order. No support.py or mock context is
+Each notebook starts with `!pip install "welt-client[parquet]"`. Run that cell,
+approve your workspace using `Client.connect()`, and run the remaining cells in order. No support.py or mock context is
 needed. Do not save keys or outputs into Git.
 
 - Classification: real Iris, inspect, seed9 stratified120/30 split, fit, predict,
@@ -14,9 +14,8 @@ needed. Do not save keys or outputs into Git.
 - Causal discovery: real Iris measurements, all150 rows/four continuous variables;
   native Arrow output inspection, no ground-truth causal accuracy or effect claim.
 
-The Iris distribution is CC BY4.0 (R.A.Fisher1936, UCI DOI10.24432/C56C76), and
-selected Yacht distribution is CC0. Programs print retained licence notices before
-use. Recorded targets, column names and canonical bytes remain unchanged. Teaching
+Examples download the current tables and use their named targets: `target` for
+Iris and `Residuary.resistance` for Yacht. Teaching
 splits are explicit local choices, not source-provided benchmark splits. There is
 no promised score, latency or calibrated interval. Each fit uses hosted resources;
 uploads, predictors and causal results persist. Reopening does not refit.

@@ -142,8 +142,8 @@ class ResearchFixture(CausalSyntheticService):
         from pathlib import Path
         from hashlib import sha256
         self.research = {}
-        for name, digest in (("iris", "d839644b6de36fc5cafdda18c5daeca3284a5ce8bb6169aff2fcb3fbb4a12021"),
-                             ("yacht", "bc7dddd884c5e798c1b2abfc559a36ab79a6d09c4e2ea3e9bbd95c06539c7342")):
+        for name, digest in (("iris", "49abb2b00bc1453978ff6d80ab3a71adbdda3a43d68f204e9251580bf6ef44cb"),
+                             ("yacht", "3f69b3143b7c34a1f0af4088dfd9d1561dc8300542b7ba8dc97ea33caddfbff2")):
             root = Path(directory)
             detail = json.loads((root / (name + ".json")).read_text())
             body = (root / (name + ".parquet")).read_bytes()
