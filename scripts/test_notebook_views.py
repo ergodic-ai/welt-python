@@ -112,9 +112,12 @@ class NotebookViews(TestCase):
             (old/'reference.html').write_text('older reference')
             with patch.object(sys, 'argv', ['build_docs', '--output', folder]):
                 build_docs.main()
-            self.assertIn('0;url=../notebooks.html', (old/'notebooks.html').read_text())
-            self.assertIn('0;url=../notebook-classification.html', (old/'notebook-classification.html').read_text())
-            self.assertIn('0;url=../reference.html', (old/'reference.html').read_text())
+            for page in ('notebooks.html', 'notebook-classification.html', 'reference.html'):
+                redirected = (old/page).read_text()
+                self.assertIn('href="../' + page + '"', redirected)
+                self.assertIn('destination.hash = window.location.hash', redirected)
+                self.assertIn('destination.search = window.location.search', redirected)
+                self.assertNotIn('http-equiv="refresh"', redirected)
             self.assertEqual((root/'downloads/classification.ipynb').read_bytes(),
                              (old/'downloads/classification.ipynb').read_bytes())
             self.assertTrue((root/'research-datasets.html').exists())

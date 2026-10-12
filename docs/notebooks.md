@@ -59,6 +59,9 @@ Use a fresh Python3.11–3.13 environment with `welt-client[parquet]`. Outputs i
 notebook sources are cleared; your own run shows actual data and measurements.
 Keep credentials in `WELT_API_KEY`, never in saved notebook cells. Every modelling
 call goes to Welt; created private training data/predictors/results persist.
+Check **Workspace → Billing** for available credits and spend caps before running
+the notebooks. Modelling and research downloads may consume credits; see
+[usage and recovery](usage.md#usage-and-workspace-credits).
 
 The causal example has no ground-truth graph and makes no causal-accuracy claim.
 Native scores are not calibrated confidence; approved public Ergodic continuation

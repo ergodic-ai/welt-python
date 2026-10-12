@@ -39,6 +39,31 @@ def main():
                 assert namespace['target'] not in query.columns
                 assert namespace['predictions'].shape == (expected[1],)
                 receipt.append((task, run, expected))
+    # Execute exactly the homepage's visible loading and training cells in order.
+    from build_docs import notebook_home
+    from html.parser import HTMLParser
+    class Cells(HTMLParser):
+        def __init__(self):
+            super().__init__(); self.cells=[]; self.inside=False
+        def handle_starttag(self, tag, attrs):
+            if tag == 'code': self.inside=True; self.cells.append('')
+        def handle_endtag(self, tag):
+            if tag == 'code': self.inside=False
+        def handle_data(self, value):
+            if self.inside: self.cells[-1]+=value
+    cells=Cells(); cells.feed(notebook_home(sdk_version='0.10.1'))
+    with patch_clients(directory), redirect_stdout(io.StringIO()):
+        namespace={}
+        for program in cells.cells:
+            if 'load_research_dataset(' in program or 'train, test = train_test_split(' in program:
+                exec(program, namespace)
+        assert namespace['data'].shape == (150, 5)
+        assert len(namespace['train']) == 120 and len(namespace['test']) == 30
+        assert set(namespace['train'].index).isdisjoint(namespace['test'].index)
+        assert namespace['target'] not in namespace['X_test'].columns
+        assert list(namespace['X_test'].columns) == ['sepal-length','sepal-width','petal-length','petal-width']
+        assert namespace['predictions'].shape == (30,)
+    receipt.append(('homepage','visible loading + modelling','PASS'))
     # Resource guides are explicit continuations of the real Iris walkthrough.
     for name in ('async-and-errors','reuse','usage','model-selection','causal-discovery','research-datasets','migration'):
         with patch_clients(directory), redirect_stdout(io.StringIO()):

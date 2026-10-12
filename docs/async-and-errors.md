@@ -75,6 +75,9 @@ A completion/cancellation race follows the current server job state.
 | Missing `WELT_API_KEY` | Open Welt → Account; create a workspace key and configure it locally. No authenticated request was sent. |
 | `AuthenticationError`: invalid, expired or revoked key | Replace the key through Account; avoid printing the secret. These conditions require current server authorization. |
 | `PermissionDeniedError` | Use a key with **Allow writes, fits and predictions** enabled in the intended workspace. |
+| `WeltError`, HTTP 402, `code="insufficient_credits"` | Open **Workspace → Billing**. Check available credits and pending reservations; wait for accepted work to settle or have an authorized person add credits. |
+| `WeltError`, HTTP 402, `code="spend_cap_reached"` | Ask a workspace billing administrator to review the monthly spend cap. Retry after the cap is raised or the calendar month changes. |
+| `WeltError`, HTTP 402, `code="plan_past_due"` | An authorized person must resolve the unpaid plan through Workspace Billing and its customer portal. Retry after the workspace's billing status recovers. |
 | `ValueError` / `InvalidInputError` | Check unique feature names, exactly one explicit target, matching query schema and task limits. |
 | `ModelUnavailableError` | Inspect the requested `task_profiles` entry and worker readiness. There is no hidden model or task fallback. |
 | `CapacityError` / `RateLimitError` | Respect `retry_after`; inspect queued work before submitting again. |
@@ -86,6 +89,11 @@ Typed errors expose available `code`, `request_id`, `job_id`, `status_code`,
 `retryable` and `retry_after`. Bodies are sanitized; never add keys or raw rows to
 logs. A temporary `ResultExpiredError` concerns access, not proof of physical blob
 deletion. Explicitly deleted native causal reads use `ResultDeletedError`.
+
+The three billing conditions use the base `WeltError`; check `status_code == 402`
+and `code` rather than expecting a dedicated payment exception. Repeating the same
+request does not repair a balance, spend cap or unpaid plan. The SDK does not
+purchase credits or change billing settings. See [usage accounting](usage.md#usage-and-workspace-credits).
 
 ## Retries and repeated submissions
 

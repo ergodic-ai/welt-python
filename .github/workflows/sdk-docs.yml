@@ -7,7 +7,7 @@ on:
       release_tag:
         description: Published SDK release to document
         required: true
-        default: v0.10.0
+        default: v0.10.1
       docs_presentation_ref:
         description: Optional exact reviewed documentation-only commit (SDK0.8 or SDK0.10)
         required: false
@@ -111,15 +111,11 @@ jobs:
       - run: uv pip install --python .venv/bin/python --reinstall --no-deps "https://github.com/ergodic-ai/welt-python/releases/download/v0.7.1/welt_client-0.7.1-py3-none-any.whl"
         working-directory: .legacy-sdk071
       - uses: actions/checkout@v4
-        if: inputs.docs_presentation_ref != ''
         with:
           ref: ${{ inputs.release_tag == 'v0.8.0' && '49699b14ebc10bcb093c9cf208518dd5ea3a0c46' || 'f41f37e1b69f178969707f8b31e58b85e71fb158' }}
           path: .presentation-baseline
       - name: Render immutable accepted 0.7.1 presentation
-        if: inputs.docs_presentation_ref != ''
         run: .venv/bin/python .presentation-baseline/scripts/build_historical_docs.py --source .legacy-sdk071 --version 0.7.1 --output site
-      - run: .venv/bin/python scripts/build_historical_docs.py --source .legacy-sdk071 --version 0.7.1 --output site
-        if: inputs.docs_presentation_ref == ''
       # Retain all intervening released guides in their matching environments.
       # 0.8 uses the accepted docs-only presentation revision; published runtime
       # still comes from its immutable release wheel.
@@ -143,6 +139,23 @@ jobs:
         working-directory: .legacy-sdk091
       - run: .venv/bin/python scripts/build_docs.py --output ../site
         working-directory: .legacy-sdk091
+      # Keep the accepted 0.10.0 presentation with its immutable runtime.
+      - uses: actions/checkout@v4
+        if: github.event.release.tag_name == 'v0.10.1' || inputs.release_tag == 'v0.10.1'
+        with:
+          ref: 3d2a805fd334636df3470b08eb3b451a630e6968
+          path: .legacy-sdk010
+      - run: uv sync --frozen --extra parquet
+        if: github.event.release.tag_name == 'v0.10.1' || inputs.release_tag == 'v0.10.1'
+        working-directory: .legacy-sdk010
+      - run: uv pip install --python .venv/bin/python --reinstall --no-deps "https://github.com/ergodic-ai/welt-python/releases/download/v0.10.0/welt_client-0.10.0-py3-none-any.whl"
+        if: github.event.release.tag_name == 'v0.10.1' || inputs.release_tag == 'v0.10.1'
+        working-directory: .legacy-sdk010
+      - run: .venv/bin/python scripts/build_docs.py --output ../site
+        if: github.event.release.tag_name == 'v0.10.1' || inputs.release_tag == 'v0.10.1'
+        working-directory: .legacy-sdk010
+      - name: Check current documentation contracts
+        run: .venv/bin/python -m pytest -q scripts/test_audit_navigation.py scripts/test_audit_content.py scripts/test_homepage_presentation.py scripts/test_learning_materials.py scripts/test_notebook_views.py
       - run: .venv/bin/python scripts/build_docs.py
         env:
           DOCS_NOTEBOOK_REF: ${{ inputs.docs_presentation_ref || github.sha }}

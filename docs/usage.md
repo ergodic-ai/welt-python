@@ -1,7 +1,8 @@
 # SDK guide
 
 `Client()` defaults to `https://welt.ergodic.dev`; explicit `base_url` overrides
-`WELT_BASE_URL`. Authenticated methods use `WELT_API_KEY` or an explicit key. Always close it or use a context
+`WELT_BASE_URL`. Authenticated methods use your connected/saved workspace credential,
+`WELT_API_KEY` or an explicit key. See [Connect](connect.md) for precedence. Always close it or use a context
 manager. `Client.models()` reports actual capabilities, not blanket task support.
 
 ```python
@@ -40,12 +41,49 @@ usage(); metadata inspection/export_metadata() returns authorized JSON-compatibl
 provenance only, never weights/context/credentials. Explicit owned dataset/causal-result
 deletion is available; recipe/deletion-plan transport remains separate.
 
-Only controlled tests establish current clone/Pipeline/CV and construction behavior.
-The full official estimator/task/version matrix, batch/resumable
-files, remaining causal engines and public Ergodic continuation remain gates.
-AsyncClient/AsyncJob and native ArrowFM/CDFM/AVICI results retain their independently
-qualified narrow boundaries; the supported notebook checks remain distinct from
-real model qualification. See the [research catalogue](research-datasets.md) for tables to try.
+`Client` and `AsyncClient` also provide resumable upload sessions, `upload_file`,
+`submit_batch_predict` and `batch_payload`. Keep the upload ID before sending bytes
+and inspect batch manifests for failed row ranges. Enabled file formats, batch
+limits and model readiness depend on the connected service. See [CLI recipes](cli.md)
+and [capabilities](capabilities.md) for those boundaries. Native ArrowFM/CDFM/AVICI
+results retain their graph semantics; public Ergodic continuation and remaining
+engines have separate availability requirements. See the [research catalogue](research-datasets.md) for tables to try.
+
+## Usage and workspace credits
+
+Modelling and research downloads may consume workspace credits. Before running a
+walkthrough, open **Workspace → Billing** in [Welt](https://welt.ergodic.dev) and
+check available credits, pending reservations, plan status and spend caps.
+`client.pricing()` reads the current public rate card; it does not buy credits,
+change a plan or authorize a payment. Billing changes require browser authority.
+The current public rate card has a five-credit minimum for a priced fit,
+prediction, batch prediction or discovery, and a 25-credit research download.
+Verify the current offers in Billing or `client.pricing()` before budgeting;
+request size and applicable accounting rules determine the charge.
+
+```python
+with Client() as client:
+    events = client.usage()
+for event in events:
+    print(event["operation_id"], event["status"],
+          event.get("credits"), event.get("rate_card_version"))
+```
+
+Usage contains lifecycle/attempt workload metadata and nullable accounting fields:
+
+- `credits` is the operation's net credit charge, or its reservation until settled.
+- `rate_card_version` identifies the accounting rules used for that operation.
+- `credits: null` means unpriced; it is distinct from zero and does not promise
+  that later operations will be free.
+
+Several lifecycle events can share one `operation_id` and repeat its accounting
+fields. Count distinct operations and do not sum credits across every event.
+Use Workspace Billing for the workspace ledger and available balance. Usage
+contains no prediction payloads and does not measure model accuracy.
+
+HTTP 402 is exposed as `WeltError` with its `code`, including
+`insufficient_credits`, `spend_cap_reached` or `plan_past_due`. Resolve the billing
+condition before a deliberate retry; see [Wait and recover](async-and-errors.md#recover-from-the-cause).
 
 Safe metadata GET requests have bounded automatic retries (default two,
 maximum five), respecting Retry-After up to the configured wait bound; a larger

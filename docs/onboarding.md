@@ -16,6 +16,11 @@ python -m venv .venv
 python -m pip install "welt-client[parquet]"
 ```
 
+Before running the script, open **Workspace → Billing** and check available
+credits, pending reservations and spend caps. Modelling and research downloads may
+consume credits; [usage and recovery](usage.md#usage-and-workspace-credits) explains
+HTTP 402 and the required browser billing authority.
+
 Download [first_request.py](downloads/first_request.py)
 from this reviewed documentation revision, then run:
 
@@ -27,6 +32,7 @@ The script connects through the browser or its printed verification link. It als
 reuses a valid configured/saved key. No API secret is printed or written into the
 notebook/source. See [Connect](connect.md) for remote/headless use and optional
 private persistence. Browser sessions and SDK credentials remain distinct.
+
 
 This is a **real native request**, not a mock or metadata ping. The script downloads
 the current Iris table (150 rows), verifies it and uses all four features
@@ -53,5 +59,4 @@ from unavailable workers, capacity or revoked credentials remain actionable and
 do not produce a success celebration. No latency guarantee is implied.
 
 See [Research datasets](research-datasets.md), [SDK guide](usage.md) and
-[model capabilities](capabilities.md). Broader managed signup/recovery and all-model
-completion gates remain distinct from this bounded walkthrough.
+[model capabilities](capabilities.md) for available tasks and current limits.

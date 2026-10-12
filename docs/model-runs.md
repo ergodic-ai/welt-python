@@ -15,7 +15,7 @@ worker as well as permission. A listed checkpoint is not an accuracy guarantee.
 | `nori-30m` | regression | authenticated |
 | `orion-msp-1.0` | classification | authenticated |
 | `tabdpt-turbo-1.2` | classification, regression | authenticated |
-| `tabstar-1.1.16` | classification, regression | authenticated; attribution applies |
+| `tabstar-1.1.16` | classification, regression | authenticated |
 | `limix-1-2m` | classification, regression | allowlisted internal testing |
 | `foundcause-1.0` | causal_discovery | allowlisted internal testing |
 | `lcm-2.5m` | temporal_causal_discovery | allowlisted internal testing |

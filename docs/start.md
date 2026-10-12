@@ -32,6 +32,10 @@ copying a key. Use `client.connect(save=True)` only if you want it saved for fut
 processes. [Connection details](connect.md) explains expiry and key precedence.
 Manual `WELT_API_KEY` configuration remains supported; never save a secret in code.
 
+Modelling and research downloads may consume workspace credits. Before running the
+examples, check available credits, pending reservations and spend caps in
+**Workspace → Billing**. See [usage and billing recovery](usage.md#usage-and-workspace-credits).
+
 ## Classification: predict a flower's class
 
 Iris has 150 rows, four measurements and three encoded classes. The outcome

@@ -19,9 +19,9 @@ reproduce publisher benchmark recipes.
 | Regression preparation/prediction/reopen | Qualified TabICLv2, Kumo Medium, TabDPT1.3 and Mitra-v2 tasks return finite target-unit points, with classes/probabilities absent. See the task-specific regression guide. |
 | DataFrame/array/CSV/Parquet | Scalar cells; named schema safe alignment. Files are currently loaded into memory; Parquet needs optional reader. |
 | Durable jobs | Explicit submission, polling, reconnect, cancellation. A local wait timeout leaves durable work running. |
-| Usage | Logical operation IDs plus lifecycle/attempt workload metadata; event count is not fit count or monetary price. |
+| Usage | Logical operation IDs, lifecycle/attempt workload metadata and nullable `credits`/`rate_card_version`; event count is not fit count. See [usage accounting](usage.md#usage-and-workspace-credits). |
 | Model swapping | Available between qualified TabICLv2, Kumo Medium, TabDPT1.3 and Mitra-v2 tasks; new models need a new fit. See model selection. |
-| Resumable files / true large batch jobs | Future transport implementation, not implied by file convenience reads. |
+| Resumable files / true large batch jobs | Released sync/async upload-session, chunk/file-resume and batch methods. Enabled formats, parser envelopes and batch limits come from the server; estimator file convenience reads still load into memory. |
 | Metadata export / recipes / deletion plans | export_metadata() returns pinned server provenance; recipes and deletion plans require released routes. No executable/context/credential export. |
 | Causal discovery / ergodic | ArrowFM bounded observational preview:2–500 rows/2–20 finite continuous variables, native DAG/owned scores/durable reopen. Literal local continuation passes with the private approved Ergodic 0.1.1 artifact. CDFM preserves native directed output/adaptive threshold; AVICI preserves native directed output/strict>0.5 decoding with fixed native PRNG0. Both refuse every non-declared-DAG conversion, including acyclic directed output. Usable public co-release and remaining engines are gated. |
 | Confidence / conformal | Native probabilities are not calibrated coverage or conformal intervals; conformal is later. |
@@ -33,7 +33,9 @@ fit. Cache presence is derived execution state, distinct from durable predictor
 ownership and cold restoration.
 
 
-## Resource completion (source candidate)
+<a id="resource-completion-source-candidate"></a>
+
+## Upload and batch resources
 
 Both `Client` and `AsyncClient` now have `workspace()`, `pricing()`,
 `create_upload(format=..., size_bytes=..., sha256=..., target=None, schema=None)`,
@@ -46,6 +48,7 @@ Async equivalents are awaited, including upload/file and batch submission.
 row ranges; `batch_payload()` retrieves authenticated JSON until expiry. Keep
 upload IDs before sending bytes for recovery. File reads/hashing in the async
 helper are local blocking I/O; low-level chunk methods let callers schedule disk
-I/O independently. These methods require server support and do not qualify held
-formats/models. Account and payment controls remain browser-authorized.
+I/O independently. These released methods require server support. Inspect workspace limits and model
+readiness before submitting work; a client method does not enable a server format
+or model. Account and payment controls remain browser-authorized.
 See the [agent CLI reference](cli.md).

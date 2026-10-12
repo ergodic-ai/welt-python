@@ -141,21 +141,21 @@ class SiteContracts(unittest.TestCase):
             for old in expected:self.assertIn(f'/v{old}/</loc>',sitemap)
             self.assertNotIn('/v0.7.0/',sitemap)
 
-    def test_landing_copy_is_visible_prepared_dataframe_continuation(self):
+    def test_landing_copy_loads_data_visibly_before_modelling(self):
         from scripts.test_homepage_presentation import NotebookPage
         with tempfile.TemporaryDirectory() as folder:
             self.build(folder)
             body=(Path(folder)/'index.html').read_text()
             parsed=NotebookPage();parsed.feed(body)
             self.assertNotIn('data-copy=',body)
-            self.assertIn('already-loaded pandas DataFrame',body)
+            self.assertIn('Load Iris below',body)
             program=next(value for value in parsed.code if 'train, test = train_test_split' in value)
             compile(program,'visible copied cell','exec')
             self.assertIn('model.fit(X_train, y_train)',program)
             self.assertIn('model.predict(X_test)',program)
             self.assertIn('classification_report',program)
             self.assertNotIn('download_research_dataset',program)
-            self.assertIn('df.head()\n',parsed.code)
+            self.assertTrue(any('load_research_dataset' in code and 'data.head()' in code for code in parsed.code))
 
     def test_mutable_source_link_refuses_before_writing_site(self):
         with tempfile.TemporaryDirectory() as folder, patch.object(sys,'argv',['build_docs','--output',folder]), patch.object(build_docs,'reference',return_value='# Reference\n\n[bad](https://github.com/ergodic-ai/welt-python/blob/main/examples/x.py)'):

@@ -1,65 +1,78 @@
 # Upgrade your client
 
-SDK 0.7 keeps the released supervised, research and causal interfaces and adds a
-simpler hosted setup plus explicit target-column convenience.
+Install the current release in the environment used by your script or notebook:
 
-## Select the endpoint explicitly when local
-
-Precedence is constructor `base_url` → `WELT_BASE_URL` →
-`https://welt.ergodic.dev`. The default changed from localhost to the hosted origin.
-If you develop against a local server, select it deliberately:
-
-```python
-from welt import Client
-
-with Client(base_url="http://localhost:8000") as client:
-    models = client.models()
+```sh
+python -m pip install --upgrade "welt-client[parquet]"
 ```
 
-Public model-catalogue reads remain keyless. Authenticated methods validate missing
-credentials before issuing requests and explain how to create a workspace key.
-Invalid/expired credentials and insufficient permissions remain typed server
-failures. Keys are never saved implicitly.
+Restart a notebook kernel after upgrading if it has already imported `welt`.
+Upgrading the SDK does not refit a model or change an existing remote predictor.
 
-## Use a DataFrame target
+<a id="select-the-endpoint-explicitly-when-local"></a>
+<a id="move-from-07-to-08"></a>
 
-Existing `fit(X, y)` remains valid. The additive form accepts exactly one target
-source, requires a directly supplied DataFrame, and removes its named target from
-features before upload:
+## Connect to the intended workspace
+
+`Client()` defaults to `https://welt.ergodic.dev`. An explicit `base_url` overrides
+`WELT_BASE_URL`; select `http://localhost:8000` deliberately for a local server.
+Public catalogue reads are keyless. Authenticated work needs a workspace credential:
+run `welt login` in a terminal or call `Client().connect()` in a notebook.
+Constructors never initiate authentication. Explicit keys and `WELT_API_KEY` retain
+precedence; Python connection is process-only unless `save=True` is explicit.
+See [Connect](connect.md) for private persistence and remote/headless use.
+
+The current release supports multiple saved workspace profiles and explicit
+`workspace` selection. A key remains bound to its original tenant; a workspace
+option cannot retarget it. See [CLI workspace selection](cli.md#connect-and-choose-a-workspace).
+
+<a id="use-a-dataframe-target"></a>
+
+## Keep your existing supervised workflow
+
+`fit(X, y)` remains valid. You can also name the target in a directly supplied
+DataFrame; exactly one target source is required:
 
 ```python
 # Continue with the real train table and target name from Start.
 model.fit(train, target=target)
 ```
 
-Select `Classifier` or `Regressor` explicitly. Conflicting `y`/`target`, missing or
-duplicate target names and invalid schema reject locally before upload. Query rows
-still contain features only. Existing fitted predictor identities remain pinned;
-upgrading the client does not refit or change a remote model.
+Select `Classifier` or `Regressor` explicitly. Missing/duplicate target names,
+conflicting `y`/`target` and invalid schema reject locally before upload. Query
+rows still contain features only. Predictors retain their exact model/configuration
+identity; changing models requires an intentional new fit.
 
-## Reconnect after waiting
+<a id="keep-the-release-boundary"></a>
+
+## Use the released resource methods
+
+The current client includes research metadata sidecars and one-step table loading,
+resumable file upload sessions, durable batch prediction, workspace inspection and
+hidden-model runs. Both sync and async clients expose the corresponding resources.
+Estimator CSV/Parquet convenience reads still load into memory; use
+`Client.upload_file` with a retained upload ID for resumable file transfer.
+
+Client availability does not enable a server parser, model or task. Inspect
+workspace limits and the model's task profile/readiness before submission.
+`Job.result()` returns a batch manifest for successful or partial batches;
+retrieve its payload separately and inspect failed ranges. See [capabilities](capabilities.md),
+[CLI recipes](cli.md) and [hidden-model runs](model-runs.md).
+
+<a id="reconnect-after-waiting"></a>
+
+## Preserve durable identities when recovering
 
 `Job.result(timeout=...)` budgets initial inspection, polling, GET retry waits and
-final result retrieval. It never cancels or resubmits work. Async requests are
-bounded using the remaining wait budget. Synchronous HTTP phases receive the
-remaining budget and the deadline is checked after each request; separate network
-phases and custom blocking transports do not provide a hard wall-clock interrupt.
-Use the preserved `job_id` with the same endpoint/current workspace credentials.
-See [Wait and recover](async-and-errors.md).
+final result retrieval. It never cancels or resubmits work. Async requests use the
+remaining wait budget. Synchronous HTTP phases receive the remaining budget and
+the deadline is checked afterward; a custom blocking transport is not a hard
+wall-clock interrupt. Keep `job_id` and reconnect using the same endpoint and
+workspace credentials. See [Wait and recover](async-and-errors.md).
 
-## Keep the release boundary
+Usage now includes nullable `credits` and `rate_card_version`. HTTP 402 remains a
+`WeltError` whose `code` explains the balance, spend-cap or unpaid-plan condition.
+Check Workspace Billing before rerunning work; see [usage accounting](usage.md#usage-and-workspace-credits).
 
-0.7 excludes the held resumable CSV and large batch candidates. CSV/Parquet
-convenience reads still load into memory. Full all-model qualification, public
-Ergodic distribution and calibrated/conformal confidence retain their own gates.
-The [0.6 documentation](../v0.6.0/index.html) remains available with its original
-contract and pinned notebook sources.
-
-## Move from 0.7 to 0.8
-
-Install `welt-client[parquet]`. Run `welt login` in your terminal or call
-`Client().connect()` in a notebook. Existing explicit keys/environment keys remain
-supported and take precedence; constructors never initiate authentication. Python
-connection is process-only unless you opt into `save=True`. See [Connect](connect.md)
-for private saved-origin storage and remote/headless fallback. Model semantics,
-research bytes, targets, splits and fitted predictor formats are unchanged.
+Historical documentation remains available from the version menu with its own
+SDK contract. Redirected guides identify that they now lead to the current docs.

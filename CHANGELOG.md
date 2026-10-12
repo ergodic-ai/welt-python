@@ -1,3 +1,13 @@
+# 0.10.1 (2026-10-12) — Current documentation and runnable examples
+
+- Correct the package README, causal CLI recipe, workspace credit guidance and
+  upgrade instructions to match the current released client and service contract.
+- Load current Iris data on the homepage; expose inherited scores and batch
+  results in the reference, link search directly to methods and preserve old
+  deep links when redirecting to current guides.
+- Runtime behavior, dependencies, model semantics and evaluation protocols are
+  unchanged. Historical packages and documentation remain available.
+
 # 0.10.0 (2026-10-12) — Workspace-aware agent CLI and hidden model runs
 
 - Workspace connection profiles and workspace-targeted browser/CLI login; complete

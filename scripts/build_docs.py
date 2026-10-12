@@ -29,7 +29,7 @@ GUIDES = [('Start', [('First prediction', 'start'), ('Connect your workspace', '
                       ('Wait and recover', 'async-and-errors'), ('Discover a graph', 'causal-discovery')]),
           ('Explore', [('SDK resources', 'usage'), ('Regression', 'regression'),
                        ('Agent CLI', 'cli'), ('Reference', 'reference'), ('Models and limits', 'capabilities'),
-                       ('Install and accounts', 'onboarding'), ('Migrate to 0.7', 'migration')])]
+                       ('Install and accounts', 'onboarding'), ('Upgrade your client', 'migration')])]
 # Every documented method gets a return contract and an actionable error boundary.
 METHODS = {
  'connect': ('Explicitly approve workspace access through browser/device authorization; no constructor login.', 'The same connected Client. Python defaults to process-only origin-bound access; save=True opts into private local persistence.', 'AuthenticationError for denied/expired/consumed/unsafe responses or storage, PermissionDeniedError for an existing insufficient key, TransportError or local KeyboardInterrupt; printed link supports headless/remote notebooks.'),
@@ -46,7 +46,7 @@ METHODS = {
  'upload': ('Create a private workspace dataset from explicit columns and rows; target=None keeps every column for discovery.', 'Dataset dictionary with a durable id.', 'Authentication, permission, schema/target, or workload-limit errors.'),
  'job': ('Reconnect to durable work by ID. This is a regular factory on both Client and AsyncClient.', 'Job or AsyncJob handle; no request until inspection/waiting.', 'Subsequent methods require current authorization; a local timeout never cancels work.'),
  'inspect': ('Read the durable job state and server-reported stages.', 'Job metadata dictionary (await for AsyncJob).', 'Authentication, permissions, NotFoundError, transport or service errors.'),
- 'result': ('Poll until completion within a local waiting budget; never resubmit or implicitly cancel.', 'Supervised fit: predictor dictionary. Predict or model_run: result dictionary. Discovery: CausalResult.', 'JobTimeoutError with job_id for reconnect; typed failed/cancelled job errors. Synchronous request phase budgets are cooperative, not a hard wall-clock interrupt.'),
+ 'result': ('Poll until completion within a local waiting budget; never resubmit or implicitly cancel.', 'Supervised fit: predictor dictionary. Predict or model_run: result dictionary. Discovery: CausalResult. Batch prediction: manifest dictionary for succeeded or partially_completed jobs, with row_count, successful_ranges, failed_ranges, result_reference and expires_at. Ranges are zero-based [start, stop), with stop excluded. Inspect failed_ranges before using the result; retrieve ordered predictions, probabilities and per-range errors separately through client.batch_payload(job.id, result_reference=manifest["result_reference"]). Failed rows have null predictions; partial completion is not success for every row.', 'JobTimeoutError with job_id for reconnect; typed failed/cancelled job errors. Synchronous request phase budgets are cooperative, not a hard wall-clock interrupt. Batch payload retrieval requires current workspace authorization and unexpired retention; no third-party download URL is followed.'),
  'cancel': ('Explicitly request remote cancellation of this job.', 'Server job metadata dictionary (await for AsyncJob).', 'Authentication, permissions, NotFoundError or job conflict; cancellation races with completion.'),
  'research_datasets': ('Search the research catalogue without uploading or fitting data.', 'Page dictionary: items, next_cursor, total, catalogue_version, facets.', 'Invalid filters/limit, authentication, permission or transport errors.'),
  'research_dataset': ('Inspect licence, schema, recorded targets/splits and eligible content before download.', 'Full research detail dictionary; content=None means bytes are not eligible.', 'Authentication/permission or NotFoundError; never infer redistribution rights from catalogue presence.'),
@@ -55,7 +55,7 @@ METHODS = {
  'datasets': ('List private workspace datasets visible to the current key.', 'List of dataset dictionaries.', 'Authentication, permission or transport errors.'),
  'predictors': ('List durable fitted predictors in the current workspace.', 'List of predictor dictionaries.', 'Authentication, permission or transport errors.'),
  'jobs': ('List durable jobs in the current workspace.', 'List of job dictionaries.', 'Authentication, permission or transport errors.'),
- 'usage': ('Inspect operation, lifecycle and attempt workload metadata; count operation IDs rather than events.', 'List of usage dictionaries. No rates, credits, pricing or prediction payloads.', 'Authentication, permission or transport errors.'),
+ 'usage': ('Inspect operation, lifecycle and attempt workload metadata; count operation IDs rather than events.', 'List of usage dictionaries, including nullable credits and rate_card_version accounting fields. credits records the operation\'s reservation until settlement, then its net credit charge; null means unpriced, not a promise of free execution, and differs from zero. Usage contains no raw prediction payloads or quality scores. Read current rates with pricing() and manage credits in Workspace Billing.', 'Authentication, permission or transport errors.'),
  'dataset': ('Inspect one owned private dataset.', 'Dataset metadata dictionary.', 'Authentication, permissions or NotFoundError for missing/foreign identity.'),
  'predictor': ('Inspect one owned pinned predictor.', 'Predictor metadata dictionary.', 'Authentication, permissions or NotFoundError for missing/foreign identity.'),
  'delete_dataset': ('Explicitly delete an owned dataset only when no retained predictor/result or active-job dependencies remain.', 'None; repeat owned deletion is safe.', 'NotFoundError for missing/foreign identity; ConflictError code dependency_conflict for dependencies. Never automatic cleanup.'),
@@ -95,7 +95,8 @@ def reference():
         if name == 'CausalResult':
             parts.append('Immutable native result. Read `id`, `dataset_id`, `job_id`, `variables`, `edge_marks`, `native_graph_type`, `model_version`, `configuration_version`, `score_reference`, `decoder`, `assumptions` and `diagnostics`. The result retains no HTTP client or credentials. Scores remain a separate authenticated read.')
         for key, method in inspect.getmembers(obj, inspect.isroutine):
-            if key.startswith('_') or not method.__module__.startswith('welt'):
+            supported_inherited_score = name in ('Classifier', 'Regressor') and key == 'score'
+            if key.startswith('_') or not (method.__module__.startswith('welt') or supported_inherited_score):
                 continue
             if key not in METHODS:
                 raise SystemExit(f'Missing annotated method contract: {name}.{key}')
@@ -103,6 +104,7 @@ def reference():
             parts += [f'### {name}.{key}', purpose, f'```python\n{name}.{key}{public_signature(method)}\n```', f'**Returns:** {returns}', f'**Errors and limits:** {errors}']
     parts += ['## Error types', 'All remote errors inherit `WeltError`. Table/schema validation may raise ordinary `ValueError` before upload. Do not catch every error and silently fit again.', '| Type | Next action |', '| --- | --- |']
     types = {'AuthenticationError': 'Configure a missing key locally; replace an invalid, expired or revoked key in Account.', 'PermissionDeniedError': 'Use a key with the required workspace write/fit/predict permission.', 'InvalidInputError': 'Check the named schema, explicit target and task limits.', 'ModelUnavailableError': 'Inspect current task_profiles and worker readiness; no automatic model fallback.', 'CapacityError / RateLimitError': 'Respect retry_after and workspace admission limits; inspect existing work.', 'JobTimeoutError / PredictionPendingError': 'Retain job_id and reconnect; local timeout does not cancel.', 'ExecutionError / JobCancelledError': 'Inspect the durable job and safe request/job IDs; intentional retry needs a new decision.', 'NotFoundError / ConflictError': 'Check workspace ownership and resource dependencies.', 'TransportError': 'Inspect existing job state before replaying a mutation; GET retries are bounded.', 'ResultExpiredError / ResultDeletedError': 'Temporary access expiry and explicit primary deletion are distinct.', 'InvalidCausalResultError': 'Reject malformed native payload without repair.', 'UnsupportedGraphConversionError / OptionalDependencyError': 'Preserve native graph; convert declared DAGs only with approved local co-release dependency. For load_research_dataset, install welt-client[research].'}
+    types['WeltError (HTTP 402)'] = 'Inspect status_code and code: insufficient_credits, spend_cap_reached or plan_past_due. Open Workspace Billing to review available credits and pending reservations, the spend cap or unpaid plan. Resolve the cause before intentionally retrying; this is not an automatic backoff or SDK payment operation.'
     parts += [f'| `{name}` | {meaning} |' for name, meaning in types.items()]
     return '\n\n'.join(parts[:-len(types)-2]) + '\n\n' + '\n'.join(parts[-len(types)-2:])
 
@@ -128,8 +130,46 @@ def render_markdown(text):
     return body, renderer.toc_tokens
 
 
+def search_records(body, name, title):
+    """Index rendered heading IDs, including each reference method's exact anchor."""
+    def plain(value):
+        value = html.unescape(re.sub(r'<[^>]+>', '', value))
+        value = re.sub(r'\{\{actions:[^}]+\}\}', '', value)
+        return ' '.join(value.split())
+
+    heading_pattern = r'<h([23]) id="([^"]+)">(.*?)</h\1>'
+    headings = [item for item in re.finditer(heading_pattern, body, re.S)
+                if item[1] == '2' or name == 'reference']
+    intro_end = headings[0].start() if headings else len(body)
+    records = [dict(title=title, text=plain(body[:intro_end]), href=name + '.html')]
+    for index, item in enumerate(headings):
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(body)
+        heading = plain(item[3].split('<a class="anchor"', 1)[0])
+        record = dict(title=f'{title} · {heading}', text=plain(body[item.end():end]),
+                      href=name + '.html#' + item[2])
+        if name == 'reference' and item[1] == '3':
+            record['method'] = heading
+        records.append(record)
+    return records
+
+
+def current_redirect(page):
+    """Explicitly redirect an old learning route while retaining query and fragment."""
+    destination = '../' + page
+    return ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
+            '<meta name="viewport" content="width=device-width,initial-scale=1">'
+            '<title>Open current Welt documentation</title>'
+            '<link rel="canonical" href="' + PUBLIC + '/' + html.escape(page, quote=True) + '">'
+            '</head><body><p>This guide now opens in the current documentation.</p>'
+            '<p><a id="current-docs" href="' + html.escape(destination, quote=True) + '">Open current documentation</a></p>'
+            '<script>const destination = new URL(' + json.dumps(destination) + ', window.location.href);'
+            'destination.search = window.location.search;destination.hash = window.location.hash;'
+            'document.getElementById("current-docs").href = destination.href;'
+            'window.location.replace(destination.href);</script></body></html>')
+
+
 # Published historical documentation folders (v<version>/), oldest first.
-HISTORICAL_VERSIONS = ('0.6.0', '0.7.0', '0.7.1', '0.8.0')
+HISTORICAL_VERSIONS = ('0.6.0', '0.7.0', '0.7.1', '0.8.0', '0.9.1', '0.10.0')
 
 
 def release_tuple(version):
@@ -213,10 +253,10 @@ def shell(body, name, title, version, prefix='', outline='', home=False):
 
 
 def notebook_home(prefix='', sdk_version='0.8.0'):
-    """API-075: prepared DataFrame continuation; no hidden setup in copied cells.
+    """API-103: visible loading and modelling cells using current Iris headers.
 
     Displayed Iris rows and report bind API-071's recorded seed9 holdout, not a
-    fresh benchmark. Friendly column labels rename only the canonical headers.
+    fresh benchmark. The report remains a clearly labelled earlier observation, not a fresh run.
     """
     def link(page): return prefix + page + '.html'
     def code(value, lang='python'): return render_markdown(f'```{lang}\n{value}\n```')[0]
@@ -234,24 +274,32 @@ def notebook_home(prefix='', sdk_version='0.8.0'):
         ('Notebook',code('from welt import Client\n\nClient().connect()') + '<p class="card-note">Approve the code, workspace and permissions in your browser. Running remotely? Open the printed link on your own computer. Access stays in this Python process.</p>'),
         ('Terminal',code('welt login','sh') + '<p class="card-note">Approve in your browser. The CLI saves access privately for this API origin. Run Python on the same computer.</p>'),
         ('API key',code('import os\nfrom getpass import getpass\n\nos.environ["WELT_API_KEY"] = getpass("Welt API key: ")') + '<p class="card-note">Use your own read/write key from <a href="https://welt.ergodic.dev">Workspace → API keys</a>. The key stays in this Python process environment; it is never saved in code.</p>')])
+    loading='''from welt import Client
+
+data = Client().load_research_dataset(
+    "asset-d839644b6de36fc5cafdda18c5daeca3"
+)
+target = "target"
+data.head()'''
     program='''from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report
+from sklearn.metrics import accuracy_score, classification_report
 from welt import Classifier
 
 train, test = train_test_split(
-    df, test_size=0.2, random_state=9, stratify=df["label"]
+    data, test_size=0.2, random_state=9, stratify=data[target]
 )
-X_train, y_train = train.drop(columns="label"), train["label"]
-X_test, y_test = test.drop(columns="label"), test["label"]
+X_train, y_train = train.drop(columns=target), train[target]
+X_test, y_test = test.drop(columns=target), test[target]
 
 model = Classifier(model="tabicl-v2", random_state=9)
 model.fit(X_train, y_train)
 predictions = model.predict(X_test)
 
+print("accuracy:", accuracy_score(y_test, predictions))
 print(classification_report(y_test, predictions, zero_division=0))'''
-    rows=[[0,0,1.0,.2,4.6,3.6],[1,0,1.1,.1,4.3,3.0],[2,0,1.2,.2,5.0,3.2],[3,0,1.2,.2,5.8,4.0],[4,0,1.3,.2,4.4,3.0]]
-    headers=['','label','petal_length','petal_width','sepal_length','sepal_width']
-    table='<div class="dataframe-output" tabindex="0" role="region" aria-label="First five prepared Iris rows"><table><thead><tr>' + ''.join(f'<th scope="col">{name if name else "<span class=sr-only>Row</span>"}</th>' for name in headers) + '</tr></thead><tbody>'
+    rows=[[0,4.6,3.6,1.0,.2,0],[1,4.3,3.0,1.1,.1,0],[2,5.0,3.2,1.2,.2,0],[3,5.8,4.0,1.2,.2,0],[4,4.4,3.0,1.3,.2,0]]
+    headers=['','sepal-length','sepal-width','petal-length','petal-width','target']
+    table='<div class="dataframe-output" tabindex="0" role="region" aria-label="First five current Iris rows"><table><thead><tr>' + ''.join(f'<th scope="col">{name if name else "<span class=sr-only>Row</span>"}</th>' for name in headers) + '</tr></thead><tbody>'
     for row in rows:
         table+='<tr><th scope="row">'+str(row[0])+'</th>' + ''.join(f'<td>{value}</td>' for value in row[1:])+'</tr>'
     table+='</tbody></table></div>'
@@ -264,8 +312,8 @@ print(classification_report(y_test, predictions, zero_division=0))'''
     accuracy                           1.00        30
    macro avg       1.00      1.00      1.00        30
 weighted avg       1.00      1.00      1.00        30'''
-    notebook=f'<div class="notebook-cell"><span class="cell-prompt" aria-hidden="true">In [1]</span>{code("df.head()")}</div><div class="notebook-output"><span class="cell-prompt" aria-hidden="true">Out [1]</span>{table}</div><div class="notebook-cell"><span class="cell-prompt" aria-hidden="true">In [2]</span>{code(program)}</div><div class="notebook-output"><span class="cell-prompt" aria-hidden="true">Out [2]</span><pre class="report-output" tabindex="0" aria-label="Recorded classification report">{html.escape(report)}</pre></div>'
-    return f'''<div class="hero home-v080"><h1>From a DataFrame<br><span>to a prediction.</span></h1><p class="home-meta">Python 3.11–3.13 · SDK {sdk_version}</p><div class="quickstart-cards"><section class="start-card" aria-labelledby="install-title"><header class="card-heading"><span class="card-number" aria-hidden="true">01</span><h2 id="install-title">Install</h2><a href="{link('start')}#install">Setup guide ↗</a></header>{install}</section><section class="start-card" aria-labelledby="connect-title"><header class="card-heading"><span class="card-number" aria-hidden="true">02</span><h2 id="connect-title">Connect</h2><a href="{link('connect')}">Connection guide ↗</a></header>{connect}</section><section class="start-card notebook-card" aria-labelledby="predict-title"><header class="card-heading"><span class="card-number" aria-hidden="true">03</span><h2 id="predict-title">Train, predict, evaluate</h2><a href="{link('start')}">Full walkthrough ↗</a></header><p class="card-note prepared-data">Start with your already-loaded pandas DataFrame <code>df</code> and its <code>label</code> column. These cells do not load data. Shown here: Iris, 150 rows, four features, classes 0–2.</p>{notebook}<p class="card-note output-provenance">Recorded Iris run · TabICL v2 · seed 9 · 120 training / 30 held-out rows. This report is one observed result, not a promised score. Fit uploads the training table; prediction runs remotely.</p><p class="card-note">For your own table, replace <code>label</code> with your target column.</p></section></div></div><section class="home-bottom" aria-label="Continue learning"><div><a href="{link('own-data')}">Use your own table ↗</a><p>Choose the label you want to predict.</p></div><div><a href="{link('regression')}">Predict a number ↗</a><p>Continue with a regression example.</p></div><div><a href="{link('reuse')}">Reuse your predictor ↗</a><p>Predict again without another fit.</p></div></section>'''
+    notebook=f'<div class="notebook-cell"><span class="cell-prompt" aria-hidden="true">In [1]</span>{code(loading)}</div><div class="notebook-output"><span class="cell-prompt" aria-hidden="true">Out [1]</span>{table}</div><div class="notebook-cell"><span class="cell-prompt" aria-hidden="true">In [2]</span>{code(program)}</div><div class="notebook-output"><span class="cell-prompt" aria-hidden="true">Out [2]</span><pre class="report-output" tabindex="0" aria-label="Recorded classification report">{html.escape(report)}</pre></div>'
+    return f'''<div class="hero home-v080"><h1>From a DataFrame<br><span>to a prediction.</span></h1><p class="home-meta">Python 3.11–3.13 · SDK {sdk_version}</p><div class="quickstart-cards"><section class="start-card" aria-labelledby="install-title"><header class="card-heading"><span class="card-number" aria-hidden="true">01</span><h2 id="install-title">Install</h2><a href="{link('start')}#install">Setup guide ↗</a></header>{install}</section><section class="start-card" aria-labelledby="connect-title"><header class="card-heading"><span class="card-number" aria-hidden="true">02</span><h2 id="connect-title">Connect</h2><a href="{link('connect')}">Connection guide ↗</a></header>{connect}</section><section class="start-card notebook-card" aria-labelledby="predict-title"><header class="card-heading"><span class="card-number" aria-hidden="true">03</span><h2 id="predict-title">Train, predict, evaluate</h2><a href="{link('start')}">Full walkthrough ↗</a></header><p class="card-note prepared-data">Load Iris below: 150 rows, four features, classes 0–2. The target column is <code>target</code>. Before downloading or fitting, open <a href="https://welt.ergodic.dev">Workspace → Billing</a> and check your credits and spending limits.</p>{notebook}<p class="card-note output-provenance">Earlier recorded Iris run · TabICL v2 · seed 9 · 120 training / 30 held-out rows. This report is one observed result, not a promised score. Fit uploads the training table; prediction runs remotely.</p><p class="card-note">For your own table, replace <code>target</code> with your target column.</p></section></div></div><section class="home-bottom" aria-label="Continue learning"><div><a href="{link('own-data')}">Use your own table ↗</a><p>Choose the label you want to predict.</p></div><div><a href="{link('regression')}">Predict a number ↗</a><p>Continue with a regression example.</p></div><div><a href="{link('reuse')}">Reuse your predictor ↗</a><p>Predict again without another fit.</p></div></section>'''
 
 
 def home_body(start, prefix='', sdk_version='0.7.1', browser_connect=False):
@@ -321,12 +369,7 @@ def main():
             body = '<div class="notebook-index">' + body + '</div>'
         outline='<strong>On this page</strong>'+''.join(f'<a href="#{item["id"]}">{html.escape(item["name"])}</a>' for item in toc[0].get('children',[]) if item['level']==2) if toc else ''
         (out/f'{name}.html').write_text(shell(body,name,title,version,outline=outline))
-        # One search record per section; links and snippets remain scoped to this release.
-        sections=re.split(r'(?m)^## ',text)
-        for section in sections:
-            heading=section.splitlines()[0].lstrip('# ');heading=re.sub(r'\[([^]]+)\]\([^)]+\)', r'\1', heading);slug=re.sub(r'[^\w\- ]','',heading.lower()).replace(' ','-')
-            plain=re.sub(r'[`#*|\[\]()]','',re.sub(r'<[^>]+>','',section));plain=re.sub(r'\{\{actions:[^}]+\}\}', '', plain);plain=' '.join(plain.split())
-            search.append(dict(title=f'{title} · {heading}',text=plain,href=name+'.html'+('#'+slug if section!=sections[0] else '')))
+        search.extend(search_records(body, name, title))
     notebook_pages = []
     for source in sorted((ROOT/'examples/notebooks').glob('*.ipynb')):
         name = 'notebook-' + source.stem
@@ -356,11 +399,7 @@ def main():
         path.write_text(text)
     for path in (base/'v0.8.0').glob('*.html'):
         if (base/path.name).exists():
-            destination = '../' + path.name
-            path.write_text('<!doctype html><html lang="en"><meta charset="utf-8">'
-                '<title>Welt documentation</title><meta http-equiv="refresh" content="0;url=' + destination + '">'
-                '<link rel="canonical" href="' + PUBLIC + '/' + path.name + '">'
-                '<p><a href="' + destination + '">Open current documentation</a></p></html>')
+            path.write_text(current_redirect(path.name))
     if (base/'v0.8.0/downloads').exists():
         for source in downloads.iterdir():
             if source.is_file():shutil.copy2(source, base/'v0.8.0/downloads'/source.name)

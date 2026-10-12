@@ -5,14 +5,14 @@ estimators backed by durable predictors in your private Welt workspace.
 Install `welt-client`, import `welt`. Python 3.11–3.13.
 
 [Start here](https://ergodic-ai.github.io/welt-python/) ·
-[Guides](https://ergodic-ai.github.io/welt-python/v0.8.0/own-data.html) ·
-[Reference](https://ergodic-ai.github.io/welt-python/v0.8.0/reference.html) ·
-[Models and limits](docs/capabilities.md)
+[Guides](https://ergodic-ai.github.io/welt-python/own-data.html) ·
+[Reference](https://ergodic-ai.github.io/welt-python/reference.html) ·
+[Models and limits](https://ergodic-ai.github.io/welt-python/capabilities.html)
 
 ## Install
 
 ```sh
-python -m pip install "welt-client[parquet]==0.8.0"
+python -m pip install "welt-client[parquet]"
 ```
 
 Run `welt login` and approve your workspace in the browser. This saves a private,
@@ -28,7 +28,12 @@ with Client() as client:
 Open its printed verification link on your own computer if Python is remote.
 Python connection stays in this process; use `save=True` explicitly to persist it.
 Constructors never open a browser. Explicit keys and `WELT_API_KEY` still work and
-have precedence over connected/saved credentials. [Connection guide](docs/connect.md).
+have precedence over connected/saved credentials. [Connection guide](https://ergodic-ai.github.io/welt-python/connect.html).
+
+Modelling and research downloads may consume workspace credits. Check **Workspace
+→ Billing** for available credits, pending reservations and spend caps before
+running the examples. [Usage and recovery](https://ergodic-ai.github.io/welt-python/usage.html#usage-and-workspace-credits)
+explains accounting; payments and account changes require browser authorization.
 
 ## Learn with real data
 
@@ -45,16 +50,13 @@ from welt import Client, Classifier
 
 # 1. Get a real table from Welt's research inventory.
 dataset_id = "asset-d839644b6de36fc5cafdda18c5daeca3"
-version = "d839644b6de36fc5cafdda18c5daeca3284a5ce8bb6169aff2fcb3fbb4a12021"
 path = Path(mkdtemp(prefix="welt-iris-")) / "iris.parquet"
 with Client() as client:
     info = client.research_dataset(dataset_id)
-    print("Dataset:", info["name"], "— License:", info["license"])
-    for notice in info["license_notices"]:
-        print(notice)
-    client.download_research_dataset(dataset_id, path, version=version)
+    print("Dataset:", info["name"])
+    client.download_research_dataset(dataset_id, path)
 data = pd.read_parquet(path)
-target = "__target__#0"  # The target recorded in this research snapshot.
+target = "target"  # The outcome column in this table.
 
 # 2. Look at the rows before modelling.
 print(data.head())
@@ -84,53 +86,52 @@ print("Keep this predictor ID:", model.predictor_id_)
 ```
 
 Accuracy and per-class precision/recall/F1 describe your held-out run, not a
-promised benchmark score. [Start](docs/start.md) explains each step and teaches
+promised benchmark score. [Start](https://ergodic-ai.github.io/welt-python/start.html) explains each step and teaches
 numeric predictions with real Yacht data. `fit` uploads only your training rows;
 your workspace retains the resulting dataset and predictor for reuse.
 
 ### Research metadata and one-step loading
 
-Keep the catalogue detail (licence, schema and column descriptions, provenance)
+Keep the catalogue detail (schema, column descriptions and provenance)
 beside a download with `metadata=True`, or load a table directly with the
 `research` extra (`pip install "welt-client[research]"`):
 
 ```python
 with Client() as client:
     saved = client.download_research_dataset(
-        dataset_id, path.with_name("iris-2.parquet"), version=version, metadata=True)
+        dataset_id, path.with_name("iris-2.parquet"), metadata=True)
     # saved.path, saved.metadata_path ("iris-2.parquet.metadata.json"), saved.metadata
-    data, meta = client.load_research_dataset(dataset_id, version=version, metadata=True)
+    data, meta = client.load_research_dataset(dataset_id, metadata=True)
 print(meta.name, meta.column_descriptions)
 ```
 
-Without `metadata=True` the download still returns the path, unchanged. The pinned
-Iris `version` keeps working if a newer (restored-header) version becomes current:
-the SDK downloads any version listed in the detail's `previous_content`.
-`load_research_dataset` removes its private temporary file; for notice-bearing ZIP
-content it warns that `meta.license_text`/`meta.attribution_text` apply. See
-[Research datasets](docs/research-datasets.md).
+Without `metadata=True` the download returns its local path. Omitting `version`
+selects the currently published file; the SDK verifies its size and checksum.
+`load_research_dataset` removes its temporary file after loading. See
+[Research datasets](https://ergodic-ai.github.io/welt-python/research-datasets.html).
 
-SDK 0.7 adds explicit DataFrame target convenience and hosted credential guidance
-while preserving `fit(X, y)`, sync/async resources, durable jobs, research downloads
-and native causal objects. Available hosted tasks and workers follow the service
-catalogue. Bounded TabICLv2, Kumo Medium, TabDPT1.3 and Mitra-v2 classification and
-regression previews are separately qualified: 500 training rows, 20 features,
-100 query rows, and 10 classes for classification. Other tasks need separate
-qualification. File reads load into memory. Held resumable CSV and large batch
-APIs are excluded.
+The released client includes sync/async resources, resumable file uploads, durable
+batch jobs, workspace selection and native causal objects. Estimator CSV/Parquet
+convenience reads load files into memory; `Client.upload_file` uses upload sessions
+and supports recovery with a retained upload ID. Available formats, models, tasks
+and limits depend on the connected server. Inspect its catalogue before executing.
+The bounded TabICLv2, Kumo Medium, TabDPT1.3 and Mitra-v2 classification and regression
+profiles allow 500 training rows, 20 features and 100 query rows, with up to 10
+classes for classification. [Capabilities](https://ergodic-ai.github.io/welt-python/capabilities.html) explains scope.
+
 
 A local wait timeout leaves server work running. Reconnect by its job ID rather
-than fitting again; [recovery](docs/async-and-errors.md) describes typed failures,
+than fitting again; [recovery](https://ergodic-ai.github.io/welt-python/async-and-errors.html) describes typed failures,
 authentication, cancellation and retry behavior. Probabilities are not calibrated
 coverage. ArrowFM, CDFM and AVICI discovery preserve native graph and score semantics;
-[causal conversion](docs/causal-discovery.md) is restricted to declared native DAGs
+[causal conversion](https://ergodic-ai.github.io/welt-python/causal-discovery.html) is restricted to declared native DAGs
 and the separately approved Ergodic co-release artifact. Public Ergodic distribution
 and the complete all-model catalogue remain gated.
 
 ## Examples and development
 
-[Runnable script](examples/first_prediction.py) · [Jupyter notebooks](docs/notebooks.md) ·
-[Research datasets](docs/research-datasets.md) · [Contributing](CONTRIBUTING.md)
+[Runnable script](https://ergodic-ai.github.io/welt-python/downloads/first_prediction.py) · [Jupyter notebooks](https://ergodic-ai.github.io/welt-python/notebooks.html) ·
+[Research datasets](https://ergodic-ai.github.io/welt-python/research-datasets.html) · [Contributing](https://github.com/ergodic-ai/welt-python/blob/main/CONTRIBUTING.md)
 
 ```sh
 uv sync --frozen
@@ -143,19 +144,16 @@ hosted service nor measure foundation-model quality. Notebook sources have clear
 bounded authorized live acceptance are separate evidence. CI requires no private
 backend, credentials or checkpoints.
 
-Apache 2.0: see [LICENSE](LICENSE). Model weights and hosted service are separate
-from this SDK licence.
-
-Agent workflows, workspace selection and the full source-candidate command reference: [CLI](docs/cli.md).
+Agent workflows, workspace selection and the released command reference: [CLI](https://ergodic-ai.github.io/welt-python/cli.html).
 
 ## Explicit hidden-model runs
 
-With SDK 0.10, `client.model("chronos-2")` inspects an explicit hidden ID while
+`client.model("chronos-2")` inspects an explicit hidden ID while
 `client.models()` keeps the main catalogue. `client.submit_model_run(payload,
 idempotency_key="your-key")` returns a durable Job; `job.result()` returns the
 native task result. AsyncClient has matching methods. The payload follows the
 API's tabular support/query, causal table or univariate forecasting contract;
-check the model metadata for enabled tasks, limits and licence access.
+check the model metadata for enabled tasks, limits, readiness and workspace access.
 
 ```python
 from welt import Client
@@ -175,7 +173,7 @@ CLI equivalents: `welt models get chronos-2`, `welt run --input request.json`,
 `client.delete_model_run(id)` to explicitly remove a terminal run's input/result.
 Deleting keeps the idempotency/usage record; a new run needs a fresh key. Native
 model libraries remain server-side. Restricted models need an internal testing
-workspace; hidden status alone does not grant serving rights. TabSTAR's trained
+workspace; hidden status alone does not grant execution access. TabSTAR's trained
 state stays alive for the single run, and these runs do not publish reusable
 support-only fitted predictors. LimiX query splitting can change its transductive
 results. API errors, cancellation and timeouts retain existing typed semantics.

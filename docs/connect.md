@@ -75,7 +75,9 @@ For process-based parallel cross-validation, configure `WELT_API_KEY` in workers
 or explicitly save a private origin credential first. Never pickle a secret.
 
 
-## Multiple workspaces (source candidate)
+<a id="multiple-workspaces-source-candidate"></a>
+
+## Multiple workspaces
 
 ```python
 from welt import Client, AsyncClient

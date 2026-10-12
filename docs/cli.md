@@ -1,7 +1,7 @@
 # Welt CLI for agents
 
-Status: source candidate for API-089/090; package publication and backend rollout
-are separate. Install the reviewed release before using these new commands.
+Install the current `welt-client` release to use these commands. Model readiness,
+file formats and limits depend on the connected service.
 `welt --help`, `welt COMMAND --help`, and `welt capabilities` describe the complete
 command tree. `python -m welt` uses the same entry point.
 
@@ -44,6 +44,10 @@ the shared active profile is a convenience for interactive use. CLI origins must
 be HTTPS or explicit localhost HTTP. Redirects and cross-origin requests never
 receive bearer credentials.
 
+Before paid work, check **Workspace → Billing** for available credits, pending
+reservations and spend caps. [Usage and recovery](usage.md#usage-and-workspace-credits)
+explains current accounting and HTTP 402 conditions.
+
 ## Durable modelling workflow
 
 ```sh
@@ -71,15 +75,14 @@ payload after an uncertain submission; inspect jobs before submitting again.
 Replay keys are printed to stderr before submission, including generated ones.
 Writes are not automatically retried; bounded transient retries apply to GETs.
 
-## File uploads and causal discovery
+<a id="file-uploads-and-causal-discovery"></a>
+
+## Resume a supervised file upload
 
 ```sh
 welt uploads create train.csv --target outcome --schema schema.json
 welt uploads get upload_id
 welt uploads file train.csv --target outcome --schema schema.json --upload-id upload_id
-welt discover --dataset ds_train --model arrow --seed 19 --constraints constraints.json --idempotency-key graph-run-000001
-welt jobs result job_graph
-welt jobs scores job_graph
 ```
 
 Use `uploads create` first when recovery matters: keep the upload ID before
@@ -90,17 +93,51 @@ contract. CSV/Parquet support depends on the deployed server configuration and
 qualified parser/envelope; do not assume every deployment enables Parquet.
 Schema example: `{"columns":["x","outcome"],"types":["number","string"]}`.
 Types follow the API file schema (`number`, `boolean`, `string`); use `string` for
-categorical columns. Constraints retain required/forbidden edges and temporal
-order; inspect model capabilities before using them. Causal graph scores are
-method-defined scores, not normalized posterior probabilities. Python provides
-validated graph objects and optional local Ergodic conversion.
+categorical columns. The completed upload returns a dataset ID for a supervised
+fit. That target-labelled dataset cannot be used for causal discovery.
+
+## Causal discovery with target-free observations
+
+Prepare a separate table containing only the numeric variables to study. For
+example, save the Iris measurements loaded in [Start](start.md), dropping its
+class label before creating the upload JSON:
+
+```python
+# Continue with the Iris data and target from Start.
+from pathlib import Path
+import json
+
+observations = data.drop(columns=target)
+Path("observations.json").write_text(json.dumps({
+    "columns": list(observations.columns),
+    "rows": observations.values.tolist(),
+    "target": None,
+    "name": "Iris measurements",
+}), encoding="utf-8")
+```
+
+```sh
+welt datasets upload --input observations.json
+# Replace ds_observations with the dataset ID returned above.
+welt discover --dataset ds_observations --model arrow --seed 19 --idempotency-key graph-run-000001
+welt jobs result job_graph
+welt jobs scores job_graph
+```
+
+Arrow accepts 2–500 rows and 2–20 finite continuous variables, without a supervised
+target. Its current path does not support nonempty required/forbidden edges or
+temporal constraints, so this recipe omits `--constraints`. A graph inferred from
+these measurements has no ground-truth causal graph for accuracy evaluation.
+Native scores are method-defined, not normalized graph posterior probabilities.
+Python provides validated graph objects and optional local Ergodic conversion;
+see [Causal discovery](causal-discovery.md).
 
 ## Other commands and authority
 
 `datasets list/get`, `predictors list/get`, `jobs list/get`, `research list/get/download`
 and `pricing` cover resource inspection. Research search is paginated; pass its
 `next_cursor` as `--cursor`, and preserve exact version/checksum provenance for
-downloads. `research download ID PATH --version HASH --max-bytes LIMIT` uses
+downloads. `research download ID PATH --max-bytes LIMIT` selects the current published file and uses
 verified downloads to a new local file; the configured server may meter downloads.
 `jobs cancel ID --yes`, `datasets delete ID --yes` and
 `causal-results delete ID --yes` are explicit mutations. Dataset deletion refuses
@@ -144,8 +181,8 @@ welt model-runs delete job_returned --yes
 ```
 
 `forecast.json` uses the task payload in [Hidden model runs](model-runs.html).
-`models list` stays curated; inspect a hidden model using its exact ID. Licence
-scope is enforced by the server's workspace policy. `run` returns a durable job;
+`models list` stays curated; inspect a hidden model using its exact ID. Workspace
+access is enforced by the server. `run` returns a durable job;
 `jobs wait` returns its native task-specific JSON result. These bounded runs create
 no reusable fitted predictor. Deleting a terminal run explicitly purges both its
 private input and result, while job, replay and usage metadata remain.
