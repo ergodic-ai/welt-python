@@ -16,6 +16,8 @@ ALLOWLIST = {
     'scripts/test_homepage_presentation.py',
     'scripts/test_learning_materials.py',
     'scripts/test_docs_presentation_guard.py',
+    'scripts/test_notebook_views.py',
+    'docs/notebooks.md',
     'docs/assets/docs.css',
     'docs/assets/docs.js',
 }
@@ -60,7 +62,8 @@ def main():
     Path('/tmp/welt-docs-presentation-wheel.whl').write_bytes(wheel)
     proof = {'presentation_commit': ref, 'sdk_source_commit': BASELINE,
              'sdk_version': '0.8.0', 'published_wheel_sha256': WHEEL_SHA,
-             'runtime_dependencies_guides_notebooks_unchanged': True,
+             'runtime_dependencies_notebook_sources_unchanged': True,
+             'guides_unchanged_except_notebook_index': True,
              'changed_files': {name: hashlib.sha256(Path(name).read_bytes()).hexdigest() for name in files}}
     Path('/tmp/welt-docs-presentation-proof.json').write_text(json.dumps(proof, indent=2) + '\n')
     print(json.dumps(proof))

@@ -118,12 +118,58 @@ def render_markdown(text):
     return body, renderer.toc_tokens
 
 
+def notebook_view(source, version):
+    """Render cleared notebook sources without executing cells or loading outputs."""
+    notebook = json.loads(source.read_text())
+    parts = ['<p><a href="notebooks.html">← All notebooks</a></p>',
+             notebook_actions(source.stem, version),
+             '<p class="notebook-preview-note">Static notebook preview · outputs are cleared. '
+             'Open in Colab or download the notebook to run the cells. '
+             '<a href="notebooks.html#run-in-colab">Colab setup</a></p>']
+    title = None
+    code_count = 0
+    for cell in notebook['cells']:
+        text = ''.join(cell['source'])
+        if cell['cell_type'] == 'markdown':
+            if title is None:
+                heading = re.search(r'^# (.+)$', text, re.M)
+                if heading:
+                    title = heading[1]
+            parts.append(render_markdown(text)[0])
+        elif cell['cell_type'] == 'code':
+            if cell.get('outputs') or cell.get('execution_count') is not None:
+                raise SystemExit(f'Notebook views require cleared outputs: {source.name}')
+            code_count += 1
+            fence = '`' * max(3, 1 + max((len(m[0]) for m in re.finditer(r'`+', text)), default=0))
+            code = render_markdown(f'{fence}python\n{text.rstrip(chr(10))}\n{fence}')[0]
+            code = code.replace('<div class="code-wrap">',
+                                '<div class="code-wrap" data-copy="' + html.escape(text, quote=True) + '">', 1)
+            parts.append(f'<section class="notebook-cell" aria-label="Code cell {code_count}">'
+                         '<span class="cell-prompt" aria-hidden="true">In [ ]</span>' + code + '</section>')
+        else:
+            raise SystemExit(f'Unsupported notebook cell type: {source.name}')
+    if title is None:
+        raise SystemExit(f'Notebook view needs a title: {source.name}')
+    return '<div class="notebook-view">' + ''.join(parts) + '</div>', title
+
+
+def notebook_actions(name, version):
+    # SDK0.8's source is immutable even though its presentation can advance.
+    revision = '49699b14ebc10bcb093c9cf208518dd5ea3a0c46' if version == '0.8.0' else 'v' + version
+    colab = f'https://colab.research.google.com/github/ergodic-ai/welt-python/blob/{revision}/examples/notebooks/{name}.ipynb'
+    label = html.escape(name.replace('-', ' '), quote=True)
+    return (f'<div class="notebook-actions" role="group" aria-label="{label} notebook actions">'
+            f'<a href="{colab}">Open in Colab<span class="sr-only">: {label}</span> ↗</a>'
+            f'<a href="downloads/{name}.ipynb" download="{name}.ipynb">Download notebook<span class="sr-only">: {label}</span></a>'
+            f'<a href="notebook-{name}.html">View<span class="sr-only">: {label}</span></a></div>')
+
+
 def shell(body, name, title, version, prefix='', outline='', home=False):
     def link(page): return prefix + ('index.html' if page == 'index' else page + '.html')
-    group = 'Start' if name in ('index', 'start', 'onboarding', 'notebooks', 'connect') else 'Reference' if name == 'reference' else 'Models' if name == 'capabilities' else 'Guides'
+    group = 'Start' if name in ('index', 'start', 'onboarding', 'notebooks', 'connect') or name.startswith('notebook-') else 'Reference' if name == 'reference' else 'Models' if name == 'capabilities' else 'Guides'
     nav = ''.join(f'<a href="{link(page)}"' + (' aria-current="page"' if label == group else '') + f'>{label}</a>' for label, page in NAV)
     guide_groups = [(label, [(text,page) for text,page in pages if page != 'connect' or version == '0.8.0']) for label,pages in GUIDES]
-    sidebar = ''.join(f'<p>{label}</p>' + ''.join(f'<a href="{link(page)}"' + (' aria-current="page"' if page == name else '') + f'>{text}</a>' for text,page in pages) for label,pages in guide_groups)
+    sidebar = ''.join(f'<p>{label}</p>' + ''.join(f'<a href="{link(page)}"' + (' aria-current="page"' if page == name or (page == 'notebooks' and name.startswith('notebook-')) else '') + f'>{text}</a>' for text,page in pages) for label,pages in guide_groups)
     versions = f'<option value="{prefix}index.html">v{version}</option><option value="{"../" if prefix == "" else ""}v0.6.0/">v0.6.0</option>'
     if version in ("0.7.1", "0.8.0"):
         versions += f'<option value="{"../" if prefix == "" else ""}v0.7.0/">v0.7.0</option>'
@@ -237,25 +283,39 @@ def main():
     search=[]
     for name,text in pages.items():
         body,toc=render_markdown(text); title=re.search(r'^# (.+)$',text,re.M)[1]
+        if name == 'notebooks':
+            for source in sorted((ROOT/'examples/notebooks').glob('*.ipynb')):
+                body = body.replace(f'<p>{{{{actions:{source.stem}}}}}</p>', notebook_actions(source.stem, version))
+            body = '<div class="notebook-index">' + body + '</div>'
         outline='<strong>On this page</strong>'+''.join(f'<a href="#{item["id"]}">{html.escape(item["name"])}</a>' for item in toc[0].get('children',[]) if item['level']==2) if toc else ''
         (out/f'{name}.html').write_text(shell(body,name,title,version,outline=outline))
         # One search record per section; links and snippets remain scoped to this release.
         sections=re.split(r'(?m)^## ',text)
         for section in sections:
-            heading=section.splitlines()[0].lstrip('# ');slug=re.sub(r'[^\w\- ]','',heading.lower()).replace(' ','-')
-            plain=re.sub(r'[`#*|\[\]()]','',re.sub(r'<[^>]+>','',section));plain=' '.join(plain.split())
+            heading=section.splitlines()[0].lstrip('# ')
+            heading=re.sub(r'\[([^]]+)\]\([^)]+\)', r'\1', heading)
+            slug=re.sub(r'[^\w\- ]','',heading.lower()).replace(' ','-')
+            plain=re.sub(r'[`#*|\[\]()]','',re.sub(r'<[^>]+>','',section));plain=re.sub(r'\{\{actions:[^}]+\}\}', '', plain);plain=' '.join(plain.split())
             search.append(dict(title=f'{title} · {heading}',text=plain,href=name+'.html'+('#'+slug if section!=sections[0] else '')))
+    notebook_pages = []
+    for source in sorted((ROOT/'examples/notebooks').glob('*.ipynb')):
+        name = 'notebook-' + source.stem
+        body, title = notebook_view(source, version)
+        (out/f'{name}.html').write_text(shell(body, name, title, version))
+        notebook_pages.append(name)
+        search.append(dict(title=title, text=f'{title} · Notebook preview · {source.stem}', href=name+'.html'))
     (out/'search-index.json').write_text(json.dumps(search,ensure_ascii=False,indent=2)+'\n')
     home=home_body(pages['start'],sdk_version=version,browser_connect=version=='0.8.0');(out/'index.html').write_text(shell(home,'index','From a DataFrame to a prediction',version,home=True))
     prefix=f'v{version}/';(base/'index.html').write_text(shell(home_body(pages['start'],prefix,sdk_version=version,browser_connect=version=='0.8.0'),'index','From a DataFrame to a prediction',version,prefix=prefix,home=True))
     (base/'.nojekyll').write_text('')
-    urls=[PUBLIC+'/',PUBLIC+f'/v{version}/']+[PUBLIC+f'/v{version}/{name}.html' for name in pages]
+    urls=[PUBLIC+'/',PUBLIC+f'/v{version}/']+[PUBLIC+f'/v{version}/{name}.html' for name in [*pages, *notebook_pages]]
     if (base/'v0.7.1/index.html').exists():urls += [PUBLIC+'/v0.7.1/']+[PUBLIC+'/v0.7.1/'+p.name for p in (base/'v0.7.1').glob('*.html')]
     if (base/'v0.7.0/index.html').exists():urls += [PUBLIC+'/v0.7.0/']+[PUBLIC+'/v0.7.0/'+p.name for p in (base/'v0.7.0').glob('*.html')]
     if (base/'v0.6.0/index.html').exists():urls += [PUBLIC+'/v0.6.0/']+[PUBLIC+'/v0.6.0/'+p.name for p in (base/'v0.6.0').glob('*.html')]
     (base/'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+''.join(f'<url><loc>{url}</loc></url>' for url in urls)+'</urlset>')
     (base/'robots.txt').write_text('User-agent: *\nAllow: /\nSitemap: '+PUBLIC+'/sitemap.xml\n')
     manifest=dict(sdk_version=version,pages=sorted(pages),source_tag='v'+version,supported_notebooks=sorted(p.stem for p in downloads.glob('*.ipynb')),historical_versions=[v for v in ['0.6.0','0.7.0','0.7.1'] if (base/('v'+v)/'index.html').exists()],scope='bounded qualified preview; full-model/SDK closure gates pending')
+    manifest['notebook_views'] = sorted(notebook_pages)
     (out/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     print(f'Built {len(pages)} guides plus landing for SDK {version}; no credentials or live model execution')
 

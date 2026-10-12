@@ -77,7 +77,7 @@ jobs:
       - name: Test docs-only presentation gate
         if: inputs.docs_presentation_ref != ''
         run: |
-          .venv/bin/python -m pytest scripts/test_docs_presentation_guard.py scripts/test_homepage_presentation.py scripts/test_learning_materials.py -q
+          .venv/bin/python -m pytest scripts/test_docs_presentation_guard.py scripts/test_homepage_presentation.py scripts/test_learning_materials.py scripts/test_notebook_views.py -q
       # Preserve v0.6 URLs and corrected research archive/licence notices.
       # This is an isolated checkout/environment: historical docs cannot inherit 0.7 APIs.
       - uses: actions/checkout@v4

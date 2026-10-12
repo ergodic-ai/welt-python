@@ -4,14 +4,62 @@ Start with classification. Each notebook downloads real research data, prints th
 table, and explains what happens next. No helper file or testing context is needed.
 Install the existing Parquet extra and configure your workspace key locally first.
 
-| Notebook | What you learn |
-| --- | --- |
-| [Classification](downloads/classification.ipynb) | Iris → inspect → train/test → fit → predict → accuracy and per-class report |
-| [Regression](downloads/regression.ipynb) | Yacht → inspect → train/test → fit → predict → MAE, RMSE and R² |
-| [Async jobs](downloads/async-jobs.ipynb) | The Iris workflow with durable submission and async waiting |
-| [Artifacts and usage](downloads/artifacts-and-usage.ipynb) | Evaluate Iris, reopen the same predictor and inspect operation events |
-| [Research datasets](downloads/research-datasets.ipynb) | Search, inspect a fixed eligible asset and complete your first classification |
-| [Causal discovery](downloads/causal-discovery.ipynb) | Inspect real Iris measurements and native proposed graph structure |
+Open in Colab to run an example, download the `.ipynb` file for Jupyter,
+or choose View to read its formatted cells here. Each action uses the same
+release-pinned notebook.
+
+## [Classification](notebook-classification.html)
+
+Iris → inspect → train/test → fit → predict → accuracy and per-class report.
+
+{{actions:classification}}
+
+## [Regression](notebook-regression.html)
+
+Yacht → inspect → train/test → fit → predict → MAE, RMSE and R².
+
+{{actions:regression}}
+
+## [Async jobs](notebook-async-jobs.html)
+
+The Iris workflow with durable submission and async waiting.
+
+{{actions:async-jobs}}
+
+## [Artifacts and usage](notebook-artifacts-and-usage.html)
+
+Evaluate Iris, reopen the same predictor and inspect operation events.
+
+{{actions:artifacts-and-usage}}
+
+## [Research datasets](notebook-research-datasets.html)
+
+Search, inspect a fixed eligible asset and complete your first classification.
+
+{{actions:research-datasets}}
+
+## [Causal discovery](notebook-causal-discovery.html)
+
+Inspect real Iris measurements and native proposed graph structure.
+
+{{actions:causal-discovery}}
+
+## Run in Colab
+
+Open a notebook with **Open in Colab**. Before running its cells, add and run
+this installation cell:
+
+```python
+%pip install "welt-client[parquet]==0.8.0"
+```
+
+If Colab asks you to restart the session, restart it after installation. Then
+run the original cells in order. The first cell prints a Welt verification
+link; open it in your browser and approve your workspace.
+
+View pages show the original markdown and code without executing anything.
+Outputs are cleared in the downloadable sources and previews; your own run
+shows the actual results.
 
 Use a fresh Python3.11–3.13 environment with `welt-client[parquet]`. Outputs in
 notebook sources are cleared; your own run shows actual data and measurements.
