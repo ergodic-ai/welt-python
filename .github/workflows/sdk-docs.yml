@@ -125,7 +125,7 @@ jobs:
       # still comes from its immutable release wheel.
       - uses: actions/checkout@v4
         with:
-          ref: 6c11653b89367b51fb6c872af52882ad1621d6b8
+          ref: c568691e9280215250d82f0f8b0578a16a2dce92
           path: .legacy-sdk08
       - run: uv sync --frozen
         working-directory: .legacy-sdk08
