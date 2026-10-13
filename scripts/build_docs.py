@@ -348,6 +348,8 @@ def wrap_steps(body):
         if not is_step and open_steps and part.startswith('<h2 '):
             result.append('</div>')
             open_steps = False
+        if is_step:  # The section carries the step; the heading keeps any other classes.
+            part = re.sub(r'^(<h2 [^>]*?) class="([^"]*)"', lambda m: m[1] + (f' class="{c}"' if (c := ' '.join(x for x in m[2].split() if x != 'step')) else ''), part, count=1)
         result.append(f'<section class="step">{part}</section>' if is_step else part)
     if open_steps:
         result.append('</div>')
@@ -695,29 +697,11 @@ weighted avg       1.00      1.00      1.00        30'''
 
 
 def home_body(start, prefix='', sdk_version='0.7.1', browser_connect=False):
-    if browser_connect and browser_connect_release(sdk_version):
-        return notebook_home(prefix, sdk_version)
-    blocks = re.findall(r'```(\w+)\n(.*?)```', start, re.S)
-    install = blocks[0][1].splitlines()[-1]
-    key = blocks[1][1]
-    classification = blocks[2][1]
-    regression = blocks[4][1]
-    def code(value, lang='python'): return render_markdown(f'```{lang}\n{value}\n```')[0]
-    def link(page): return prefix+page+'.html'
-    def example(value):
-        # Preserve the exact holdout recipe while making the labelled DataFrame
-        # the first visible line. Copy always includes the complete real program.
-        value = value.replace('train, test = train_test_split(', 'split = train_test_split(')
-        value = value.replace('query = test.drop(columns=target)',
-                              'train = split[0]  # Labelled pandas DataFrame from the split.\n'
-                              'print(train.head())\n'
-                              'test = split[1]\nquery = test.drop(columns=target)')
-        setup, primary = value.split('train = split[0]', 1)
-        full = code('train = split[0]' + primary)
-        full = full.replace('<div class="code-wrap">', '<div class="code-wrap" data-copy="' + html.escape(value, quote=True) + '" data-copy-label="Copy complete example">', 1)
-        return '<details class="sample-data"><summary>Download, inspect and split the real research table · included in Copy</summary>' + code(setup.rstrip()) + '</details>' + full
-    authentication = (code('welt login', 'sh') + '<p class="credential-note">Approve your workspace in the browser. In a remote notebook, use <code>Client().connect()</code> and open its printed verification link on your own computer.</p>') if browser_connect else ('<p class="credential-note">Open Account in <a href="https://welt.ergodic.dev">Welt</a>, create a key with <strong>Allow writes, fits and predictions</strong>, then enter it at this hidden prompt. Keep keys out of saved code.</p>'+code(key))
-    return f'''<div class="hero"><h1>From a DataFrame<br><span>to a prediction.</span></h1><section class="quickstart" aria-labelledby="quickstart-title"><h2 id="quickstart-title" class="sr-only">Your first prediction</h2><p class="intro">Python 3.11–3.13 · SDK {sdk_version}</p><div class="step"><span>1 &nbsp; Install</span><a href="{link('start')}#install">Environment setup ↗</a></div>{code(install,'sh')}<div class="step"><span>2 &nbsp; Connect your workspace</span></div>{authentication}<div class="step"><span>3 &nbsp; Train, predict and evaluate</span><a href="{link('start')}">Full walkthrough ↗</a></div><div class="task-tabs" role="tablist" aria-label="Prediction task"><button id="classification-tab" role="tab" type="button" aria-selected="true" aria-controls="classification-panel">Classification</button><button id="regression-tab" role="tab" type="button" aria-selected="false" aria-controls="regression-panel" tabindex="-1">Regression</button></div><div id="classification-panel" class="task-panel" role="tabpanel" aria-labelledby="classification-tab">{example(classification)}<div class="result"><strong>Read the result</strong>Compare actual and predicted labels, then inspect your test accuracy and per-class report. All 30 test rows are evaluated.</div></div><div id="regression-panel" class="task-panel" role="tabpanel" aria-labelledby="regression-tab" hidden>{example(regression)}<div class="result"><strong>Read the result</strong>Compare actual and predicted values, then inspect MAE, RMSE and R² over all 62 test rows.</div></div><p class="credential-note">Fit uploads the training table into your private workspace. Predict executes remotely. Keep your predictor ID to reuse the fit; no particular score is promised.</p></section></div><section class="home-bottom" aria-label="Continue learning"><div><a href="{link('own-data')}">Use your own table ↗</a><p>Declare the target and hold back test rows.</p></div><div><a href="{link('reuse')}">Reopen your predictor ↗</a><p>Predict again without a new fit.</p></div><div><a href="{link('notebooks')}">Learn in a notebook ↗</a><p>Real tables and clear steps.</p></div></section>'''
+    """Current landing. Pre-0.8 landings are rendered by their pinned presentation
+    baseline in sdk-docs.yml, never re-derived from today's guides (API-123)."""
+    if not (browser_connect and browser_connect_release(sdk_version)):
+        raise SystemExit('Landing pages before SDK 0.8 are rendered from their pinned presentation baseline.')
+    return notebook_home(prefix, sdk_version)
 
 
 def markdown_copy(text, version):

@@ -15,6 +15,10 @@ def main():
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument("--version", choices=("0.6.0", "0.7.0", "0.7.1"), default="0.6.0")
     args = parser.parse_args()
+    if args.version == "0.7.1":
+        # Its corrected landing comes from the pinned presentation baseline checkout
+        # (sdk-docs.yml), never from this tree's current guides or styles (API-123).
+        raise SystemExit('Render 0.7.1 with the pinned presentation baseline: .presentation-baseline/scripts/build_historical_docs.py.')
     revision = {"0.6.0": REVISION, "0.7.0": "0d7719f410061ac41f9fdc0428cfe44148999489", "0.7.1": "a14e880ea17fa4114bacf7b269283c4db8327678"}[args.version]
     tag = "v" + args.version
     source = args.source.resolve()

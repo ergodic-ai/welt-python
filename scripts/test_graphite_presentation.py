@@ -105,6 +105,7 @@ def test_callouts_steps_and_details():
     assert '<div class="callout need" role="note">' in body
     steps = body.split('<div class="steps">', 1)[1].split('</div>', 1)[0]
     assert steps.count('<section class="step">') == 2 and 'id="install"' in steps and 'id="connect"' in steps
+    assert steps.count('class="step"') == 2  # only the sections, so each step is numbered once
     assert 'id="next-steps"' not in steps and body.index('</div>') < body.index('id="next-steps"')
     assert '<summary>Where is access stored?</summary>' in body and '<p>In this process.</p>' in body
 
