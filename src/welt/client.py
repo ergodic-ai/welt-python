@@ -46,6 +46,14 @@ def _retry_after(response):
     return max(0, delay) if math.isfinite(delay) else None
 
 
+def _redact(value, api_key):
+    if isinstance(value, dict):
+        return {k: _redact(v, api_key) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_redact(v, api_key) for v in value]
+    return None if isinstance(value, str) and api_key and api_key in value else value
+
+
 def _error_fields(error, api_key=None):
     fields = dict(error)
     if api_key:
@@ -56,7 +64,7 @@ def _error_fields(error, api_key=None):
     return fields
 
 
-def _response(response, *, api_key=None):
+def _response(response, *, api_key=None, text=False):
     if response.is_error:
         try:
             error = response.json()["error"]
@@ -102,9 +110,15 @@ def _response(response, *, api_key=None):
         raise cls(message, code=code,
                   request_id=error.get("request_id"), retryable=error.get("retryable", False),
                   job_id=error.get("job_id"), status_code=response.status_code,
-                  retry_after=_retry_after(response))
+                  retry_after=_retry_after(response), details=_redact(error.get("details"), api_key))
     if response.status_code == 204:
         return None
+    if text:
+        # HTML documents such as evaluation reports; never decoded as JSON.
+        if not response.headers.get("content-type", "").lower().startswith("text/html"):
+            raise WeltError("Welt API returned an invalid response.", code="invalid_response",
+                            status_code=response.status_code)
+        return response.text
     try:
         return response.json()
     except ValueError:
@@ -242,7 +256,7 @@ class Client(_HTTP):
     def __exit__(self, *args):
         self.close()
 
-    def request(self, method, path, *, _deadline=None, _job_id=None, _workspace_probe=False, **kwargs):
+    def request(self, method, path, *, _deadline=None, _job_id=None, _workspace_probe=False, _text=False, **kwargs):
         self._authenticate(method, path, kwargs.get("headers"), kwargs.get("auth"))
         if not _workspace_probe and self.workspace_selector and (not self._workspace_verified or self._verified_key != self.api_key or self._verified_workspace != self.workspace_selector) and not (method.upper() == "GET" and (httpx.URL(path).path in ("/v1/models", "/v1/billing/pricing", "/v1/research-datasets") or (httpx.URL(path).path.startswith("/v1/research-datasets/") and httpx.URL(path).path.count("/") == 3))):
             current = self.request("GET", "/v1/workspace", _workspace_probe=True, _deadline=_deadline, _job_id=_job_id)
@@ -270,7 +284,7 @@ class Client(_HTTP):
                     _wait(_deadline, _job_id, float("inf"))
                 delay = self._delay(method, attempt, response)
                 if delay is None:
-                    result = _response(response, api_key=secret(self.api_key))
+                    result = _response(response, api_key=secret(self.api_key), text=_text)
                     if _deadline is not None:
                         _wait(_deadline, _job_id, float("inf"))
                     return result
@@ -495,6 +509,50 @@ class Client(_HTTP):
         result = self.causal_result(job_id)
         return validated_scores(result, self.request("GET", f"/v1/jobs/{_id(job_id)}/result/scores"))
 
+    def submit_evaluation(self, data_or_dataset, target=None, *, task, models=None, folds=None, split="auto",
+                          group_column=None, fold_column=None, seed=0, primary_metric=None, positive_class=None,
+                          sample_rows=None, max_credits=None, idempotency_key=None):
+        """Cross-validate models on a dataset ID, or a DataFrame/array/CSV/Parquet table uploaded first.
+
+        Empty models lets Welt choose every model that admits the data. Options are checked
+        before any upload; replay an exact submission with the same idempotency_key.
+        """
+        from .evaluation import Evaluation, key, replay_error, submission
+        dataset_id, upload, body = submission(data_or_dataset, target, task=task, models=models, folds=folds,
+            split=split, group_column=group_column, fold_column=fold_column, seed=seed,
+            primary_metric=primary_metric, positive_class=positive_class, sample_rows=sample_rows,
+            max_credits=max_credits)
+        replay = key(idempotency_key)
+        if upload is not None:
+            dataset_id = self.upload(**upload)["id"]
+        try:
+            payload = self.request("POST", "/v1/evaluations", json=dict(body, dataset_id=dataset_id),
+                                   headers={"Idempotency-Key": replay})
+        except TransportError:
+            raise replay_error(dataset_id, replay) from None
+        return Evaluation(self, payload)
+
+    def evaluate(self, data_or_dataset, target=None, *, task, models=None, folds=None, split="auto",
+                 group_column=None, fold_column=None, seed=0, primary_metric=None, positive_class=None,
+                 sample_rows=None, max_credits=None, idempotency_key=None, timeout=600):
+        """Submit an evaluation and wait for its results; timeout leaves it running."""
+        return self.submit_evaluation(data_or_dataset, target, task=task, models=models, folds=folds, split=split,
+            group_column=group_column, fold_column=fold_column, seed=seed, primary_metric=primary_metric,
+            positive_class=positive_class, sample_rows=sample_rows, max_credits=max_credits,
+            idempotency_key=idempotency_key).wait(timeout=timeout)
+
+    def evaluation(self, evaluation_id):
+        """Reopen one evaluation by ID; no new work is submitted."""
+        from .evaluation import Evaluation
+        evaluation = Evaluation(self, self.request("GET", f"/v1/evaluations/{_id(evaluation_id)}"))
+        if evaluation.id != evaluation_id:
+            raise WeltError("Evaluation response belongs to a different evaluation.", code="invalid_response")
+        return evaluation
+
+    def evaluations(self):
+        from .evaluation import Evaluation
+        return [Evaluation(self, item) for item in self.request("GET", "/v1/evaluations")["items"]]
+
     def forecast_job(self, job_id):
         """Reconnect to one forecast run, borrowing this client; validates durable provenance."""
         from .forecast import ForecastJob
@@ -600,7 +658,7 @@ class AsyncClient(_HTTP):
     async def __aexit__(self, *args):
         await self.aclose()
 
-    async def request(self, method, path, *, _deadline=None, _job_id=None, _workspace_probe=False, **kwargs):
+    async def request(self, method, path, *, _deadline=None, _job_id=None, _workspace_probe=False, _text=False, **kwargs):
         self._authenticate(method, path, kwargs.get("headers"), kwargs.get("auth"))
         if not _workspace_probe and self.workspace_selector and (not self._workspace_verified or self._verified_key != self.api_key or self._verified_workspace != self.workspace_selector) and not (method.upper() == "GET" and (httpx.URL(path).path in ("/v1/models", "/v1/billing/pricing", "/v1/research-datasets") or (httpx.URL(path).path.startswith("/v1/research-datasets/") and httpx.URL(path).path.count("/") == 3))):
             current = await self.request("GET", "/v1/workspace", _workspace_probe=True, _deadline=_deadline, _job_id=_job_id)
@@ -636,7 +694,7 @@ class AsyncClient(_HTTP):
                     _wait(_deadline, _job_id, float("inf"))
                 delay = self._delay(method, attempt, response)
                 if delay is None:
-                    result = _response(response, api_key=secret(self.api_key))
+                    result = _response(response, api_key=secret(self.api_key), text=_text)
                     if _deadline is not None:
                         _wait(_deadline, _job_id, float("inf"))
                     return result
@@ -851,6 +909,46 @@ class AsyncClient(_HTTP):
         from .causal import validated_scores
         result = await self.causal_result(job_id)
         return validated_scores(result, await self.request("GET", f"/v1/jobs/{_id(job_id)}/result/scores"))
+
+    async def submit_evaluation(self, data_or_dataset, target=None, *, task, models=None, folds=None, split="auto",
+                                group_column=None, fold_column=None, seed=0, primary_metric=None,
+                                positive_class=None, sample_rows=None, max_credits=None, idempotency_key=None):
+        """Async Client.submit_evaluation with the same contract."""
+        from .evaluation import AsyncEvaluation, key, replay_error, submission
+        dataset_id, upload, body = submission(data_or_dataset, target, task=task, models=models, folds=folds,
+            split=split, group_column=group_column, fold_column=fold_column, seed=seed,
+            primary_metric=primary_metric, positive_class=positive_class, sample_rows=sample_rows,
+            max_credits=max_credits)
+        replay = key(idempotency_key)
+        if upload is not None:
+            dataset_id = (await self.upload(**upload))["id"]
+        try:
+            payload = await self.request("POST", "/v1/evaluations", json=dict(body, dataset_id=dataset_id),
+                                         headers={"Idempotency-Key": replay})
+        except TransportError:
+            raise replay_error(dataset_id, replay) from None
+        return AsyncEvaluation(self, payload)
+
+    async def evaluate(self, data_or_dataset, target=None, *, task, models=None, folds=None, split="auto",
+                       group_column=None, fold_column=None, seed=0, primary_metric=None, positive_class=None,
+                       sample_rows=None, max_credits=None, idempotency_key=None, timeout=600):
+        """Async Client.evaluate with the same contract."""
+        evaluation = await self.submit_evaluation(data_or_dataset, target, task=task, models=models, folds=folds,
+            split=split, group_column=group_column, fold_column=fold_column, seed=seed,
+            primary_metric=primary_metric, positive_class=positive_class, sample_rows=sample_rows,
+            max_credits=max_credits, idempotency_key=idempotency_key)
+        return await evaluation.wait(timeout=timeout)
+
+    async def evaluation(self, evaluation_id):
+        from .evaluation import AsyncEvaluation
+        evaluation = AsyncEvaluation(self, await self.request("GET", f"/v1/evaluations/{_id(evaluation_id)}"))
+        if evaluation.id != evaluation_id:
+            raise WeltError("Evaluation response belongs to a different evaluation.", code="invalid_response")
+        return evaluation
+
+    async def evaluations(self):
+        from .evaluation import AsyncEvaluation
+        return [AsyncEvaluation(self, item) for item in (await self.request("GET", "/v1/evaluations"))["items"]]
 
     def forecast_job(self, job_id):
         """Reconnect borrowing this client; await the typed job's result()."""

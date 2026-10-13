@@ -13,14 +13,14 @@ from .credentials import credential
 from .errors import PredictionPendingError
 
 
+def read_table(path):
+    path = Path(path)
+    return pd.read_parquet(path) if path.suffix.lower() in (".parquet", ".pq") else pd.read_csv(path)
+
+
 def table(X):
     if isinstance(X, (str, Path)):
-        path = Path(X)
-        X = (
-            pd.read_parquet(path)
-            if path.suffix.lower() in (".parquet", ".pq")
-            else pd.read_csv(path)
-        )
+        X = read_table(X)
     if isinstance(X, pd.DataFrame):
         if any(not isinstance(c, str) or not c.strip() for c in X.columns) or X.columns.has_duplicates:
             raise ValueError("DataFrame columns must be unique, nonempty strings.")
@@ -77,6 +77,15 @@ def _training_table(X, y, target):
     return columns, rows, named, targets
 
 
+def check_targets(task, targets):
+    if task == "classification":
+        check_classification_targets(targets)
+    elif not np.issubdtype(targets.dtype, np.number):
+        raise ValueError("Regression targets must be numeric.")
+    elif not np.isfinite(targets).all():
+        raise ValueError("Regression targets must be finite.")
+
+
 class _RemoteEstimator(BaseEstimator):
     def __init__(
         self,
@@ -113,12 +122,7 @@ class _RemoteEstimator(BaseEstimator):
         return self._submit_table(columns, rows, targets)
 
     def _submit_table(self, columns, rows, targets):
-        if self._task == "classification":
-            check_classification_targets(targets)
-        elif not np.issubdtype(targets.dtype, np.number):
-            raise ValueError("Regression targets must be numeric.")
-        elif not np.isfinite(targets).all():
-            raise ValueError("Regression targets must be finite.")
+        check_targets(self._task, targets)
         target_name = "__welt_target__"
         while target_name in columns:
             target_name += "_"
@@ -174,6 +178,10 @@ class _RemoteEstimator(BaseEstimator):
     def from_predictor(cls, predictor_id, *, base_url=None, api_key=None):
         with Client(base_url=base_url, api_key=api_key) as client:
             predictor = client.predictor(predictor_id)
+        return cls._from_metadata(predictor, base_url=base_url, api_key=api_key)
+
+    @classmethod
+    def _from_metadata(cls, predictor, *, base_url=None, api_key=None):
         estimator = cls(
             model=predictor["model_id"],
             configuration=predictor["configuration"],

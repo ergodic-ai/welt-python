@@ -138,6 +138,8 @@ deliberate retry; see [Wait and recover](async-and-errors.md#recover-from-the-ca
   Omitted keys are freshly generated per call.
 - Estimator fit and `submit_fit` make a new dataset upload and logical fit. For an
   intentional request replay, call `Client.submit_fit` on the existing dataset.
+- `submit_evaluation` with a table uploads it each time. To replay an evaluation, pass
+  its dataset ID and the same `idempotency_key`; a dropped submission's error names both.
 
 ## Next steps
 

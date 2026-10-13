@@ -24,13 +24,15 @@ import welt
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = "https://ergodic-ai.github.io/welt-python"
 REQUIRED = ('Client', 'Job', 'Classifier', 'Regressor', 'AsyncClient', 'AsyncJob',
-            'CausalDiscovery', 'CausalResult', 'Forecast', 'ForecastResult', 'ForecastJob', 'AsyncForecastJob')
+            'CausalDiscovery', 'CausalResult', 'Forecast', 'ForecastResult', 'ForecastJob', 'AsyncForecastJob',
+            'Evaluation', 'AsyncEvaluation', 'ReportLink')
 # DEC-073: top sections and the guide sidebar. Order defines the previous/next pager.
 NAV = [('Get started', 'start'), ('Guides', 'own-data'), ('Reference', 'reference'), ('Models', 'capabilities'), ('CLI', 'cli')]
 GUIDES = [('Get started', [('First prediction', 'start'), ('Connect your workspace', 'connect'), ('Install and accounts', 'onboarding'),
                            ('Notebook examples', 'notebooks')]),
           ('Guides', [('Use your own table', 'own-data'), ('Predict a number', 'regression'), ('Reuse a predictor', 'reuse'),
-                      ('Select a model', 'model-selection'), ('Forecast a time series', 'forecasting'), ('Hidden model runs', 'model-runs'),
+                      ('Select a model', 'model-selection'), ('Compare models', 'evaluations'),
+                      ('Forecast a time series', 'forecasting'), ('Hidden model runs', 'model-runs'),
                       ('Research datasets', 'research-datasets'), ('Wait and recover', 'async-and-errors'),
                       ('Discover a graph', 'causal-discovery'), ('Workspace resources', 'usage')]),
           ('Reference', [('Python reference', 'reference'), ('Models and limits', 'capabilities'), ('Agent CLI', 'cli')]),
@@ -94,6 +96,14 @@ PARAMS = {
     'ForecastJob': {'job': 'Underlying Job handle.', 'expected': 'Request expectations the result must match.',
                     'owns_client': 'True when closing this job should also close its client.'},
     'AsyncForecastJob': {'job': 'Underlying AsyncJob handle.'},
+    'Evaluation': {'client': 'The Client the evaluation borrows for its reads.',
+                   'payload': 'Evaluation resource. Usually obtained from evaluate(), submit_evaluation() or evaluation(), not built by hand.'},
+    'AsyncEvaluation': {'client': 'The AsyncClient the evaluation borrows for its reads.',
+                        'payload': 'Evaluation resource. Usually obtained from the AsyncClient methods, not built by hand.'},
+    'ReportLink': {'id': 'Link ID, used to revoke it.', 'evaluation_id': 'The evaluation whose report it opens.',
+                   'url': 'Signed report URL, returned once at creation; None when listed. Hidden from repr.',
+                   'created_at': 'Creation time (ISO 8601).', 'expires_at': 'Expiry time (ISO 8601), at most seven days after creation.',
+                   'revoked': 'True after revocation.', 'created_by': 'Creating credential, when the server reports it.'},
 }
 
 # Every documented method gets a return contract and an actionable error boundary.
@@ -157,6 +167,26 @@ FORECAST_METHODS = {
  'predict': ('Submit one guarded run with copied history; wait within timeout.', 'numpy.ndarray, shape (horizon,), containing native medians.', METHODS['predict_quantiles'][2]),
  'predict_details': ('Submit one guarded run, wait and validate native provenance and exact request expectations.', 'Immutable ForecastResult; properties and conversions share this one run.', METHODS['predict_quantiles'][2]),
  'submit_predict': ('Submit one guarded durable forecast without waiting; retain job.id.', 'ForecastJob owning its new client; close explicitly or use a context manager.', METHODS['predict_quantiles'][2])}
+METHODS.update({
+ 'submit_evaluation': ('Cross-validate models on a dataset ID, or upload a DataFrame, array, CSV or Parquet table with its target first. Empty models lets Welt choose every eligible model. Options are checked locally before any upload.', 'Evaluation (await for AsyncClient: AsyncEvaluation) with its ID, models, skipped models and estimated_credits.', 'ValueError for invalid options, targets or split columns before upload; InvalidInputError for server refusals (codes invalid_input, workload_limit, budget_exceeded, no_eligible_models with error.details); ModelUnavailableError; ConflictError for a reused key with different inputs; TransportError names the dataset ID and key for a replay. Not retried automatically.'),
+ 'evaluate': ('Submit an evaluation and wait for it within a local timeout.', 'Finished Evaluation or AsyncEvaluation; partially_completed returns with an EvaluationWarning.', 'Submission errors; ExecutionError when no model finished; JobCancelledError; JobTimeoutError naming the evaluation, which keeps running.'),
+ 'evaluation': ('Reopen one evaluation by ID under current workspace authority; no new work.', 'Evaluation (await for AsyncClient: AsyncEvaluation).', 'NotFoundError for a missing, deleted or foreign evaluation; authentication or permission errors.'),
+ 'evaluations': ('List the workspace\'s evaluations.', 'List of Evaluation or AsyncEvaluation handles.', 'Authentication, permission or transport errors.')})
+EVALUATION_METHODS = {
+ 'refresh': ('Read the evaluation\'s current state and per-model progress.', 'The same handle (self), updated (await for AsyncEvaluation).', 'NotFoundError after deletion; authentication, permission or transport errors.'),
+ 'wait': ('Poll with backoff until the evaluation finishes; timeout=None waits without a local limit.', 'The same finished handle. partially_completed returns with an EvaluationWarning; models[].error explains the rest.', 'ExecutionError when no model finished, JobCancelledError after cancellation, JobTimeoutError naming the evaluation. A timeout never cancels.'),
+ 'cancel': ('Cancel every unfinished model; reserved credits are released.', 'The same handle with status cancelled, or its final state if already finished.', 'NotFoundError; authentication or permission errors; cancellation may race completion.'),
+ 'delete': ('Delete a terminal (finished, failed or cancelled) evaluation: results, predictions, report and its links.', 'None.', 'ConflictError (dependency_conflict) while running; retryable deletion_pending; NotFoundError.'),
+ 'summary': ('Build the leaderboard locally from the finished evaluation; no request.', 'pandas.DataFrame indexed by model_id: ranked models, then the baseline, with name, rank (nullable) and <metric>_mean / <metric>_sd columns.', 'ConflictError result_not_ready before it finishes, result_unavailable after failure or cancellation.'),
+ 'folds': ('Read per-fold metrics for every model and the baseline.', 'Long pandas.DataFrame with model_id, fold, rows, metric and value (NaN when undefined).', 'ConflictError result_not_ready or result_unavailable; NotFoundError.'),
+ 'predictions': ('Read out-of-fold predictions for every evaluated row.', 'pandas.DataFrame with row_index, fold, actual, one column per model and baseline, and <model>:p(<class>) probabilities for classification.', 'ResultExpiredError (410) after seven days; ConflictError before results exist.'),
+ 'report_html': ('Read the self-contained HTML report (no script, no external resources); cached once read.', 'HTML document string.', 'ConflictError result_not_ready or result_unavailable; NotFoundError.'),
+ 'report_link': ('Create a signed report URL that anyone holding it can open without signing in, for 1–7 days.', 'ReportLink whose url is returned only now; repr hides it.', 'ValueError for days outside 1–7; ConflictError when no report exists; at most 20 live links.'),
+ 'report_links': ('List the evaluation\'s report links without their URLs.', 'List of ReportLink with url None.', 'NotFoundError; authentication or permission errors.'),
+ 'revoke_report_link': ('Revoke one report link by ID or ReportLink; it then returns 410.', 'None.', 'NotFoundError for an unknown link.'),
+ 'show': ('Display the report in Jupyter, or the status of an unfinished evaluation. Styles stay scoped to the report.', 'None (await for AsyncEvaluation).', 'OptionalDependencyError without IPython; report read errors.'),
+ 'fit': ('Submit a new fit of the chosen model (default: the leaderboard\'s first) on the full stored dataset with the evaluation\'s seed. Not a promotion of a fold context.', 'Fitted Classifier or Regressor (await for AsyncEvaluation).', 'ValueError for an unranked model or an evaluation with split columns; ConflictError before results exist; fit errors and JobTimeoutError.'),
+ 'to_dict': ('Copy the last evaluation resource read from the server.', 'Independent dictionary with status, provenance (fold_sha256, versions), models, skipped and summary.', 'No remote call.')}
 TYPED_FORECAST_METHODS = {
  'result': ('Wait within a local budget, validate durable task/version/result identities and preserve native values.', 'ForecastResult (await for AsyncForecastJob). Estimator jobs also validate exact submitted context/horizon/future times/levels; reconnects cannot reconstruct missing original context.', 'Typed remote errors, JobTimeoutError retaining job_id, or InvalidForecastResultError. No resubmission, repair or implicit cancellation.'),
  'cancel': ('Validate the forecast task/identity before explicitly requesting remote cancellation.', 'Validated server job metadata (await for AsyncForecastJob).', 'Task/version/provenance validation, authentication, permission, NotFoundError or job conflict; cancellation may race completion.'),
@@ -217,13 +247,16 @@ def reference():
             parts.append('Immutable native result. Read `id`, `dataset_id`, `job_id`, `variables`, `edge_marks`, `native_graph_type`, `model_version`, `configuration_version`, `score_reference`, `decoder`, `assumptions` and `diagnostics`. The result retains no HTTP client or credentials. Scores remain a separate authenticated read.')
         if name == 'Forecast':
             parts.append('Zero-shot local history context, not a durable Predictor. See [forecasting](forecasting.md) for input/time/version/ownership rules; no score or automatic cross-validation contract.')
+        if name == 'Evaluation':
+            parts.append('Cross-validated comparison handle; see [evaluations](evaluations.md). Properties: id, status, stage, finished, task, dataset_id, target, rows, primary_metric, positive_class, classes, models, skipped, estimated_credits, comparison, warnings and predictions_expires_at. Values are owned copies. Reads borrow the client.')
         if name == 'ForecastResult':
             parts.append('Immutable native result with job_id, model_id, model_version, configuration, timestamps, predictions, quantile_levels and quantiles properties. Arrays/dictionaries are owned copies; native medians and quantiles carry no calibrated coverage claim.')
         for key, method in inspect.getmembers(obj, inspect.isroutine):
             supported_inherited_score = name in ('Classifier', 'Regressor') and key == 'score'
             if key.startswith('_') or not (method.__module__.startswith('welt') or supported_inherited_score):
                 continue
-            overrides = FORECAST_METHODS if name == 'Forecast' else TYPED_FORECAST_METHODS if name in ('ForecastJob', 'AsyncForecastJob') else {}
+            overrides = (FORECAST_METHODS if name == 'Forecast' else TYPED_FORECAST_METHODS if name in ('ForecastJob', 'AsyncForecastJob')
+                         else EVALUATION_METHODS if name in ('Evaluation', 'AsyncEvaluation') else {})
             if key not in METHODS and key not in overrides:
                 raise SystemExit(f'Missing annotated method contract: {name}.{key}')
             purpose, returns, errors = (html.escape(text, quote=False) for text in (overrides[key] if key in overrides else METHODS[key]))
@@ -604,6 +637,7 @@ def reference_index(link):
     """Class index for the single reference page; every link is an existing anchor."""
     groups = [('Connect', ('Client', 'AsyncClient')), ('Predict', ('Classifier', 'Regressor')),
               ('Discover', ('CausalDiscovery', 'CausalResult')), ('Forecast', ('Forecast', 'ForecastResult', 'ForecastJob', 'AsyncForecastJob')),
+              ('Evaluate', ('Evaluation', 'AsyncEvaluation', 'ReportLink')),
               ('Long-running work', ('Job', 'AsyncJob')),
               ('Errors', ())]
     listed = {name for _, names in groups for name in names}
@@ -780,7 +814,7 @@ def main():
     downloads=out/'downloads'; downloads.mkdir(exist_ok=True)
     for source in (ROOT/'examples/notebooks').glob('*'):
         if source.suffix in ('.ipynb','.py','.md'):shutil.copy2(source,downloads/source.name)
-    for name in ('first_prediction.py', 'first_request.py', 'forecasting.py'):
+    for name in ('first_prediction.py', 'first_request.py', 'forecasting.py', 'evaluation.py'):
         shutil.copy2(ROOT/'examples'/name, downloads/name)
     search=[]
     titles={}
@@ -832,7 +866,7 @@ def main():
             path.write_text(current_redirect(path.name))
     if (base/'v0.8.0/downloads').exists():
         for source in downloads.iterdir():
-            if source.is_file() and source.name != 'forecasting.py':
+            if source.is_file() and source.name not in ('forecasting.py', 'evaluation.py'):
                 shutil.copy2(source, base/'v0.8.0/downloads'/source.name)
     print(f'Built {len(pages)} guides plus landing for SDK {version}; no credentials or live model execution')
 

@@ -7,7 +7,7 @@ on:
       release_tag:
         description: Published SDK release to document
         required: true
-        default: v0.11.0
+        default: v0.12.0
       docs_presentation_ref:
         description: Optional exact reviewed documentation-only commit (SDK0.8 or SDK0.10)
         required: false
@@ -146,34 +146,49 @@ jobs:
         working-directory: .legacy-sdk091
       # Keep the accepted 0.10.0 presentation with its immutable runtime.
       - uses: actions/checkout@v4
-        if: github.event.release.tag_name == 'v0.10.1' || inputs.release_tag == 'v0.10.1' || github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0'
+        if: github.event.release.tag_name == 'v0.10.1' || inputs.release_tag == 'v0.10.1' || github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0'
         with:
           ref: 3d2a805fd334636df3470b08eb3b451a630e6968
           path: .legacy-sdk010
       - run: uv sync --frozen --extra parquet
-        if: github.event.release.tag_name == 'v0.10.1' || inputs.release_tag == 'v0.10.1' || github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0'
+        if: github.event.release.tag_name == 'v0.10.1' || inputs.release_tag == 'v0.10.1' || github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0'
         working-directory: .legacy-sdk010
       - run: uv pip install --python .venv/bin/python --reinstall --no-deps "https://github.com/ergodic-ai/welt-python/releases/download/v0.10.0/welt_client-0.10.0-py3-none-any.whl"
-        if: github.event.release.tag_name == 'v0.10.1' || inputs.release_tag == 'v0.10.1' || github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0'
+        if: github.event.release.tag_name == 'v0.10.1' || inputs.release_tag == 'v0.10.1' || github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0'
         working-directory: .legacy-sdk010
       - run: .venv/bin/python scripts/build_docs.py --output ../site
-        if: github.event.release.tag_name == 'v0.10.1' || inputs.release_tag == 'v0.10.1' || github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0'
+        if: github.event.release.tag_name == 'v0.10.1' || inputs.release_tag == 'v0.10.1' || github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0'
         working-directory: .legacy-sdk010
       # Retain the preceding documentation-only release with its exact wheel.
       - uses: actions/checkout@v4
-        if: github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0'
+        if: github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0'
         with:
           ref: 1bc1c2992e74b687775735c1aa0aa9c0ceacccea
           path: .legacy-sdk0101
       - run: uv sync --frozen --extra parquet
-        if: github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0'
+        if: github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0'
         working-directory: .legacy-sdk0101
       - run: uv pip install --python .venv/bin/python --reinstall --no-deps "https://github.com/ergodic-ai/welt-python/releases/download/v0.10.1/welt_client-0.10.1-py3-none-any.whl"
-        if: github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0'
+        if: github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0'
         working-directory: .legacy-sdk0101
       - run: .venv/bin/python scripts/build_docs.py --output ../site
-        if: github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0'
+        if: github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0'
         working-directory: .legacy-sdk0101
+      # Retain the Forecast release guides with their exact wheel.
+      - uses: actions/checkout@v4
+        if: github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0'
+        with:
+          ref: b306db9767f48bae3d14fed5da2f59815c644b0b
+          path: .legacy-sdk011
+      - run: uv sync --frozen --extra parquet
+        if: github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0'
+        working-directory: .legacy-sdk011
+      - run: uv pip install --python .venv/bin/python --reinstall --no-deps "https://github.com/ergodic-ai/welt-python/releases/download/v0.11.0/welt_client-0.11.0-py3-none-any.whl"
+        if: github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0'
+        working-directory: .legacy-sdk011
+      - run: .venv/bin/python scripts/build_docs.py --output ../site
+        if: github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0'
+        working-directory: .legacy-sdk011
       - name: Check current documentation contracts
         run: .venv/bin/python -m pytest -q scripts/test_audit_navigation.py scripts/test_audit_content.py scripts/test_homepage_presentation.py scripts/test_learning_materials.py scripts/test_notebook_views.py scripts/test_graphite_presentation.py scripts/test_docs_browser.py
       - run: .venv/bin/python scripts/build_docs.py
@@ -189,6 +204,13 @@ jobs:
           test -f site/v0.11.0/reference.html
           test -f site/v0.11.0/downloads/forecasting.py
           grep -q 'Forecast.predict_quantiles' site/v0.11.0/reference.html
+      - name: Verify Evaluations and preceding release documentation
+        if: github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0'
+        run: |
+          test -f site/v0.11.0/forecasting.html
+          test -f site/v0.12.0/evaluations.html
+          test -f site/v0.12.0/downloads/evaluation.py
+          grep -q 'Evaluation.summary' site/v0.12.0/reference.html
       - name: Bind documentation presentation proof
         if: inputs.docs_presentation_ref != ''
         run: cp /tmp/welt-docs-presentation-proof.json site/docs-presentation-proof.json

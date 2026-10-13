@@ -1,3 +1,27 @@
+# 0.12.0 (unreleased) — Cross-validated evaluations
+
+- Add `Client.submit_evaluation`, `evaluate`, `evaluation(id)` and `evaluations()`
+  (and the `AsyncClient` equivalents) for the `/v1/evaluations` resource (DEC-076).
+  A dataset ID, DataFrame, array or CSV/Parquet table is accepted; tables are
+  uploaded with their target. Options are checked before upload; empty `models` lets
+  Welt choose. Submissions carry an `Idempotency-Key`; a dropped submission's error
+  names the dataset ID and key to replay with. Mutations still never auto-retry.
+- Add `Evaluation` and `AsyncEvaluation`: `wait`/`refresh` with the same polling
+  backoff as jobs, `cancel`, `delete`, `summary()` (leaderboard with
+  `<metric>_mean`/`_sd` and rank), `folds()` and `predictions()` DataFrames,
+  `report_html()`, notebook display that keeps the report's styles scoped (or isolates
+  it in a sandboxed iframe), and an explicit `fit(model_id)` that submits a new
+  full-data fit. `partially_completed` returns with an `EvaluationWarning`; failed and
+  cancelled evaluations raise `ExecutionError` / `JobCancelledError`.
+- Add `ReportLink` with `report_link(days)`, `report_links()` and
+  `revoke_report_link()`; its repr hides the signed URL.
+- `WeltError.details` exposes the server's structured, data-free error context (for
+  example `budget_exceeded` estimates or `no_eligible_models` reasons), redacting the
+  configured key. Existing errors keep their types and fields.
+- Document evaluations (leakage boundary, model choice, splits, results, links,
+  pricing and limits) and add a local CSV example. Runtime dependencies, existing
+  model semantics and estimator behavior are unchanged.
+
 # 0.11.0 (2026-10-13) — Forecast estimator and redesigned documentation
 
 - Add zero-shot `Forecast.fit`, `predict`, `predict_quantiles`, `predict_details`

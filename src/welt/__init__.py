@@ -19,6 +19,7 @@ from .errors import InvalidForecastResultError
 from .causal import CausalDiscovery, CausalResult
 from .errors import InvalidCausalResultError, OptionalDependencyError, UnsupportedGraphConversionError
 from .research import ResearchDownload, ResearchMetadata, ResearchNoticeWarning
+from .evaluation import AsyncEvaluation, Evaluation, EvaluationWarning, ReportLink
 
 __all__ = [
     "AsyncClient", "AsyncJob", "Credential", "ConflictError", "JobCancelledError",
@@ -38,5 +39,6 @@ __all__ = [
     "CausalDiscovery", "CausalResult", "InvalidCausalResultError",
     "OptionalDependencyError", "UnsupportedGraphConversionError",
     "ResearchDownload", "ResearchMetadata", "ResearchNoticeWarning",
+    "Evaluation", "AsyncEvaluation", "EvaluationWarning", "ReportLink",
 ]
-__version__ = "0.11.0"
+__version__ = "0.12.0"

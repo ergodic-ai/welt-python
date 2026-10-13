@@ -178,6 +178,16 @@ state stays alive for the single run, and these runs do not publish reusable
 support-only fitted predictors. LimiX query splitting can change its transductive
 results. API errors, cancellation and timeouts retain existing typed semantics.
 
+## Compare models with cross-validation
+
+`client.evaluate(data, "target", task="classification")` cross-validates every
+eligible model (or up to 8 you name with `models=[...]`) on the same seeded folds and
+returns an `Evaluation`: `summary()` is the leaderboard against a baseline, `folds()`
+and `predictions()` are DataFrames, `show()` displays the HTML report in Jupyter and
+`report_link()` creates a signed link anyone holding it can open for up to seven days.
+`evaluation.fit()` then fits the chosen model on the full dataset. Requires SDK0.12
+and the matching server capability. [Evaluations guide](https://ergodic-ai.github.io/welt-python/evaluations.html).
+
 ## Forecast a time series
 
 `Forecast` snapshots regular timezone-aware history and submits guarded zero-shot

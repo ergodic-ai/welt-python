@@ -10,12 +10,14 @@ def safe_id(value):
 
 class WeltError(Exception):
     def __init__(self, message, *, code="unknown", request_id=None, retryable=False,
-                 job_id=None, status_code=None, retry_after=None):
+                 job_id=None, status_code=None, retry_after=None, details=None):
         self.message = str(message)
         request_id, job_id = safe_id(request_id), safe_id(job_id)
         super().__init__(self.message)
         self.code, self.request_id, self.retryable = code, request_id, retryable
         self.job_id, self.status_code, self.retry_after = job_id, status_code, retry_after
+        # Structured, data-free server context such as credit estimates or skipped models.
+        self.details = details if isinstance(details, dict) else None
 
 
     def __str__(self):

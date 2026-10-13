@@ -60,7 +60,8 @@ The current client includes:
 - resumable file upload sessions;
 - durable batch prediction;
 - workspace inspection;
-- hidden-model runs.
+- hidden-model runs;
+- cross-validated [evaluations](evaluations.md) with DataFrame results and report links (0.12).
 
 Both sync and async clients expose the corresponding resources. Estimator CSV and
 Parquet convenience reads still load into memory. For resumable file transfer, use

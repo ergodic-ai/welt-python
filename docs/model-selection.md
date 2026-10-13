@@ -69,6 +69,9 @@ you compare models for real:
 - Keep preprocessing inside the training folds.
 - Separate model selection from unbiased assessment.
 
+[Compare models](evaluations.md) runs this for you: `client.evaluate()` cross-validates
+several models on the same folds and reports a leaderboard against a baseline.
+
 !!! caution "Scores are not calibrated confidence"
     Native classifier probabilities and regression mean points do not promise
     calibrated confidence.
@@ -88,6 +91,7 @@ not provide a calibrated interval or publisher benchmark guarantee.
 
 <div class="cards" markdown="1">
 
+- [Compare models](evaluations.md): cross-validate several models on the same folds.
 - [Models and limits](capabilities.md): every qualified task and its limits.
 - [Predict a number](regression.md): the same pattern with `Regressor`.
 - [Reuse a predictor](reuse.md): reopen a fitted predictor without another fit.
