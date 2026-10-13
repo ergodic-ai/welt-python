@@ -599,6 +599,23 @@ def test_a_server_without_evaluations_gets_an_explicit_error():
     asyncio.run(run())
 
 
+def test_an_older_server_answering_405_gets_the_same_explicit_error():
+    def old_console(request):  # Released servers before evaluations: the console mount answers POSTs with 405.
+        if request.url.path == "/v1/datasets":
+            return httpx.Response(201, json={"id": "ds_1"})
+        return httpx.Response(405, json={"detail": "Method Not Allowed"})
+    with Client(api_key="fixture-only", transport=httpx.MockTransport(old_console)) as client:
+        with pytest.raises(NotFoundError) as missing:
+            client.submit_evaluation(table(), "label", task="classification")
+    assert missing.value.code == "evaluations_unavailable" and "dataset ds_1" in str(missing.value)
+
+    async def run():
+        async with AsyncClient(api_key="fixture-only", transport=httpx.MockTransport(old_console)) as client:
+            with pytest.raises(NotFoundError, match="does not offer evaluations"):
+                await client.evaluate("ds_1", task="classification")
+    asyncio.run(run())
+
+
 def test_settled_credits_and_runtime():
     service = Service(polls=1)
     original = service.finish

@@ -153,7 +153,7 @@ print(link.url, link.expires_at)  # the URL is shown once; store it safely
 
 A link lasts the chosen 1–7 days (default 7). A link created from the SDK with an API
 key, or through an OAuth connection, never outlives that key and stops if the key is
-revoked. A link created in the console lasts the chosen days, even after you sign out.
+revoked. A link created in the console lasts the chosen days, even after an ordinary sign-out; "sign out everywhere", a password reset or account disablement revoke every link you created in the console.
 Every link stops working when it expires, when it is revoked, or when its creator is
 no longer a verified member of the workspace. Deleting the evaluation removes the
 report and its links.

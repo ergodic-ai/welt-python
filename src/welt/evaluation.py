@@ -116,8 +116,9 @@ def key(idempotency_key):
 
 
 def unavailable(error, dataset_id=None):
-    """A 404 without Welt's error envelope means the server has no evaluation routes."""
-    if isinstance(error, WeltError) and error.status_code == 404 and error.code == "unknown":
+    """A 404 or 405 without Welt's error envelope means the server has no evaluation routes (an
+    older server answers the POST with 405 from its console mount)."""
+    if isinstance(error, WeltError) and error.status_code in (404, 405) and error.code == "unknown":
         uploaded = f" The table was uploaded as dataset {dataset_id}." if safe_id(dataset_id) else ""
         return NotFoundError("This Welt server does not offer evaluations (no /v1/evaluations route). Use a server "
                              "release with evaluations, or upgrade the deployment." + uploaded,
