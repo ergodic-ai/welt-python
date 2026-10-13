@@ -44,7 +44,8 @@
     tabs.forEach((tab, i) => { tab.addEventListener('click', () => select(tab)); tab.addEventListener('keydown', (event) => { let next; if (event.key === 'ArrowRight') next = tabs[(i + 1) % tabs.length]; if (event.key === 'ArrowLeft') next = tabs[(i + tabs.length - 1) % tabs.length]; if (event.key === 'Home') next = tabs[0]; if (event.key === 'End') next = tabs[tabs.length - 1]; if (next) { event.preventDefault(); select(next); next.focus(); } }); });
   });
 
-  document.querySelector('#version').addEventListener('change', (event) => { location.href = event.target.value; });
+  document.querySelectorAll('[data-version]').forEach((select) => select.addEventListener('change', (event) => { location.href = event.target.value; }));
+  if (!/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) document.querySelectorAll('.shortcut').forEach((hint) => { hint.textContent = 'Ctrl K'; });
 
   // Outline: mark the section currently under the top bar.
   const links = [...document.querySelectorAll('.outline-inner a[href^="#"]')];
@@ -82,17 +83,27 @@
     empty.hidden = found.length > 0;
     empty.textContent = !words.length ? 'Search this SDK version by task, method or error.' : !index ? 'Search is unavailable. Browse Guides or Reference in the navigation.' : 'No matches. Try “reopen”, “target”, “JobTimeoutError” or “causal”.';
     found.forEach((item, i) => { const li = document.createElement('li'); li.id = `search-result-${i}`; li.setAttribute('role', 'option'); const a = document.createElement('a'); a.href = new URL(item.href, searchURL).href; a.tabIndex = -1; a.textContent = item.title; const small = document.createElement('small'); small.textContent = item.text.slice(0, 140); a.append(small); li.append(a); results.append(li); });
+    field.setAttribute('aria-expanded', String(found.length > 0));
     if (found.length) highlight();
     announce(found.length ? `${found.length} search results.` : empty.textContent);
   };
   const openSearch = async () => { if (search.open) return; openDialog('search-dialog', searchButton); field.focus(); field.select(); if (!index) { try { const response = await fetch(searchURL); if (!response.ok) throw Error(); index = await response.json(); } catch (_) { index = null; } } render(); };
+  // A result on this page moves focus to its heading instead of back to the search button.
+  const go = (link) => {
+    const target = new URL(link.href);
+    if (target.pathname !== location.pathname) { location.href = target.href; return; }
+    search.close(); history.pushState(null, '', target.hash || location.pathname);
+    const heading = target.hash && document.getElementById(decodeURIComponent(target.hash.slice(1)));
+    if (heading) { heading.tabIndex = -1; heading.scrollIntoView(); heading.focus({ preventScroll: true }); }
+  };
+  results.addEventListener('click', (event) => { const link = event.target.closest('a'); if (link) { event.preventDefault(); go(link); } });
   searchButton.addEventListener('click', openSearch);
   field.addEventListener('input', render);
   field.addEventListener('keydown', (event) => {
     const count = results.children.length;
     if (event.key === 'ArrowDown' && count) { event.preventDefault(); selected = (selected + 1) % count; highlight(); }
     if (event.key === 'ArrowUp' && count) { event.preventDefault(); selected = (selected + count - 1) % count; highlight(); }
-    if (event.key === 'Enter' && count) { event.preventDefault(); location.href = results.children[selected].querySelector('a').href; search.close(); }
+    if (event.key === 'Enter' && count) { event.preventDefault(); go(results.children[selected].querySelector('a')); }
   });
   document.addEventListener('keydown', (event) => {
     const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName) || document.activeElement.isContentEditable;

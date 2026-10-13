@@ -41,7 +41,7 @@ TASKS = [('Classify rows', 'start', 'Predict a category for each row of a table.
          ('Use your own table', 'own-data', 'DataFrames, CSV and Parquet with a named target.'),
          ('Discover a causal graph', 'causal-discovery', 'Native graphs from observational data.'),
          ('Research datasets', 'research-datasets', 'Search, inspect and load real tables to practise on.'),
-         ('Work from the CLI', 'cli', 'Scriptable commands with JSON output for agents.')]
+         ('Reuse a predictor', 'reuse', 'Predict again later without another fit.')]
 REPOSITORY = 'https://github.com/ergodic-ai/welt-python'
 ICONS = {
     'menu': '<path d="M4 6h16M4 12h16M4 18h16"/>',
@@ -329,7 +329,7 @@ def extract_code(text):
             raise SystemExit('Output panels cannot be tabbed.')
         token = f'WELTCODEBLOCK{len(rendered)}X'
         rendered.append(code_block(blocks))
-        output += [text[cursor:group[0].start()], indent + token]
+        output += [text[cursor:group[0].start()], f'\n{indent}{token}\n']
         cursor = group[-1].end()
         index += 1
     output.append(text[cursor:])
@@ -523,8 +523,9 @@ def available_models():
     return rows, snapshot['taken_at'][:10]
 
 
-MODEL_COLUMNS = ('Model', 'Task', 'Training rows', 'Columns', 'Query rows', 'Classes')
-MODEL_NOTE = 'The live catalogue is authoritative: Client().models() reports current limits and readiness.'
+MODEL_COLUMNS = ('Model', 'Task', 'Training rows', 'Features or variables', 'Query rows', 'Classes')
+MODEL_NOTE = ('Supervised rows count feature columns without the target; causal discovery counts every variable. '
+              'The live catalogue is authoritative: Client().models() reports current limits and readiness.')
 
 
 def models_table():
@@ -534,8 +535,8 @@ def models_table():
                    + '</tr>' for name, model_id, *rest in rows)
     return ('<div class="table-wrap models-table" tabindex="0" role="region" aria-label="Available models"><table><thead><tr>'
             + ''.join(f'<th scope="col">{label}</th>' for label in MODEL_COLUMNS) + '</tr></thead><tbody>' + body + '</tbody></table></div>'
-            f'<p class="table-note">Public catalogue snapshot from {html.escape(taken)}. The live catalogue is authoritative: '
-            '<code>Client().models()</code> reports current limits and readiness.</p>')
+            f'<p class="table-note">Public catalogue snapshot from {html.escape(taken)}. Supervised rows count feature columns without the target; '
+            'causal discovery counts every variable. The live catalogue is authoritative: <code>Client().models()</code> reports current limits and readiness.</p>')
 
 
 def models_markdown():
@@ -604,13 +605,14 @@ def shell(body, name, title, version, prefix='', outline='', home=False, markdow
             actions.append(f'<a href="{REPOSITORY}/blob/v{version}/docs/{name}.md">{icon("source")}<span>View source at v{version}</span></a>')
     actions.append(f'<a href="{issue}">{icon("edit")}<span>Suggest an edit</span></a>')
     rail = (f'<div class="outline-inner">{outline}</div>' if outline else '') + '<div class="page-actions">' + ''.join(actions) + '</div>'
+    inline_actions = '<div class="page-actions page-actions-inline">' + ''.join(actions) + '</div>'
     crumbs = '' if home or name == 'index' else f'<p class="crumbs">{html.escape(section)}{icon("chevron")}<span>{html.escape(title)}</span></p>'
     main = (f'<main id="main" tabindex="-1" class="home">{body}</main>' if home else
             f'<div class="layout"><nav class="sidebar" aria-label="Documentation">{side}</nav>'
-            f'<main id="main" tabindex="-1" class="article">{crumbs}{body}{pager(name, version, link)}</main>'
+            f'<main id="main" tabindex="-1" class="article">{crumbs}{body}{pager(name, version, link)}{inline_actions}</main>'
             f'<aside class="outline" aria-label="On this page">{rail}</aside></div>')
     theme_boot = "try{const t=localStorage.getItem('welt-docs-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}"
-    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Welt Python SDK {version}: DataFrame prediction, reusable predictors, research datasets, forecasting and native causal discovery."><meta name="color-scheme" content="light dark"><title>{html.escape(title)} · Welt Python SDK {version}</title><link rel="canonical" href="{canonical}"><link rel="icon" type="image/svg+xml" href="{prefix}assets/ergodic-mark-dark.svg"><link rel="preload" href="{prefix}assets/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="{prefix}assets/tokens.css"><link rel="stylesheet" href="{prefix}assets/docs.css"><script>{theme_boot}</script><script defer src="{prefix}assets/docs.js"></script></head><body data-search="{prefix}search-index.json"><a class="skip" href="#main">Skip to content</a><header class="topbar"><button id="menu" class="icon-button menu-button" type="button" aria-haspopup="dialog" aria-label="Open navigation">{icon("menu")}</button><a class="brand" href="{link('index')}"><img src="{prefix}assets/ergodic-mark-dark.svg" alt="" width="28" height="28"><strong>Welt</strong><span class="brand-sep" aria-hidden="true"></span><span class="brand-sub">Python SDK</span></a><nav class="topnav" aria-label="Main navigation">{nav}</nav><span class="spacer"></span><button id="search" class="search-trigger" type="button" aria-haspopup="dialog">{icon("search")}<span class="search-label">Search docs</span><kbd aria-hidden="true">⌘K</kbd><span class="sr-only">Search documentation</span></button><select id="version" class="version" aria-label="Documentation version">{versions}</select><button id="theme" class="icon-button" type="button" aria-label="Switch theme">{icon("theme")}</button><a class="btn btn-primary btn-sm open-console" href="https://welt.ergodic.dev">Open console</a></header>{main}<footer class="footer"><span>Welt by Ergodic · Python SDK {version}</span><span class="footer-links"><a href="https://welt.ergodic.dev">Console</a><a href="{REPOSITORY}/tree/v{version}">Release source</a><a href="https://pypi.org/project/welt-client/{version}/">PyPI</a><a href="{prefix}llms.txt">llms.txt</a></span></footer><dialog id="navigation" class="nav-dialog" aria-labelledby="navigation-title"><header><strong id="navigation-title">Documentation</strong><button type="button" class="icon-button" data-close aria-label="Close navigation">{icon("close")}</button></header><nav class="nav-dialog-sections" aria-label="Sections">{nav}</nav><nav aria-label="Mobile guide navigation">{side if name == 'reference' else sidebar}</nav></dialog><dialog id="search-dialog" class="palette" aria-labelledby="search-title"><h2 id="search-title" class="sr-only">Search SDK {version}</h2><div class="palette-input">{icon("search")}<label for="search-input" class="sr-only">Task, method or error</label><input id="search-input" type="search" autocomplete="off" placeholder="Search guides, methods and errors" role="combobox" aria-expanded="true" aria-controls="search-results" aria-autocomplete="list"><button type="button" data-close class="palette-close" aria-label="Close search"><kbd>Esc</kbd></button></div><ul id="search-results" role="listbox" aria-label="Search results"></ul><p id="search-empty">Search this SDK version by task, method or error.</p><div class="palette-footer" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> to move</span><span><kbd>↵</kbd> to open</span><span>Searching v{version}</span></div></dialog><div id="announcement" class="sr-only" role="status" aria-live="polite"></div></body></html>'''
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Welt Python SDK {version}: DataFrame prediction, reusable predictors, research datasets, forecasting and native causal discovery."><meta name="color-scheme" content="light dark"><title>{html.escape(title)} · Welt Python SDK {version}</title><link rel="canonical" href="{canonical}"><link rel="icon" type="image/svg+xml" href="{prefix}assets/ergodic-mark-dark.svg"><link rel="preload" href="{prefix}assets/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="{prefix}assets/tokens.css"><link rel="stylesheet" href="{prefix}assets/docs.css"><script>{theme_boot}</script><script defer src="{prefix}assets/docs.js"></script></head><body data-search="{prefix}search-index.json"><a class="skip" href="#main">Skip to content</a><header class="topbar"><button id="menu" class="icon-button menu-button" type="button" aria-haspopup="dialog" aria-label="Open navigation">{icon("menu")}</button><a class="brand" href="{link('index')}"><img src="{prefix}assets/ergodic-mark-dark.svg" alt="" width="28" height="28"><strong>Welt</strong><span class="brand-sep" aria-hidden="true"></span><span class="brand-sub">Python SDK</span></a><nav class="topnav" aria-label="Main navigation">{nav}</nav><span class="spacer"></span><button id="search" class="search-trigger" type="button" aria-haspopup="dialog">{icon("search")}<span class="search-label">Search docs</span><kbd class="shortcut" aria-hidden="true">⌘K</kbd><span class="sr-only">Search documentation</span></button><select id="version" class="version" data-version aria-label="Documentation version">{versions}</select><button id="theme" class="icon-button" type="button" aria-label="Switch theme">{icon("theme")}</button><a class="btn btn-primary btn-sm open-console" href="https://welt.ergodic.dev">Open console</a></header>{main}<footer class="footer"><span>Welt by Ergodic · Python SDK {version}</span><span class="footer-links"><a href="https://welt.ergodic.dev">Console</a><a href="{REPOSITORY}/tree/v{version}">Release source</a><a href="https://pypi.org/project/welt-client/{version}/">PyPI</a><a href="{prefix}llms.txt">llms.txt</a></span></footer><dialog id="navigation" class="nav-dialog" aria-labelledby="navigation-title"><header><strong id="navigation-title">Documentation</strong><button type="button" class="icon-button" data-close aria-label="Close navigation">{icon("close")}</button></header><div class="nav-dialog-tools"><select class="version" data-version aria-label="Documentation version">{versions}</select><a class="btn btn-primary btn-sm" href="https://welt.ergodic.dev">Open console</a></div><nav class="nav-dialog-sections" aria-label="Sections">{nav}</nav><nav aria-label="Mobile guide navigation">{side if name == 'reference' else sidebar}</nav></dialog><dialog id="search-dialog" class="palette" aria-labelledby="search-title"><h2 id="search-title" class="sr-only">Search SDK {version}</h2><div class="palette-input">{icon("search")}<label for="search-input" class="sr-only">Task, method or error</label><input id="search-input" type="search" autocomplete="off" placeholder="Search guides, methods and errors" role="combobox" aria-expanded="false" aria-controls="search-results" aria-autocomplete="list"><button type="button" data-close class="palette-close" aria-label="Close search"><kbd>Esc</kbd></button></div><ul id="search-results" role="listbox" aria-label="Search results"></ul><p id="search-empty">Search this SDK version by task, method or error.</p><div class="palette-footer" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> to move</span><span><kbd>↵</kbd> to open</span><span>Searching v{version}</span></div></dialog><div id="announcement" class="sr-only" role="status" aria-live="polite"></div></body></html>'''
 
 
 def notebook_home(prefix='', sdk_version='0.8.0'):
@@ -677,7 +679,7 @@ weighted avg       1.00      1.00      1.00        30'''
     hero = (f'<section class="home-hero" aria-labelledby="home-title"><p class="eyebrow"><span class="badge mono">SDK {sdk_version}</span>Python 3.11–3.13</p>'
             f'<h1 id="home-title">From a DataFrame<br><span>to a prediction.</span></h1>'
             '<p class="lead">Upload a table to your private Welt workspace, fit a qualified model and predict from Python. '
-            'The same SDK reopens predictors, forecasts time series and runs native causal discovery.</p>'
+            'The same SDK reopens predictors and runs native causal discovery.</p>'
             f'<div class="actions"><a class="btn btn-primary btn-lg" href="{link("start")}">Make your first prediction{icon("right")}</a>'
             f'<a class="btn btn-lg" href="{link("reference")}">Python reference</a></div></section>')
     steps = (f'<section class="home-band" aria-labelledby="setup-title"><div class="band-head"><h2 id="setup-title">Set up in three steps</h2>'
@@ -719,7 +721,7 @@ def llms_index(version, titles):
     lines = [f'# Welt Python SDK {version}', '',
              '> Python SDK for Welt: fit qualified tabular models on DataFrames, reuse predictors, forecast, '
              'load research datasets and run native causal discovery. Each link is this release\'s Markdown source.', '',
-             'For the hosted MCP server, CLI and product-level agent docs, see https://welt.ergodic.dev/llms.txt', '']
+             'Product-level agent access, including the hosted Welt service and console, is at https://welt.ergodic.dev', '']
     for label, pages in GUIDES:
         lines += [f'## {label}', '']
         lines += [f'- [{titles[page]}]({PUBLIC}/v{version}/{page}.md)' for _, page in pages if page in titles]

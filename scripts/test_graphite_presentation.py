@@ -156,7 +156,7 @@ def test_reference_index_links_only_existing_anchors(site):
 def test_guides_have_pager_markdown_source_edit_link_and_llms_index(site):
     _, out, version = site
     llms = (out / 'llms.txt').read_text()
-    assert 'https://welt.ergodic.dev/llms.txt' in llms
+    assert 'https://welt.ergodic.dev' in llms and 'welt.ergodic.dev/llms.txt' not in llms
     order = [page for _, pages in build_docs.guide_groups(version) for _, page in pages]
     for index, name in enumerate(order):
         page = (out / f'{name}.html').read_text()
