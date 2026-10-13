@@ -176,13 +176,18 @@ def format_signature(label, signature):
     if len(text) <= 72 or not signature.parameters:
         return text
     items, keyword_only = [], False
-    for parameter in signature.parameters.values():
+    parameters = list(signature.parameters.values())
+    for index, parameter in enumerate(parameters):
+        if items and parameters[index - 1].kind is parameter.POSITIONAL_ONLY and parameter.kind is not parameter.POSITIONAL_ONLY:
+            items.append('/')
         if parameter.kind is parameter.VAR_POSITIONAL:
             keyword_only = True
         elif parameter.kind is parameter.KEYWORD_ONLY and not keyword_only:
             items.append('*')
             keyword_only = True
         items.append(str(parameter))
+    if parameters[-1].kind is parameters[-1].POSITIONAL_ONLY:
+        items.append('/')
     tail = str(signature)[str(signature).rindex(')') + 1:]
     return f'{label}(\n' + ''.join(f'    {item},\n' for item in items) + ')' + tail
 

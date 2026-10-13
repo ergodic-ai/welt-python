@@ -260,3 +260,11 @@ def test_models_table_refuses_a_non_public_snapshot(tmp_path):
     path.write_text(json.dumps(snapshot))
     with patch.object(build_docs, 'MODELS_SNAPSHOT', path), pytest.raises(SystemExit, match='only a snapshot of'):
         build_docs.models_table()
+
+
+def test_wrapped_signatures_keep_positional_only_and_keyword_only_markers():
+    import inspect
+    def sample(first_positional_argument, second_positional_argument, /, normal_argument=1, *, keyword_argument=2): pass
+    text = build_docs.format_signature('Sample.method', inspect.signature(sample))
+    assert text.split('\n')[1:-1] == ['    first_positional_argument,', '    second_positional_argument,', '    /,',
+                                       '    normal_argument=1,', '    *,', '    keyword_argument=2,']
