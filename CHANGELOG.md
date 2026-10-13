@@ -1,4 +1,4 @@
-# 0.11.0 — Forecast estimator (pending publication)
+# 0.11.0 (2026-10-13) — Forecast estimator and redesigned documentation
 
 - Add zero-shot `Forecast.fit`, `predict`, `predict_quantiles`, `predict_details`
   and `submit_predict` with owned regular UTC history and frozen workspace/model/
