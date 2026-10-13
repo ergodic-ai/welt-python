@@ -186,7 +186,8 @@ returns an `Evaluation`: `summary()` is the leaderboard against a baseline, `fol
 and `predictions()` are DataFrames, `show()` displays the HTML report in Jupyter and
 `report_link()` creates a signed link anyone holding it can open for up to seven days.
 `evaluation.fit()` then fits the chosen model on the full dataset. Requires SDK0.12
-and the matching server capability. [Evaluations guide](https://ergodic-ai.github.io/welt-python/evaluations.html).
+and a server release with evaluations; an older server raises `NotFoundError` with
+`code="evaluations_unavailable"`. [Evaluations guide](https://ergodic-ai.github.io/welt-python/evaluations.html).
 
 ## Forecast a time series
 

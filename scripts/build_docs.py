@@ -168,9 +168,9 @@ FORECAST_METHODS = {
  'predict_details': ('Submit one guarded run, wait and validate native provenance and exact request expectations.', 'Immutable ForecastResult; properties and conversions share this one run.', METHODS['predict_quantiles'][2]),
  'submit_predict': ('Submit one guarded durable forecast without waiting; retain job.id.', 'ForecastJob owning its new client; close explicitly or use a context manager.', METHODS['predict_quantiles'][2])}
 METHODS.update({
- 'submit_evaluation': ('Cross-validate models on a dataset ID, or upload a DataFrame, array, CSV or Parquet table with its target first. Empty models lets Welt choose every eligible model. Options are checked locally before any upload.', 'Evaluation (await for AsyncClient: AsyncEvaluation) with its ID, models, skipped models and estimated_credits.', 'ValueError for invalid options, targets or split columns before upload; InvalidInputError for server refusals (codes invalid_input, workload_limit, budget_exceeded, no_eligible_models with error.details); ModelUnavailableError; ConflictError for a reused key with different inputs; TransportError names the dataset ID and key for a replay. Not retried automatically.'),
+ 'submit_evaluation': ('Cross-validate models on a dataset ID, or upload a DataFrame, array, CSV or Parquet table with its target first. Empty models lets Welt choose every eligible model. Options are checked locally before any upload.', 'Evaluation (await for AsyncClient: AsyncEvaluation) with its ID, models, skipped models and estimated_credits.', 'ValueError for invalid options, targets or split columns before upload; InvalidInputError for server refusals (codes invalid_input, workload_limit, budget_exceeded, no_eligible_models with error.details); ModelUnavailableError; ConflictError for a reused key with different inputs; NotFoundError code evaluations_unavailable on a server without evaluations; TransportError names the dataset ID and key for a replay. Not retried automatically.'),
  'evaluate': ('Submit an evaluation and wait for it within a local timeout.', 'Finished Evaluation or AsyncEvaluation; partially_completed returns with an EvaluationWarning.', 'Submission errors; ExecutionError when no model finished; JobCancelledError; JobTimeoutError naming the evaluation, which keeps running.'),
- 'evaluation': ('Reopen one evaluation by ID under current workspace authority; no new work.', 'Evaluation (await for AsyncClient: AsyncEvaluation).', 'NotFoundError for a missing, deleted or foreign evaluation; authentication or permission errors.'),
+ 'evaluation': ('Reopen one evaluation by ID under current workspace authority; no new work.', 'Evaluation (await for AsyncClient: AsyncEvaluation).', 'NotFoundError for a missing, deleted or foreign evaluation, or code evaluations_unavailable on a server without evaluations; authentication or permission errors.'),
  'evaluations': ('List the workspace\'s evaluations.', 'List of Evaluation or AsyncEvaluation handles.', 'Authentication, permission or transport errors.')})
 EVALUATION_METHODS = {
  'refresh': ('Read the evaluation\'s current state and per-model progress.', 'The same handle (self), updated (await for AsyncEvaluation).', 'NotFoundError after deletion; authentication, permission or transport errors.'),
@@ -181,11 +181,11 @@ EVALUATION_METHODS = {
  'folds': ('Read per-fold metrics for every model and the baseline.', 'Long pandas.DataFrame with model_id, fold, rows, metric and value (NaN when undefined).', 'ConflictError result_not_ready or result_unavailable; NotFoundError.'),
  'predictions': ('Read out-of-fold predictions for every evaluated row.', 'pandas.DataFrame with row_index, fold, actual, one column per model and baseline, and <model>:p(<class>) probabilities for classification.', 'ResultExpiredError (410) after seven days; ConflictError before results exist.'),
  'report_html': ('Read the self-contained HTML report (no script, no external resources); cached once read.', 'HTML document string.', 'ConflictError result_not_ready or result_unavailable; NotFoundError.'),
- 'report_link': ('Create a signed report URL that anyone holding it can open without signing in, for 1–7 days.', 'ReportLink whose url is returned only now; repr hides it.', 'ValueError for days outside 1–7; ConflictError when no report exists; at most 20 live links.'),
+ 'report_link': ('Create a signed report URL that anyone holding it can open without signing in, for 1–7 days. A key-created link never outlives the key.', 'ReportLink whose url is returned only now; repr hides it.', 'ValueError for days outside 1–7; ConflictError when no report exists; at most 20 live links.'),
  'report_links': ('List the evaluation\'s report links without their URLs.', 'List of ReportLink with url None.', 'NotFoundError; authentication or permission errors.'),
- 'revoke_report_link': ('Revoke one report link by ID or ReportLink; it then returns 410.', 'None.', 'NotFoundError for an unknown link.'),
- 'show': ('Display the report in Jupyter, or the status of an unfinished evaluation. Styles stay scoped to the report.', 'None (await for AsyncEvaluation).', 'OptionalDependencyError without IPython; report read errors.'),
- 'fit': ('Submit a new fit of the chosen model (default: the leaderboard\'s first) on the full stored dataset with the evaluation\'s seed. Not a promotion of a fold context.', 'Fitted Classifier or Regressor (await for AsyncEvaluation).', 'ValueError for an unranked model or an evaluation with split columns; ConflictError before results exist; fit errors and JobTimeoutError.'),
+ 'revoke_report_link': ('Revoke one report link by ID or ReportLink; it then returns 410.', 'None.', 'NotFoundError for an unknown link; PermissionDeniedError for a read-only key.'),
+ 'show': ('Display the report in Jupyter inside a sandboxed iframe (no script, no network loads, no notebook restyling), or the status of an unfinished evaluation.', 'None (await for AsyncEvaluation).', 'OptionalDependencyError without IPython; report read errors.'),
+ 'fit': ('Submit a new fit of the chosen model (default: the leaderboard\'s first) on the full stored dataset with the evaluation\'s seed and the model\'s current version; warns with EvaluationWarning if that differs from the evaluated version. Not a promotion of a fold context.', 'Fitted Classifier or Regressor (await for AsyncEvaluation).', 'ValueError for an unranked model or an evaluation with split columns; ConflictError before results exist; fit errors and JobTimeoutError.'),
  'to_dict': ('Copy the last evaluation resource read from the server.', 'Independent dictionary with status, provenance (fold_sha256, versions), models, skipped and summary.', 'No remote call.')}
 TYPED_FORECAST_METHODS = {
  'result': ('Wait within a local budget, validate durable task/version/result identities and preserve native values.', 'ForecastResult (await for AsyncForecastJob). Estimator jobs also validate exact submitted context/horizon/future times/levels; reconnects cannot reconstruct missing original context.', 'Typed remote errors, JobTimeoutError retaining job_id, or InvalidForecastResultError. No resubmission, repair or implicit cancellation.'),
@@ -248,7 +248,7 @@ def reference():
         if name == 'Forecast':
             parts.append('Zero-shot local history context, not a durable Predictor. See [forecasting](forecasting.md) for input/time/version/ownership rules; no score or automatic cross-validation contract.')
         if name == 'Evaluation':
-            parts.append('Cross-validated comparison handle; see [evaluations](evaluations.md). Properties: id, status, stage, finished, task, dataset_id, target, rows, primary_metric, positive_class, classes, models, skipped, estimated_credits, comparison, warnings and predictions_expires_at. Values are owned copies. Reads borrow the client.')
+            parts.append('Cross-validated comparison handle; see [evaluations](evaluations.md). Properties: id, status, stage, finished, task, dataset_id, target, rows, primary_metric, positive_class, classes, models, skipped, estimated_credits, credits (settled, None until then), runtime, comparison, warnings and predictions_expires_at. Values are owned copies. Reads borrow the client.')
         if name == 'ForecastResult':
             parts.append('Immutable native result with job_id, model_id, model_version, configuration, timestamps, predictions, quantile_levels and quantiles properties. Arrays/dictionaries are owned copies; native medians and quantiles carry no calibrated coverage claim.')
         for key, method in inspect.getmembers(obj, inspect.isroutine):
@@ -493,7 +493,7 @@ def current_redirect(page):
 
 
 # Published historical documentation folders (v<version>/), oldest first.
-HISTORICAL_VERSIONS = ('0.6.0', '0.7.0', '0.7.1', '0.8.0', '0.9.1', '0.10.0', '0.10.1')
+HISTORICAL_VERSIONS = ('0.6.0', '0.7.0', '0.7.1', '0.8.0', '0.9.1', '0.10.0', '0.10.1', '0.11.0')
 
 
 def release_tuple(version):

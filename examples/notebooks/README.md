@@ -10,6 +10,8 @@ needed. Do not save keys or outputs into Git.
   held-out MAE/RMSE/R². Related experiments can make random-split scores optimistic.
 - Async jobs: the Iris workflow with durable submission, a retained job ID and async waiting.
 - Artifacts and usage: the Iris workflow, then reopen that fit and inspect operation metadata.
+- Compare models: the Iris split, then cross-validation of the available models on the 120 training
+  rows, the leaderboard, fold metrics, report and a link, then a fit of the chosen model checked on the 30 test rows.
 - Research datasets: search, select a fixed reviewed Iris asset, then the complete modelling workflow.
 - Causal discovery: real Iris measurements, all150 rows/four continuous variables;
   native Arrow output inspection, no ground-truth causal accuracy or effect claim.

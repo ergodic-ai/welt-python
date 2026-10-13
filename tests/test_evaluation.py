@@ -11,9 +11,10 @@ import pandas as pd
 import pytest
 
 from welt import (AsyncClient, AsyncEvaluation, Classifier, Client, ConflictError, Evaluation, EvaluationWarning,
-                  ExecutionError, InvalidInputError, JobCancelledError, JobTimeoutError, Regressor, ReportLink,
+                  ExecutionError, InvalidInputError, JobCancelledError, JobTimeoutError, NotFoundError, Regressor,
+                  ReportLink,
                   ResultExpiredError, TransportError, WeltError)
-from welt.evaluation import _scoped, notebook_html
+from welt.evaluation import _POLICY, notebook_html
 
 CLASSIFICATION = ("roc_auc", "log_loss", "accuracy")
 REGRESSION = ("rmse", "mae", "r2")
@@ -45,6 +46,8 @@ class Service:
         self.lose_response = False
         self.error = None
         self.report = REPORT
+        self.fitted_version = None
+        self.report_status = 200
 
     def resource(self, body, identity):
         metrics = CLASSIFICATION if body["task"] == "classification" else REGRESSION
@@ -121,7 +124,8 @@ class Service:
             return httpx.Response(200, json=dict(id="job_fit", operation="fit", status="succeeded", predictor_id="pred_1"))
         if path == "/v1/predictors/pred_1":
             fit = json.loads([r.content for r in self.requests if r.url.path == "/v1/fits"][-1])
-            return httpx.Response(200, json=dict(id="pred_1", model_id=fit["model_id"], model_version="v1",
+            return httpx.Response(200, json=dict(id="pred_1", model_id=fit["model_id"],
+                model_version=self.fitted_version or fit["model_id"] + "-v1",
                 configuration=fit["configuration"], seed=fit["seed"], task=fit["task"], columns=["x1", "x2"],
                 classes=["no", "yes"] if fit["task"] == "classification" else None))
         parts = path.split("/")
@@ -164,6 +168,8 @@ class Service:
                                                                    for a in actual] if classification else None)
                         for m in ranked}))
         if tail == "report":
+            if self.report_status != 200:
+                return httpx.Response(self.report_status, json={"error": {"code": "result_unavailable", "message": "No."}})
             return httpx.Response(200, text=self.report, headers={"content-type": "text/html; charset=utf-8"})
         if tail == "report-links" and method == "POST":
             identity = f"rl_{len(self.links) + 1}"
@@ -431,36 +437,44 @@ def test_report_route_must_return_html():
     assert invalid.value.code == "invalid_response"
 
 
-def stylesheets(markup):
-    return re.findall(r"<style[^>]*>(.*?)</style>", markup, re.S)
+def outer_tags(markup):
+    """Tags outside the escaped srcdoc attribute: only the wrapper and the frame."""
+    return re.findall(r"<(/?[a-zA-Z]+)", markup)
 
 
-def test_notebook_html_uses_only_the_scoped_report_body(service):
+def srcdoc(markup):
+    import html as markup_html
+    return markup_html.unescape(re.search(r'srcdoc="([^"]*)"', markup)[1])
+
+
+def test_notebook_html_always_isolates_the_report_in_a_sandboxed_frame(service):
     service.polls = 1
     with client_for(service) as client:
         evaluation = client.evaluate("ds_existing", task="classification")
         markup = evaluation._repr_html_()
-    assert markup.startswith('<div class="welt-report">') and markup.endswith("</div>")
-    assert "<html" not in markup and "<head" not in markup and "html,body" not in markup
-    assert "min-height:100vh" not in markup and "Churn &lt;b&gt;" in markup
-    assert stylesheets(markup) and all(_scoped(css) for css in stylesheets(markup))
+    assert outer_tags(markup) == ["div", "iframe", "/iframe", "/div"]
+    assert '<iframe title="Welt evaluation report" sandbox="" ' in markup and "allow-" not in markup
+    assert _POLICY == ('<meta http-equiv="Content-Security-Policy" '
+                       "content=\"default-src 'none'; style-src 'unsafe-inline'; img-src data:\">")
+    assert srcdoc(markup) == "<!doctype html>" + _POLICY + REPORT[len("<!doctype html>"):]  # Otherwise unchanged.
 
 
-@pytest.mark.parametrize("css", ["body{margin:0}", ".welt-report{color:red} h1{margin:0}",
-                                 ".welt-report a,p{color:red}", "@font-face{font-family:x}",
-                                 "@import url(x.css);", ".welt-reporting{color:red}",
-                                 ".welt-report{color:red", ".welt-report{a{color:red}}"])
-def test_unscoped_report_styles_are_isolated_in_a_sandboxed_iframe(css):
-    document = REPORT.replace(".welt-report{--wr-bg:#fafafa;", css + ".welt-report{--wr-bg:#fafafa;")
+@pytest.mark.parametrize("body", ['<img src=x onerror="alert(1)">', "<svg onload=alert(1)>",
+                                  '<a href="javascript:alert(1)">x</a>', '<iframe src="https://example.com">',
+                                  '<img src="https://example.com/beacon">', "</div><div onclick=alert(1)>x</div>",
+                                  "<script>alert(1)</script>", '<style>body{display:none}</style>',
+                                  '<style>.welt-report ~ *{display:none}</style>', '<link rel="stylesheet" href="x">'])
+def test_hostile_report_markup_never_reaches_the_notebook_page(body):
+    document = f'<!doctype html><html><body><div class="welt-report">{body}</div></body></html>'
     markup = notebook_html(document)
-    assert markup.startswith('<iframe title="Welt evaluation report" sandbox=""')
-    assert "<style" not in markup and "&lt;style&gt;" in markup and 'srcdoc="&lt;!doctype html&gt;' in markup
+    assert outer_tags(markup) == ["div", "iframe", "/iframe", "/div"]
+    assert body not in markup and "<style" not in markup
+    assert srcdoc(markup).endswith(body + "</div></body></html>")
+    assert "Content-Security-Policy" in srcdoc(markup).split("<html>")[0]  # Policy precedes all content.
 
 
-def test_scope_check_accepts_the_report_patterns():
-    assert _scoped(".welt-report{x:1}@media (max-width: 700px){.welt-report .wr-grid{display:block}}"
-                   ".welt-report table td:nth-child(2),.welt-report>p{x:2}/* comment */")
-    assert notebook_html("<html><body><script>alert(1)</script></body></html>").startswith("<iframe")
+def test_documents_without_a_doctype_get_the_policy_first():
+    assert srcdoc(notebook_html("<p>x</p>")).startswith('<meta http-equiv="Content-Security-Policy"')
 
 
 def test_unfinished_and_unreachable_reports_show_a_status_table(service):
@@ -483,7 +497,30 @@ def test_show_displays_the_report_in_jupyter(service, monkeypatch):
         evaluation = client.submit_evaluation("ds_existing", task="classification")
         evaluation.show()
         evaluation.wait().show()
-    assert shown[0].startswith('<div class="welt-evaluation">') and shown[1].startswith('<div class="welt-report">')
+    assert shown[0].startswith('<div class="welt-evaluation">')
+    assert shown[1].startswith('<div class="welt-evaluation-report"><iframe')
+
+
+def test_show_emits_no_ipython_iframe_warning(service):
+    import IPython.display
+    service.polls = 1
+    with client_for(service) as client:
+        evaluation = client.evaluate("ds_existing", task="classification")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            IPython.display.HTML(evaluation._repr_html_())
+
+
+def test_a_failed_report_read_is_not_retried_on_every_display(service):
+    service.polls, service.report_status = 1, 409
+    with client_for(service) as client:
+        evaluation = client.evaluate("ds_existing", task="classification")
+        first, second = evaluation._repr_html_(), evaluation._repr_html_()
+        assert first == second and first.startswith('<div class="welt-evaluation">')
+        reads = [p for _, p in service.routes()].count("/v1/evaluations/ev_1/report")
+        assert reads == 1
+        service.report_status = 200
+        assert evaluation.refresh()._repr_html_().startswith('<div class="welt-evaluation-report">')
 
 
 def test_fit_runs_a_new_full_data_fit_of_the_chosen_model(service):
@@ -502,6 +539,97 @@ def test_fit_runs_a_new_full_data_fit_of_the_chosen_model(service):
     assert list(model.classes_) == ["no", "yes"] and list(model.feature_names_in_) == ["x1", "x2"]
     assert model.random_state == 11 and "fixture-only" not in repr(model)
     assert isinstance(regressor, Regressor) and fits[1]["model_id"] == "tabdpt-1.3"
+
+
+def test_fit_warns_when_the_fitted_version_differs_from_the_evaluated_one(service):
+    service.polls, service.fitted_version = 1, "tabicl-v2-v2"
+    with client_for(service) as client:
+        evaluation = client.evaluate("ds_existing", task="classification")
+        with pytest.warns(EvaluationWarning, match="evaluated as version tabicl-v2-v1 but fitted as tabicl-v2-v2"):
+            model = evaluation.fit()
+    assert model.model_version_ == "tabicl-v2-v2"
+
+
+def test_fit_matching_version_does_not_warn(service):
+    service.polls = 1
+    with client_for(service) as client:
+        evaluation = client.evaluate("ds_existing", task="classification")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert evaluation.fit().model_version_ == "tabicl-v2-v1"
+
+
+def test_mixed_type_labels_keep_one_probability_column_per_class():
+    from welt.evaluation import predictions_frame
+    data = dict(evaluation_id="ev_1", task="classification", classes=[1, "1", "a"], row_index=[0, 1, 2],
+                fold=[0, 1, 2], actual=[1, "1", "a"], expires_at="2026-10-20",
+                models={"tabicl-v2": dict(predictions=[1, "1", "a"],
+                                          probabilities=[[0.7, 0.2, 0.1], [0.1, 0.8, 0.1], [0.1, 0.1, 0.8]])})
+    frame = predictions_frame(data, "ev_1")
+    assert list(frame.columns[3:]) == ["tabicl-v2", "tabicl-v2:p(1)", "tabicl-v2:p('1')", "tabicl-v2:p('a')"]
+    assert frame["tabicl-v2:p('1')"].tolist() == [0.2, 0.8, 0.1]
+    data["classes"] = ["x", "y"]
+    data["models"]["tabicl-v2"]["probabilities"] = [[0.5, 0.5]] * 3
+    assert list(predictions_frame(data, "ev_1").columns[-2:]) == ["tabicl-v2:p(x)", "tabicl-v2:p(y)"]
+
+
+def test_a_server_without_evaluations_gets_an_explicit_error():
+    def old_server(request):
+        if request.url.path == "/v1/datasets":
+            return httpx.Response(201, json={"id": "ds_1"})
+        return httpx.Response(404, json={"detail": "Not Found"})
+    with Client(api_key="fixture-only", transport=httpx.MockTransport(old_server)) as client:
+        with pytest.raises(NotFoundError) as missing:
+            client.submit_evaluation(table(), "label", task="classification")
+        assert missing.value.code == "evaluations_unavailable" and "dataset ds_1" in str(missing.value)
+        for call in (lambda: client.evaluations(), lambda: client.evaluation("ev_1")):
+            with pytest.raises(NotFoundError, match="does not offer evaluations"):
+                call()
+    def new_server(request):  # A missing dataset keeps the server's own not_found error.
+        return httpx.Response(404, json={"error": {"code": "not_found", "message": "Resource not found."}})
+    with Client(api_key="fixture-only", transport=httpx.MockTransport(new_server)) as client:
+        with pytest.raises(NotFoundError) as dataset:
+            client.submit_evaluation("ds_missing", task="classification")
+    assert dataset.value.code == "not_found"
+
+    async def run():
+        async with AsyncClient(api_key="fixture-only", transport=httpx.MockTransport(old_server)) as client:
+            with pytest.raises(NotFoundError, match="does not offer evaluations"):
+                await client.submit_evaluation("ds_1", task="classification")
+    asyncio.run(run())
+
+
+def test_settled_credits_and_runtime():
+    service = Service(polls=1)
+    original = service.finish
+    service.finish = lambda e: (original(e), e.update(credits=7, runtime={"numpy": "2.3.0"}))
+    with client_for(service) as client:
+        evaluation = client.submit_evaluation("ds_existing", task="classification")
+        assert evaluation.credits is None and evaluation.runtime == {}
+        evaluation.wait()
+    assert evaluation.credits == 7 and evaluation.runtime == {"numpy": "2.3.0"}
+
+
+def test_published_evaluation_example_runs_and_saves_utf8(service, tmp_path, monkeypatch, capsys):
+    import runpy
+    import sys
+    from pathlib import Path
+    service.polls = 1
+    service.report = REPORT.replace("Churn", "Churn → ±")
+    initialize = Client.__init__
+    def isolated(self, *args, **kwargs):
+        kwargs.update(api_key="fixture-only", transport=httpx.MockTransport(service))
+        initialize(self, *args, **kwargs)
+    monkeypatch.setattr(Client, "__init__", isolated)
+    path = tmp_path / "train.csv"
+    table().to_csv(path, index=False)
+    report = tmp_path / "report.html"
+    example = Path(__file__).resolve().parents[1] / "examples/evaluation.py"
+    monkeypatch.setattr(sys, "argv", [str(example), str(path), "--target", "label", "--task", "classification",
+                                      "--folds", "3", "--report", str(report)])
+    runpy.run_path(str(example), run_name="__main__")
+    assert report.read_bytes().decode("utf-8") == service.report
+    assert "Skipped: kumo-medium workload_limit" in capsys.readouterr().out
 
 
 def test_fit_refuses_when_the_stored_dataset_has_split_columns(service):
@@ -538,7 +666,7 @@ def test_async_parity_and_requests():
                       await evaluation.predictions(), await evaluation.report_html(), await evaluation.report_link(),
                       await evaluation.report_links(), (await evaluation.fit()).predictor_id_,
                       [e.id for e in await client.evaluations()]]
-            assert evaluation._repr_html_().startswith('<div class="welt-report">')
+            assert evaluation._repr_html_().startswith('<div class="welt-evaluation-report">')
             assert (await client.evaluation(evaluation.id)).id == evaluation.id
             await evaluation.revoke_report_link("rl_1")
             await evaluation.delete()

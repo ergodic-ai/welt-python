@@ -39,7 +39,7 @@ class NotebookViews(TestCase):
             index = Page((site / 'notebooks.html').read_text())
             self.assertNotIn('{{actions:', (site / 'notebooks.html').read_text())
             notebooks = sorted((build_docs.ROOT / 'examples/notebooks').glob('*.ipynb'))
-            self.assertEqual(len(notebooks), 6)
+            self.assertEqual(len(notebooks), 7)
             for source in notebooks:
                 name = source.stem
                 revision = build_docs.subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=build_docs.ROOT, text=True).strip()

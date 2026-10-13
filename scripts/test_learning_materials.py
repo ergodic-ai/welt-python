@@ -59,7 +59,10 @@ class TeachingSources(unittest.TestCase):
             for forbidden in ('estimator_transport','from support','MockTransport','make_classification','np.random'):
                 self.assertNotIn(forbidden,code)
             if path.stem!='causal-discovery':
-                self.assertLess(code.index('train_test_split('),code.index('model.fit(') if 'model.fit(' in code else code.index('model.submit_fit('))
+                fit = next(call for call in ('model.fit(', 'model.submit_fit(', 'evaluation.fit(') if call in code)
+                self.assertLess(code.index('train_test_split('),code.index(fit))
+                if path.stem=='evaluation':  # Cross-validation sees only the training rows.
+                    self.assertIn('client.evaluate(train, target',code)
                 self.assertIn('test.drop(columns=target)',code)
                 self.assertTrue('accuracy_score' in code or 'mean_absolute_error' in code)
             for cell in notebook['cells']:

@@ -19,8 +19,8 @@ import pandas as pd
 
 from .client import _deadline, _failed, _id, _wait
 from .credentials import secret
-from .errors import (ConflictError, JobTimeoutError, OptionalDependencyError, TransportError, WeltError,
-                     safe_id)
+from .errors import (ConflictError, JobTimeoutError, NotFoundError, OptionalDependencyError, TransportError,
+                     WeltError, safe_id)
 
 TASKS = ("classification", "regression")
 SPLITS = ("auto", "kfold", "stratified", "group", "custom")
@@ -115,6 +115,16 @@ def key(idempotency_key):
     return idempotency_key or uuid4().hex
 
 
+def unavailable(error, dataset_id=None):
+    """A 404 without Welt's error envelope means the server has no evaluation routes."""
+    if isinstance(error, WeltError) and error.status_code == 404 and error.code == "unknown":
+        uploaded = f" The table was uploaded as dataset {dataset_id}." if safe_id(dataset_id) else ""
+        return NotFoundError("This Welt server does not offer evaluations (no /v1/evaluations route). Use a server "
+                             "release with evaluations, or upgrade the deployment." + uploaded,
+                             code="evaluations_unavailable", status_code=404)
+    return error
+
+
 def replay_error(dataset_id, idempotency_key):
     """The evaluation may have been accepted; replaying the same key and body reconnects to it."""
     return TransportError(
@@ -189,6 +199,16 @@ def folds_frame(data, evaluation_id):
     return frame.astype({"fold": "int64", "rows": "int64", "value": "float64"})
 
 
+def _labels(classes):
+    """Printed class labels for column names; repr() when labels of different types print alike."""
+    names = [str(c) for c in classes]
+    if len(set(names)) != len(names):
+        names = [repr(c) for c in classes]
+    if len(set(names)) != len(names):
+        raise ValueError()
+    return names
+
+
 def predictions_frame(data, evaluation_id):
     try:
         if data["evaluation_id"] != evaluation_id:
@@ -196,6 +216,7 @@ def predictions_frame(data, evaluation_id):
         n = len(data["row_index"])
         frame = dict(row_index=list(data["row_index"]), fold=list(data["fold"]), actual=list(data["actual"]))
         classes = data.get("classes")
+        labels = _labels(classes) if data["task"] == "classification" and classes is not None else None
         if len(frame["fold"]) != n or len(frame["actual"]) != n:
             raise ValueError()
         for model_id, output in data["models"].items():
@@ -206,7 +227,7 @@ def predictions_frame(data, evaluation_id):
                 raise ValueError()
             if data["task"] == "classification" and probabilities is not None:
                 matrix = np.asarray(probabilities, dtype=float).reshape(n, len(classes))
-                columns += [f"{model_id}:p({c})" for c in classes]
+                columns += [f"{model_id}:p({c})" for c in labels]
             if any(c in frame for c in columns):
                 raise ValueError()
             frame[model_id] = values
@@ -256,56 +277,25 @@ def _link_id(link):
 
 # --- Notebook display ----------------------------------------------------------------
 
-_BODY = re.compile(r"<body[^>]*>(.*)</body>", re.S | re.I)
-_STYLE = re.compile(r"<style[^>]*>(.*?)</style>", re.S | re.I)
-_SCOPE = re.compile(r"\.welt-report(?![\w-])")
-
-
-def _scoped(css):
-    """True when every style rule only selects inside ``.welt-report`` (within @media groups)."""
-    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
-    if "@import" in css.lower():
-        return False
-    stack, start = [], 0
-    for position, character in enumerate(css):
-        if character == "{":
-            header = css[start:position].strip()
-            if stack and stack[-1] == "rule":
-                return False  # Nested rules are not expected; refuse rather than guess.
-            if header.startswith("@media") or header.startswith("@supports"):
-                stack.append("group")
-            elif header.startswith("@") or not header:
-                return False
-            elif all(_SCOPE.match(s.strip()) for s in header.split(",")):
-                stack.append("rule")
-            else:
-                return False
-            start = position + 1
-        elif character == "}":
-            if not stack:
-                return False
-            stack.pop()
-            start = position + 1
-        elif character == ";" and (not stack or stack[-1] == "group"):
-            start = position + 1
-    return not stack
+# The server's report policy, applied again inside the frame: nothing loads or runs.
+_POLICY = ('<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; '
+           'style-src \'unsafe-inline\'; img-src data:">')
+_DOCTYPE = re.compile(r"\s*<!doctype[^>]*>", re.I)
 
 
 def notebook_html(document):
-    """The report for notebook output, never leaking styles into the notebook page.
+    """The report isolated in a sandboxed iframe for notebook output.
 
-    The scoped ``.welt-report`` body is used when every stylesheet rule is scoped to it;
-    otherwise the whole document is isolated in a sandboxed iframe.
+    ``sandbox=""`` (no ``allow-scripts``) stops scripts, forms and navigation of the
+    notebook, the frame's own policy blocks every network load, and the report's styles
+    cannot reach the notebook page. Nothing from the document is inlined.
     """
-    match = _BODY.search(document)
-    fragment = match.group(1).strip() if match else ""
-    lowered = fragment.lower()
-    if (fragment.startswith('<div class="welt-report">') and fragment.endswith("</div>")
-            and "<script" not in lowered and "<link" not in lowered
-            and all(_scoped(css) for css in _STYLE.findall(fragment))):
-        return fragment
-    return ('<iframe title="Welt evaluation report" sandbox="" style="width:100%;height:900px;border:0" '
-            f'srcdoc="{html.escape(document, quote=True)}"></iframe>')
+    doctype = _DOCTYPE.match(document)
+    cut = doctype.end() if doctype else 0
+    framed = document[:cut] + _POLICY + document[cut:]
+    return ('<div class="welt-evaluation-report"><iframe title="Welt evaluation report" sandbox="" '
+            'referrerpolicy="no-referrer" style="width:100%;height:900px;border:0" '
+            f'srcdoc="{html.escape(framed, quote=True)}"></iframe></div>')
 
 
 def status_html(payload, hint=None):
@@ -374,13 +364,18 @@ def fit_request(payload, model_id):
         raise ValueError("This evaluation removed its split column from the features, but a fit on the stored "
                          "dataset would use it as a feature. Fit explicitly on a table without that column, "
                          "for example Classifier(model=...).fit(table.drop(columns=[...]), target=...).")
-    configuration = next((m.get("configuration") for m in payload["models"] if m["model_id"] == model_id), None)
+    evaluated = next(m for m in payload["models"] if m["model_id"] == model_id)
     return dict(dataset_id=payload["dataset_id"], model=model_id, task=payload["task"],
-                configuration=configuration or "default", seed=payload["seed"])
+                configuration=evaluated.get("configuration") or "default", seed=payload["seed"]), evaluated
 
 
-def fitted(predictor, task, client):
+def fitted(predictor, evaluated, task, client):
     from .estimators import Classifier, Regressor
+    if predictor.get("model_version") != evaluated.get("model_version"):
+        warn(EvaluationWarning(
+            f"{evaluated['model_id']} was evaluated as version {evaluated.get('model_version')} but fitted as "
+            f"{predictor.get('model_version')}: the catalogue changed since the evaluation, so its scores describe "
+            "a different version. Evaluate again to compare the current one."), stacklevel=3)
     estimator = Classifier if task == "classification" else Regressor
     return estimator._from_metadata(predictor, base_url=client.base_url, api_key=client.api_key)
 
@@ -391,12 +386,13 @@ class _EvaluationView:
     """Local state shared by Evaluation and AsyncEvaluation; no request is made here."""
 
     def __init__(self, client, payload):
-        self.client, self._report = client, None
+        self.client, self._report, self._report_failed = client, None, False
         self._payload = _validated(payload, None, secret(client.api_key))
         self.id = self._payload["id"]
 
     def _update(self, payload):
         self._payload = _validated(payload, self.id, secret(self.client.api_key))
+        self._report_failed = False  # A fresh read may make the report available again.
         return self
 
     def __repr__(self):
@@ -457,6 +453,16 @@ class _EvaluationView:
     @property
     def estimated_credits(self):
         return self._payload.get("estimated_credits")
+
+    @property
+    def credits(self):
+        """Credits settled at the outcome; None until the evaluation settles."""
+        return self._payload.get("credits")
+
+    @property
+    def runtime(self):
+        """Library versions the server used to compute the metrics."""
+        return deepcopy(self._payload.get("runtime") or {})
 
     @property
     def comparison(self):
@@ -533,18 +539,18 @@ class Evaluation(_EvaluationView):
         _display(notebook_html(self.report_html()) if self.finished else self._status())
 
     def _repr_html_(self):
-        if self.finished and self._payload.get("report_available"):
+        if self.finished and self._payload.get("report_available") and not self._report_failed:
             try:
                 return notebook_html(self.report_html())
             except Exception:  # A notebook repr never raises; the status table remains useful.
-                pass
+                self._report_failed = True  # Not retried on every display until refresh().
         return self._status()
 
     def fit(self, model_id=None, *, timeout=600, idempotency_key=None):
         """Fit the chosen model on the full stored dataset: a new fit, not a promoted fold context."""
-        request = fit_request(self._payload, model_id)
+        request, evaluated = fit_request(self._payload, model_id)
         job = self.client.submit_fit(request.pop("dataset_id"), **request, idempotency_key=idempotency_key)
-        return fitted(job.result(timeout=timeout), self.task, self.client)
+        return fitted(job.result(timeout=timeout), evaluated, self.task, self.client)
 
 
 class AsyncEvaluation(_EvaluationView):
@@ -610,6 +616,6 @@ class AsyncEvaluation(_EvaluationView):
 
     async def fit(self, model_id=None, *, timeout=600, idempotency_key=None):
         """Fit the chosen model on the full stored dataset: a new fit, not a promoted fold context."""
-        request = fit_request(self._payload, model_id)
+        request, evaluated = fit_request(self._payload, model_id)
         job = await self.client.submit_fit(request.pop("dataset_id"), **request, idempotency_key=idempotency_key)
-        return fitted(await job.result(timeout=timeout), self.task, self.client)
+        return fitted(await job.result(timeout=timeout), evaluated, self.task, self.client)

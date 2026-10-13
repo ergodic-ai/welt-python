@@ -42,6 +42,13 @@ Evaluate Iris, reopen the same predictor and inspect its operation events.
 
 {{actions:artifacts-and-usage}}
 
+## [Compare models](notebook-evaluation.html)
+
+Hold out Iris test rows, cross-validate models on the rest, read the leaderboard and the
+report, then fit the chosen model and check it once on the test rows.
+
+{{actions:evaluation}}
+
 ## [Research datasets](notebook-research-datasets.html)
 
 Search the catalogue, inspect a fixed eligible asset and complete your first

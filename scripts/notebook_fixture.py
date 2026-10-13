@@ -13,6 +13,72 @@ class SyntheticService:
     def __init__(self):
         self.data, self.fitted, self.job_records, self.events = {}, {}, {}, []
         self.regression_coefficients = {}
+        self.evaluations = {}
+
+    def evaluation(self, value):
+        """Constant evaluation wire shapes on the stored rows; no cross-validation is computed."""
+        ds = self.data[value['dataset_id']]
+        target = ds['target']
+        labels = [row[ds['columns'].index(target)] for row in ds['rows']]
+        task, k = value['task'], value['folds'] or 5
+        classification = task == 'classification'
+        classes = sorted(set(labels)) if classification else None
+        metrics = (['roc_auc', 'log_loss', 'brier', 'accuracy', 'balanced_accuracy', 'f1_macro', 'ece']
+                   if classification else ['rmse', 'mae', 'r2', 'mape', 'median_ae'])
+        version = 'synthetic-contract-v1' if classification else 'synthetic-regression-contract-v1'
+        models = value['models'] or ['tabicl-v2']
+        identity = f'evaluation-{len(self.evaluations)}'
+        entry = lambda model_id, name, score: dict(model_id=model_id, name=name, mean=dict.fromkeys(metrics, score),
+                                                   sd=dict.fromkeys(metrics, 0.0), pooled=dict.fromkeys(metrics, score))
+        summary = dict(primary_metric=metrics[0], metrics=metrics, directions={}, comparison=None,
+                       leaderboard=[entry(m, m, 0.5) for m in models], baseline=entry('baseline', 'Baseline', 0.5),
+                       warnings=[dict(code='synthetic', message='Synthetic fixture scores; not model evidence.')])
+        resource = dict(id=identity, status='queued', stage='queued', operation_id='op-' + identity,
+            dataset_id=ds['id'], dataset_name=ds.get('name'), task=task, target=target, rows=len(labels),
+            dataset_rows=len(labels), feature_columns=[c for c in ds['columns'] if c != target], folds=k,
+            split=value['split'], group_column=None, fold_column=None, seed=value['seed'], sample_rows=None,
+            primary_metric=metrics[0], positive_class=None, classes=classes, class_counts=None, fold_sha256='0' * 64,
+            protocol_version='evaluation-protocol-v1', metrics_version='metrics-v1', report_version='report-v1',
+            model_selection='explicit' if value['models'] else 'evaluation-defaults-v1',
+            models=[dict(model_id=m, name=m, model_version=version, configuration='default', resolved_configuration={},
+                         job_id=f'{identity}-{m}', status='queued', error=None) for m in models],
+            skipped=[], estimated_credits=5, credits=None, runtime={}, summary=None, report_available=False,
+            predictions_expires_at=None, error=None, created_at='2026-01-01T00:00:00Z',
+            updated_at='2026-01-01T00:00:00Z', completed_at=None)
+        folds = [i % k for i in range(len(labels))]
+        outputs = {m: dict(predictions=[classes[0] if classification else 0.0] * len(labels),
+                           probabilities=[[1.0] + [0.0] * (len(classes) - 1)] * len(labels) if classification else None)
+                   for m in models + ['baseline']}
+        finished = dict(resource, status='succeeded', stage='complete', summary=summary, report_available=True,
+                        credits=5, predictions_expires_at='2026-01-08T00:00:00Z', completed_at='2026-01-01T00:00:00Z',
+                        models=[dict(m, status='succeeded') for m in resource['models']])
+        self.evaluations[identity] = dict(resource=resource, finished=finished, links=[], predictions=dict(
+            evaluation_id=identity, task=task, classes=classes, row_index=list(range(len(labels))), fold=folds,
+            actual=labels, models=outputs, expires_at='2026-01-08T00:00:00Z'), folds=dict(
+            evaluation_id=identity, metrics=metrics, items=[dict(model_id=m, fold=f, rows=folds.count(f),
+                values=dict.fromkeys(metrics, 0.5)) for m in models + ['baseline'] for f in range(k)]))
+        return resource
+
+    def evaluation_route(self, path, method):
+        if path == '/v1/evaluations' and method == 'GET':
+            return httpx.Response(200, json={'items': [e['finished'] for e in self.evaluations.values()]})
+        parts = path.split('/')
+        record = self.evaluations[parts[3]]
+        tail = '/'.join(parts[4:])
+        if tail == '':
+            return httpx.Response(200, json=record['finished'])
+        if tail in ('folds', 'predictions'):
+            return httpx.Response(200, json=record[tail])
+        if tail == 'report':
+            return httpx.Response(200, text='<!doctype html><html><head><meta charset="utf-8"><title>Synthetic report'
+                                  '</title></head><body><div class="welt-report"><p>Synthetic fixture report; not '
+                                  'model evidence.</p></div></body></html>', headers={'content-type': 'text/html'})
+        if tail == 'report-links' and method == 'POST':
+            link = dict(id=f'link-{len(record["links"])}', evaluation_id=parts[3], created_at='2026-01-01T00:00:00Z',
+                        expires_at='2026-01-02T00:00:00Z', revoked=False, created_by=None)
+            record['links'].append(link)
+            return httpx.Response(201, json=dict(link, url='https://notebook.invalid/reports/synthetic'))
+        raise AssertionError(f'Unsupported notebook fixture operation: {method} {path}')
 
     def usage(self, operation, kind, status, dataset, predictor=None, rows=0, task="classification"):
         version = "synthetic-regression-contract-v1" if task == "regression" else "synthetic-contract-v1"
@@ -37,6 +103,10 @@ class SyntheticService:
         if path == '/v1/datasets' and method == 'POST':
             item=dict(id=f'dataset-{len(self.data)}', **value);self.data[item['id']]=item
             return httpx.Response(201,json=item)
+        if path == '/v1/evaluations' and method == 'POST':
+            return httpx.Response(202, json=self.evaluation(value))
+        if path.startswith('/v1/evaluations'):
+            return self.evaluation_route(path, method)
         if path == '/v1/fits':
             ds=self.data[value['dataset_id']];pid=f'predictor-{len(self.fitted)}';jid=f'job-{len(self.job_records)}'
             task=value['task']

@@ -22,7 +22,7 @@ def main():
         print(evaluation.summary())
         for model in evaluation.skipped:
             print('Skipped:', model['model_id'], model['reason'])
-        Path(args.report).write_text(evaluation.report_html())
+        Path(args.report).write_text(evaluation.report_html(), encoding="utf-8")
         print('Report saved to', args.report)
 
 

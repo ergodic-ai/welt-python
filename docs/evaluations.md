@@ -55,8 +55,9 @@ Name up to 8 models with `models=["tabicl-v2", "tabdpt-1.3"]`. Each one must be 
 to evaluate your table, otherwise the request is refused with that model's reason and
 nothing runs.
 
-Leave `models` empty and Welt evaluates every available model for the task whose
-limits admit your data. The others are listed with a reason in `evaluation.skipped`:
+Leave `models` empty and Welt evaluates every available catalogue model for the task
+whose limits admit your data. Hidden research models are never evaluated in this
+version. The others are listed with a reason in `evaluation.skipped`:
 
 ```python
 for model in evaluation.skipped:
@@ -111,7 +112,9 @@ default is the second class in sorted order.
 
 - `row_index` is the row's position in the uploaded table, then `fold` and `actual`;
 - one column per model (and `baseline`) with its out-of-fold prediction;
-- for classification, `<model>:p(<class>)` probability columns.
+- for classification, `<model>:p(<class>)` probability columns. If labels of different
+  types print alike (for example `1` and `"1"`), these columns use `repr()`:
+  `p(1)` and `p('1')`.
 
 !!! note "Predictions expire after seven days"
     After seven days `predictions()` raises `ResultExpiredError`. The summary, fold
@@ -120,12 +123,18 @@ default is the second class in sorted order.
 ## Display the report in a notebook
 
 `evaluation.show()` displays the report in Jupyter. An evaluation that is the last
-expression of a cell also displays it while its client is open. The report's styles
-are scoped to the report, so it doesn't restyle your notebook. An unfinished
-evaluation shows its status instead.
+expression of a cell also displays it while its client is open. The report appears in
+a sandboxed frame: it can't run code, load anything or restyle your notebook. Scroll
+inside the frame to read all of it. An unfinished evaluation shows its status instead.
 
-`report_html()` returns the report as one self-contained HTML document, which you
-can save to a file. It contains no script and loads nothing.
+`report_html()` returns the report as one self-contained HTML document. It contains
+no script and loads nothing. Save it as UTF-8:
+
+```python
+from pathlib import Path
+
+Path("report.html").write_text(evaluation.report_html(), encoding="utf-8")
+```
 
 ## Share the report with a link
 
@@ -135,17 +144,24 @@ print(link.url, link.expires_at)  # the URL is shown once; store it safely
 ```
 
 !!! caution "Anyone with the link can read the report"
-    The link opens the report without signing in, so share it like a password. Raw
-    predictions are never exposed through a link.
+    The link opens the report without signing in, so share it like a password. It
+    never opens the predictions, folds or other API data. The report itself includes
+    the leaderboard, fold metrics and charts; for regression, the charts plot the
+    actual and predicted values of up to 1,500 rows, which a reader can make out
+    approximately. Unlike `predictions()`, the report is kept until you delete the
+    evaluation.
 
-A link lasts 1–7 days (default 7) and never outlives the key or session that created
-it. It stops working when it expires, when you revoke it, or when its creator leaves
-the workspace or loses that credential. Deleting the evaluation removes the report and
-its links.
+A link lasts the chosen 1–7 days (default 7). A link created from the SDK with an API
+key, or through an OAuth connection, never outlives that key and stops if the key is
+revoked. A link created in the console lasts the chosen days, even after you sign out.
+Every link stops working when it expires, when it is revoked, or when its creator is
+no longer a verified member of the workspace. Deleting the evaluation removes the
+report and its links.
 
 `report_links()` lists the evaluation's links without their URLs, and
-`revoke_report_link(link)` revokes one. Printing a `ReportLink` hides its URL, so it
-does not end up in saved notebook output by accident.
+`revoke_report_link(link)` revokes one. Revoking needs a key with write permission; a
+read-only key can create links but not revoke them. Printing a `ReportLink` hides its
+URL, so it does not end up in saved notebook output by accident.
 
 ## Fit the model you chose
 
@@ -158,6 +174,11 @@ predictions = model.predict(new_rows)
 `fit()` submits a **new fit** of that model on the full stored dataset, with the
 evaluation's seed, and returns a fitted `Classifier` or `Regressor`. It doesn't
 promote a fold context, and it is charged as a fit.
+
+The fit uses the model's current version. If the catalogue has moved on since the
+evaluation, `fit()` warns with an `EvaluationWarning` naming both versions; the
+evaluation's scores then describe the earlier version, so evaluate again to compare
+the current one. `model.model_version_` shows the fitted version.
 
 - If the evaluation used a `group_column` or `fold_column`, `fit()` refuses, because
   the stored dataset still contains that column. Fit an estimator on a table without
@@ -202,10 +223,25 @@ with Client() as client:
 
 ## Pricing and limits
 
-An evaluation is one priced operation; see [usage and workspace credits](usage.md#usage-and-workspace-credits)
-for how it is charged and how to read current prices with `client.pricing()`.
-`evaluation.estimated_credits` is reserved at submission, and `max_credits` refuses an
-evaluation whose estimate is higher (`InvalidInputError`, `code="budget_exceeded"`).
+An evaluation is one priced operation (usage `kind: evaluate`) on the fit and predict
+rates of the active rate card:
+
+- each model that produced out-of-fold predictions costs the fit rate on
+  (folds − 1) × rows × columns, target included, plus the predict rate on
+  rows × features;
+- the total is rounded up once, with one five-credit minimum for the whole evaluation;
+- models that failed cost nothing, and a failed or cancelled evaluation releases its
+  whole reservation.
+
+For example, on the current `2026-10-v2` card, 600 rows with 18 features plus the
+target, 5 folds and 4 models come to 20.4, so 21 credits. Read the current rates with
+`client.pricing()`, and see [usage and workspace credits](usage.md#usage-and-workspace-credits)
+for balances and usage events.
+
+`evaluation.estimated_credits` is reserved at submission, and `evaluation.credits` is
+the settled charge once the evaluation finishes (`None` until then). `max_credits`
+refuses an evaluation whose estimate is higher (`InvalidInputError`,
+`code="budget_exceeded"`).
 
 Each training fold must fit the model's [limits](capabilities.md): at most 500
 training rows, 20 features and 10 classes for the current tabular models. With 5
@@ -221,6 +257,15 @@ report records it.
 `folds()`, `predictions()`, `report_html()`, `report_link()`, `show()` and `fit()`;
 `summary()` needs no await. In a notebook, an `AsyncEvaluation` displays its report
 after you have awaited `show()` or `report_html()` once.
+
+</details>
+
+<details markdown="1"><summary>What if the server doesn't offer evaluations?</summary>
+
+Evaluations need a Welt server release with the `/v1/evaluations` routes. On an older
+server, `submit_evaluation`, `evaluation` and `evaluations` raise `NotFoundError` with
+`code="evaluations_unavailable"`. If a table was already uploaded, the message names
+its dataset ID so you can reuse or delete it.
 
 </details>
 

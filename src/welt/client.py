@@ -517,7 +517,7 @@ class Client(_HTTP):
         Empty models lets Welt choose every model that admits the data. Options are checked
         before any upload; replay an exact submission with the same idempotency_key.
         """
-        from .evaluation import Evaluation, key, replay_error, submission
+        from .evaluation import Evaluation, key, replay_error, submission, unavailable
         dataset_id, upload, body = submission(data_or_dataset, target, task=task, models=models, folds=folds,
             split=split, group_column=group_column, fold_column=fold_column, seed=seed,
             primary_metric=primary_metric, positive_class=positive_class, sample_rows=sample_rows,
@@ -530,6 +530,10 @@ class Client(_HTTP):
                                    headers={"Idempotency-Key": replay})
         except TransportError:
             raise replay_error(dataset_id, replay) from None
+        except WeltError as error:
+            if unavailable(error) is error:
+                raise
+            raise unavailable(error, dataset_id if upload is not None else None) from None
         return Evaluation(self, payload)
 
     def evaluate(self, data_or_dataset, target=None, *, task, models=None, folds=None, split="auto",
@@ -543,15 +547,23 @@ class Client(_HTTP):
 
     def evaluation(self, evaluation_id):
         """Reopen one evaluation by ID; no new work is submitted."""
-        from .evaluation import Evaluation
-        evaluation = Evaluation(self, self.request("GET", f"/v1/evaluations/{_id(evaluation_id)}"))
+        from .evaluation import Evaluation, unavailable
+        try:
+            payload = self.request("GET", f"/v1/evaluations/{_id(evaluation_id)}")
+        except WeltError as error:
+            raise unavailable(error) from None
+        evaluation = Evaluation(self, payload)
         if evaluation.id != evaluation_id:
             raise WeltError("Evaluation response belongs to a different evaluation.", code="invalid_response")
         return evaluation
 
     def evaluations(self):
-        from .evaluation import Evaluation
-        return [Evaluation(self, item) for item in self.request("GET", "/v1/evaluations")["items"]]
+        from .evaluation import Evaluation, unavailable
+        try:
+            items = self.request("GET", "/v1/evaluations")["items"]
+        except WeltError as error:
+            raise unavailable(error) from None
+        return [Evaluation(self, item) for item in items]
 
     def forecast_job(self, job_id):
         """Reconnect to one forecast run, borrowing this client; validates durable provenance."""
@@ -914,7 +926,7 @@ class AsyncClient(_HTTP):
                                 group_column=None, fold_column=None, seed=0, primary_metric=None,
                                 positive_class=None, sample_rows=None, max_credits=None, idempotency_key=None):
         """Async Client.submit_evaluation with the same contract."""
-        from .evaluation import AsyncEvaluation, key, replay_error, submission
+        from .evaluation import AsyncEvaluation, key, replay_error, submission, unavailable
         dataset_id, upload, body = submission(data_or_dataset, target, task=task, models=models, folds=folds,
             split=split, group_column=group_column, fold_column=fold_column, seed=seed,
             primary_metric=primary_metric, positive_class=positive_class, sample_rows=sample_rows,
@@ -927,6 +939,10 @@ class AsyncClient(_HTTP):
                                          headers={"Idempotency-Key": replay})
         except TransportError:
             raise replay_error(dataset_id, replay) from None
+        except WeltError as error:
+            if unavailable(error) is error:
+                raise
+            raise unavailable(error, dataset_id if upload is not None else None) from None
         return AsyncEvaluation(self, payload)
 
     async def evaluate(self, data_or_dataset, target=None, *, task, models=None, folds=None, split="auto",
@@ -940,15 +956,23 @@ class AsyncClient(_HTTP):
         return await evaluation.wait(timeout=timeout)
 
     async def evaluation(self, evaluation_id):
-        from .evaluation import AsyncEvaluation
-        evaluation = AsyncEvaluation(self, await self.request("GET", f"/v1/evaluations/{_id(evaluation_id)}"))
+        from .evaluation import AsyncEvaluation, unavailable
+        try:
+            payload = await self.request("GET", f"/v1/evaluations/{_id(evaluation_id)}")
+        except WeltError as error:
+            raise unavailable(error) from None
+        evaluation = AsyncEvaluation(self, payload)
         if evaluation.id != evaluation_id:
             raise WeltError("Evaluation response belongs to a different evaluation.", code="invalid_response")
         return evaluation
 
     async def evaluations(self):
-        from .evaluation import AsyncEvaluation
-        return [AsyncEvaluation(self, item) for item in (await self.request("GET", "/v1/evaluations"))["items"]]
+        from .evaluation import AsyncEvaluation, unavailable
+        try:
+            items = (await self.request("GET", "/v1/evaluations"))["items"]
+        except WeltError as error:
+            raise unavailable(error) from None
+        return [AsyncEvaluation(self, item) for item in items]
 
     def forecast_job(self, job_id):
         """Reconnect borrowing this client; await the typed job's result()."""

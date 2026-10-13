@@ -93,7 +93,9 @@ check available credits, pending reservations, plan status and spend caps.
 `client.pricing()` reads the current public rate card. It does not buy credits, change
 a plan or authorize a payment; billing changes require browser authority. The current
 public rate card has a five-credit minimum for a priced fit, prediction, batch
-prediction or discovery, and a 25-credit research download.
+prediction or discovery, and a 25-credit research download. An evaluation is one
+priced operation (usage kind `evaluate`) with a single five-credit minimum; see
+[evaluation pricing](evaluations.md#pricing-and-limits).
 
 !!! note "Check current prices before budgeting"
     Verify the current offers in Billing or `client.pricing()`. Request size and the
