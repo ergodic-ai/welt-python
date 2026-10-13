@@ -37,8 +37,10 @@ def node_ok():
     return major >= 22
 
 
-@pytest.mark.skipif(not (chrome() and node_ok()), reason='Chrome and Node 22+ are required for browser checks')
+@pytest.mark.skipif(not (chrome() and node_ok()) and not os.environ.get('WELT_REQUIRE_BROWSER_CHECKS'),
+                    reason='Chrome and Node 22+ are required for browser checks')
 def test_rendered_site_in_a_real_browser():
+    assert chrome() and node_ok(), 'WELT_REQUIRE_BROWSER_CHECKS is set but Chrome or Node 22+ is missing'
     with tempfile.TemporaryDirectory() as folder:
         with patch.object(sys, 'argv', ['build_docs', '--output', folder]):
             build_docs.main()

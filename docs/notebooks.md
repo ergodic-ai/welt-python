@@ -55,18 +55,6 @@ Inspect real Iris measurements and the graph structure Welt's native model propo
 
 {{actions:causal-discovery}}
 
-## Run in Colab
-
-Choose **Open in Colab** and run the cells in order. Each notebook starts with:
-
-```python
-!pip install "welt-client[parquet]"
-```
-
-If Colab asks you to restart the session, restart it after installation. Then
-continue with the connection cell: open its printed verification link and approve
-your workspace. View pages let you read the same cells without running them.
-
 ## Before you run
 
 - Use a fresh Python 3.11–3.13 environment with `welt-client[parquet]`.
@@ -88,6 +76,18 @@ without downloading research bytes or using account credentials. Fixture scores 
 measure model quality; actual hosted acceptance is recorded separately.
 
 </details>
+
+## Run in Colab
+
+Choose **Open in Colab** and run the cells in order. Each notebook starts with:
+
+```python
+!pip install "welt-client[parquet]"
+```
+
+If Colab asks you to restart the session, restart it after installation. Then
+continue with the connection cell: open its printed verification link and approve
+your workspace. View pages let you read the same cells without running them.
 
 ## Next steps
 

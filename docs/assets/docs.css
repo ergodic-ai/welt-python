@@ -125,6 +125,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
 pre { margin: 0; padding: 14px 16px; max-width: 100%; overflow-x: auto; font-size: 13px; line-height: 1.65; tab-size: 4; color: var(--foreground); }
 pre code { white-space: pre; font-size: inherit; }
 pre .hl { display: inline-block; min-width: calc(100% + 32px); margin: 0 -16px; padding: 0 16px; background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.hl .co { color: var(--status-neutral); }
 .kw { color: var(--code-keyword); } .st { color: var(--code-string); } .co { color: var(--code-comment); font-style: italic; } .fn { color: var(--code-function); } .nu { color: var(--code-number); }
 .output { margin: -19px 0 18px; border: 1px solid var(--border); border-top-style: dashed; border-radius: 0 0 var(--radius) var(--radius); background: var(--background); }
 .code-wrap:has(+ .output) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }

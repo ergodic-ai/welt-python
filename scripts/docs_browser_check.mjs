@@ -55,6 +55,21 @@ await sleep(300);
 results.slashOpensPalette = await evaluate("document.querySelector('#search-dialog').open");
 await key('Escape', 'Escape', 27);
 
+await go('reference.html');
+await key('k', 'KeyK', 75, 2);
+await sleep(300);
+await send('Input.insertText', { text: 'classifier.fit' });
+await sleep(400);
+await key('Enter', 'Enter', 13, 0, '\r');
+await sleep(500);
+results.samePageResultFocusesHeading = await evaluate("!document.querySelector('#search-dialog').open && document.activeElement.id === 'classifierfit'");
+await evaluate("document.querySelector('#version').focus()");
+await key('k', 'KeyK', 75, 2);
+await sleep(300);
+await key('Escape', 'Escape', 27);
+await sleep(300);
+results.escapeReturnsToPreviousFocus = await evaluate("document.activeElement.id === 'version'");
+
 await go('index.html');
 await evaluate("document.querySelector('[role=tab]').focus()");
 await key('ArrowRight', 'ArrowRight', 39);

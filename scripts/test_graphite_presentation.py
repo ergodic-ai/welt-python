@@ -215,7 +215,7 @@ def test_navigation_covers_every_guide_once(site):
 
 def test_next_step_cards_render_links_from_markdown():
     body, _ = build_docs.render_markdown('## Next steps\n\n<div class="cards" markdown="1">\n\n- [Reuse a predictor](reuse.md): predict later.\n\n</div>\n')
-    assert '<div class="cards">' in body and '<a href="reuse.html">Reuse a predictor</a>: predict later.' in body
+    assert '<div class="cards">' in body and '<a href="reuse.html">Reuse a predictor</a> predict later.' in body
 
 
 def test_placeholders_render_valid_blocks_in_every_position():
@@ -268,3 +268,10 @@ def test_wrapped_signatures_keep_positional_only_and_keyword_only_markers():
     text = build_docs.format_signature('Sample.method', inspect.signature(sample))
     assert text.split('\n')[1:-1] == ['    first_positional_argument,', '    second_positional_argument,', '    /,',
                                        '    normal_argument=1,', '    *,', '    keyword_argument=2,']
+
+
+def test_card_descriptions_drop_the_markdown_separator_and_deep_fences_stay_valid():
+    body, _ = build_docs.render_markdown('<div class="cards" markdown="1">\n\n- [Reuse a predictor](reuse.md): predict later.\n\n</div>\n\nText: kept.\n')
+    assert '<a href="reuse.html">Reuse a predictor</a> predict later.' in body and 'Text: kept.' in body
+    body, _ = build_docs.render_markdown('Intro.\n\n        ```sh\n        welt login\n        ```\n')
+    assert body.count('class="code-wrap') == 1 and '<pre><code><div' not in body and '<pre><code>    <div' not in body

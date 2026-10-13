@@ -56,7 +56,7 @@
   }
 
   // Dialogs return focus to their opener.
-  const openDialog = (id, opener) => { const dialog = document.getElementById(id); dialog.showModal(); const restore = () => { opener.focus(); dialog.removeEventListener('close', restore); }; dialog.addEventListener('close', restore); };
+  const openDialog = (id, opener) => { const dialog = document.getElementById(id); dialog.showModal(); const restore = () => { dialog.removeEventListener('close', restore); if (dialog.dataset.keepFocus) delete dialog.dataset.keepFocus; else opener.focus(); }; dialog.addEventListener('close', restore); };
   document.querySelector('#menu').addEventListener('click', (event) => openDialog('navigation', event.currentTarget));
   document.querySelectorAll('dialog [data-close]').forEach((button) => button.addEventListener('click', () => button.closest('dialog').close()));
   document.querySelectorAll('dialog').forEach((dialog) => {
@@ -87,12 +87,12 @@
     if (found.length) highlight();
     announce(found.length ? `${found.length} search results.` : empty.textContent);
   };
-  const openSearch = async () => { if (search.open) return; openDialog('search-dialog', searchButton); field.focus(); field.select(); if (!index) { try { const response = await fetch(searchURL); if (!response.ok) throw Error(); index = await response.json(); } catch (_) { index = null; } } render(); };
+  const openSearch = async () => { if (search.open) return; const previous = document.activeElement; openDialog('search-dialog', previous && previous !== document.body && previous.isConnected ? previous : searchButton); field.focus(); field.select(); if (!index) { try { const response = await fetch(searchURL); if (!response.ok) throw Error(); index = await response.json(); } catch (_) { index = null; } } render(); };
   // A result on this page moves focus to its heading instead of back to the search button.
   const go = (link) => {
     const target = new URL(link.href);
     if (target.pathname !== location.pathname) { location.href = target.href; return; }
-    search.close(); history.pushState(null, '', target.hash || location.pathname);
+    search.dataset.keepFocus = 'true'; search.close(); history.pushState(null, '', target.hash || location.pathname);
     const heading = target.hash && document.getElementById(decodeURIComponent(target.hash.slice(1)));
     if (heading) { heading.tabIndex = -1; heading.scrollIntoView(); heading.focus({ preventScroll: true }); }
   };

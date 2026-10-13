@@ -388,8 +388,10 @@ def render_markdown(text):
     body = renderer.convert(text)
     token = f'WELTCODE{nonce}N(\\d+)X'
     # One pass, so inserted code is never rescanned; an indented placeholder may arrive as code.
-    body = re.sub(rf'<pre><code>{token}\s*</code></pre>|<p>{token}</p>|{token}',
+    body = re.sub(rf'<pre><code>\s*{token}\s*</code></pre>|<p>{token}</p>|{token}',
                   lambda m: blocks[int(next(group for group in m.groups() if group is not None))], body)
+    # Card lists read "[Title](page.md): description"; the link becomes the card title.
+    body = re.sub(r'<div class="cards">.*?</div>', lambda m: re.sub(r'(</a>):\s*', r'\1 ', m[0]), body, flags=re.S)
     body = body.replace('<table>', '<div class="table-wrap" tabindex="0" role="region" aria-label="Scrollable table"><table>').replace('</table>', '</table></div>')
 
     def heading(match):
@@ -754,7 +756,7 @@ def llms_index(version, titles):
     lines = [f'# Welt Python SDK {version}', '',
              '> Python SDK for Welt: fit qualified tabular models on DataFrames, reuse predictors, forecast, '
              'load research datasets and run native causal discovery. Each link is this release\'s Markdown source.', '',
-             'Product-level agent access, including the hosted Welt service and console, is at https://welt.ergodic.dev', '']
+             'The Welt console and service: https://welt.ergodic.dev', '']
     for label, pages in GUIDES:
         lines += [f'## {label}', '']
         lines += [f'- [{titles[page]}]({PUBLIC}/v{version}/{page}.md)' for _, page in pages if page in titles]
