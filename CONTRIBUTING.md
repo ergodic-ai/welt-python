@@ -20,3 +20,24 @@ Guides/notebooks evolve only with actual released contracts. Build a wheel, inst
 it into the locked development environment, execute scripts/check_notebooks.py,
 and build scripts/build_docs.py. Never commit execution outputs. Versioned docs
 publication uses the same public repository; no live CI credentials or FM execution.
+
+## Documentation pages
+
+Pages share the Welt console's Graphite design tokens (`docs/assets/tokens.css`,
+copied unchanged with its hash in `docs/assets/design-provenance.json`) and
+self-hosted Geist fonts. Style with tokens only; pages make no third-party requests.
+Guides are Markdown in `docs/` and can use these components (DEC-073):
+
+- Numbered steps: end consecutive `##` headings with `{.step}`.
+- Callouts: `!!! note "Title"`, `!!! tip`, `!!! caution` and `!!! need "You'll need"`,
+  with the body indented four spaces.
+- Code: ```` ```python file="first.py" hl="3-4" ```` labels a file and highlights lines;
+  adjacent fences with `tab="pip"` / `tab="uv"` form one tab group; ```` ```output ````
+  directly after code shows its expected output (use `title="…"` to label a recorded run).
+- Folded detail: `<details markdown="1"><summary>Question?</summary> … </details>`.
+- Next-step cards: wrap a list of links in `<div class="cards" markdown="1"> … </div>`.
+
+Renaming a heading changes its anchor; keep old anchors that published pages or
+redirects use. The Models table renders `docs/models-snapshot.json`; refresh it with
+`scripts/snapshot_models.py` (a credential-free read of the public catalogue) and
+review the diff before committing. The build never calls the live service.

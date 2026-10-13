@@ -1,0 +1,274 @@
+{
+  "source": "https://welt.ergodic.dev/v1/models",
+  "taken_at": "2026-10-13T19:13:01Z",
+  "models": [
+    {
+      "id": "welt",
+      "name": "Welt",
+      "family": "tabular",
+      "tasks": [
+        {
+          "task": "classification",
+          "status": "planned",
+          "execution_available": false,
+          "limits": {}
+        },
+        {
+          "task": "regression",
+          "status": "planned",
+          "execution_available": false,
+          "limits": {}
+        }
+      ]
+    },
+    {
+      "id": "kumo-medium",
+      "name": "Kumo Tabular Medium",
+      "family": "tabular",
+      "tasks": [
+        {
+          "task": "classification",
+          "status": "available",
+          "execution_available": true,
+          "limits": {
+            "max_rows": 500,
+            "max_columns": 20,
+            "max_classes": 10,
+            "max_prediction_rows": 100
+          }
+        },
+        {
+          "task": "regression",
+          "status": "available",
+          "execution_available": true,
+          "limits": {
+            "max_rows": 500,
+            "max_columns": 20,
+            "max_prediction_rows": 100
+          }
+        }
+      ]
+    },
+    {
+      "id": "causilo",
+      "name": "Causilo",
+      "family": "tabular",
+      "tasks": [
+        {
+          "task": "classification",
+          "status": "planned",
+          "execution_available": false,
+          "limits": {}
+        },
+        {
+          "task": "regression",
+          "status": "planned",
+          "execution_available": false,
+          "limits": {}
+        }
+      ]
+    },
+    {
+      "id": "tabpfn-3.5-fast",
+      "name": "TabPFN 3.5 Fast",
+      "family": "tabular",
+      "tasks": [
+        {
+          "task": "classification",
+          "status": "planned",
+          "execution_available": false,
+          "limits": {}
+        },
+        {
+          "task": "regression",
+          "status": "planned",
+          "execution_available": false,
+          "limits": {}
+        }
+      ]
+    },
+    {
+      "id": "mitra-v2",
+      "name": "Mitra-v2",
+      "family": "tabular",
+      "tasks": [
+        {
+          "task": "classification",
+          "status": "available",
+          "execution_available": true,
+          "limits": {
+            "max_rows": 500,
+            "max_columns": 20,
+            "max_classes": 10,
+            "max_prediction_rows": 100
+          }
+        },
+        {
+          "task": "regression",
+          "status": "available",
+          "execution_available": true,
+          "limits": {
+            "max_rows": 500,
+            "max_columns": 20,
+            "max_prediction_rows": 100
+          }
+        }
+      ]
+    },
+    {
+      "id": "exaone-tabular",
+      "name": "EXAONE Tabular",
+      "family": "tabular",
+      "tasks": [
+        {
+          "task": "classification",
+          "status": "planned",
+          "execution_available": false,
+          "limits": {}
+        },
+        {
+          "task": "regression",
+          "status": "planned",
+          "execution_available": false,
+          "limits": {}
+        }
+      ]
+    },
+    {
+      "id": "tabicl-v2",
+      "name": "TabICLv2",
+      "family": "tabular",
+      "tasks": [
+        {
+          "task": "classification",
+          "status": "available",
+          "execution_available": true,
+          "limits": {
+            "max_rows": 500,
+            "max_columns": 20,
+            "max_classes": 10,
+            "max_prediction_rows": 100
+          }
+        },
+        {
+          "task": "regression",
+          "status": "available",
+          "execution_available": true,
+          "limits": {
+            "max_rows": 500,
+            "max_columns": 20,
+            "max_prediction_rows": 100
+          }
+        }
+      ]
+    },
+    {
+      "id": "tabdpt-1.3",
+      "name": "TabDPT 1.3",
+      "family": "tabular",
+      "tasks": [
+        {
+          "task": "classification",
+          "status": "available",
+          "execution_available": true,
+          "limits": {
+            "max_rows": 500,
+            "max_columns": 20,
+            "max_classes": 10,
+            "max_prediction_rows": 100
+          }
+        },
+        {
+          "task": "regression",
+          "status": "available",
+          "execution_available": true,
+          "limits": {
+            "max_rows": 500,
+            "max_columns": 20,
+            "max_prediction_rows": 100
+          }
+        }
+      ]
+    },
+    {
+      "id": "welt-r",
+      "name": "Welt R",
+      "family": "causal",
+      "tasks": [
+        {
+          "task": "causal_discovery",
+          "status": "planned",
+          "execution_available": false,
+          "limits": {}
+        }
+      ]
+    },
+    {
+      "id": "avici",
+      "name": "AVICI",
+      "family": "causal",
+      "tasks": [
+        {
+          "task": "causal_discovery",
+          "status": "available",
+          "execution_available": true,
+          "limits": {
+            "min_rows": 2,
+            "max_rows": 500,
+            "min_features": 2,
+            "max_features": 20
+          }
+        }
+      ]
+    },
+    {
+      "id": "cdfm",
+      "name": "CDFM",
+      "family": "causal",
+      "tasks": [
+        {
+          "task": "causal_discovery",
+          "status": "available",
+          "execution_available": true,
+          "limits": {
+            "min_rows": 2,
+            "max_rows": 500,
+            "min_features": 2,
+            "max_features": 20
+          }
+        }
+      ]
+    },
+    {
+      "id": "arrow",
+      "name": "Arrow / ArrowFM",
+      "family": "causal",
+      "tasks": [
+        {
+          "task": "causal_discovery",
+          "status": "available",
+          "execution_available": true,
+          "limits": {
+            "min_rows": 2,
+            "max_rows": 500,
+            "min_features": 2,
+            "max_features": 20
+          }
+        }
+      ]
+    },
+    {
+      "id": "tabcausal",
+      "name": "TabCausal",
+      "family": "causal",
+      "tasks": [
+        {
+          "task": "causal_discovery",
+          "status": "planned",
+          "execution_available": false,
+          "limits": {}
+        }
+      ]
+    }
+  ]
+}

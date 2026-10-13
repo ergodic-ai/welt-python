@@ -1,0 +1,41 @@
+{
+  "tracking": "API-122 / DEC-073",
+  "scope": "Console Graphite design tokens and self-hosted Geist fonts shared with the Welt console (DEC-065); no third-party request at runtime.",
+  "assets": [
+    {
+      "file": "tokens.css",
+      "source": "welt-api apps/web/src/ui/tokens.css",
+      "source_commit": "17a599cbf1aeb87a5ee2023ebddb81b48f5d7dae",
+      "sha256": "0f862985422412b35bfa4d86c12d2c3b6aa21115adaa0751583e6bbcd84dba48",
+      "transformation": "None; byte-identical copy."
+    },
+    {
+      "file": "fonts/geist-latin-ext-wght-normal.woff2",
+      "source": "npm @fontsource-variable/geist@5.3.0 files/geist-latin-ext-wght-normal.woff2",
+      "licence": "SIL Open Font License 1.1 (fonts/OFL-Geist.txt)",
+      "sha256": "824f485b5d26e2f2da3c2b236132ece1bc8e4e43373452950bb0e40548b4313f",
+      "source_sha256": "824f485b5d26e2f2da3c2b236132ece1bc8e4e43373452950bb0e40548b4313f"
+    },
+    {
+      "file": "fonts/geist-latin-wght-normal.woff2",
+      "source": "npm @fontsource-variable/geist@5.3.0 files/geist-latin-wght-normal.woff2",
+      "licence": "SIL Open Font License 1.1 (fonts/OFL-Geist.txt)",
+      "sha256": "19f9c92546aa300c312235e3125af1b81394d8db9a4bc4a425cd5b641d2d54e1",
+      "source_sha256": "19f9c92546aa300c312235e3125af1b81394d8db9a4bc4a425cd5b641d2d54e1"
+    },
+    {
+      "file": "fonts/geist-mono-latin-ext-wght-normal.woff2",
+      "source": "npm @fontsource-variable/geist-mono@5.3.0 files/geist-mono-latin-ext-wght-normal.woff2",
+      "licence": "SIL Open Font License 1.1 (fonts/OFL-Geist-Mono.txt)",
+      "sha256": "1a189eb997c3e2ece68373e387afaec9e8617424186c4b1ab3cff7c54ba6223b",
+      "source_sha256": "1a189eb997c3e2ece68373e387afaec9e8617424186c4b1ab3cff7c54ba6223b"
+    },
+    {
+      "file": "fonts/geist-mono-latin-wght-normal.woff2",
+      "source": "npm @fontsource-variable/geist-mono@5.3.0 files/geist-mono-latin-wght-normal.woff2",
+      "licence": "SIL Open Font License 1.1 (fonts/OFL-Geist-Mono.txt)",
+      "sha256": "684ad5b531f81d43c1e8c7038262d5db7cdc1f68006e04d6c7769efa8d33c8cc",
+      "source_sha256": "684ad5b531f81d43c1e8c7038262d5db7cdc1f68006e04d6c7769efa8d33c8cc"
+    }
+  ]
+}

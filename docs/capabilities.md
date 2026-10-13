@@ -13,6 +13,12 @@ classical or older-generation fallback is permitted. Mitra-v2 uses the explicit
 zero-shot recipe: prediction does not fine-tune weights. This is not a claim to
 reproduce publisher benchmark recipes.
 
+## Available models
+
+{{models-table}}
+
+## Behavior boundaries
+
 | Behavior | Current boundary |
 | --- | --- |
 | Classification preparation/prediction/probabilities/reopen | Available with the qualified classifier; metadata pins model/configuration/seed. |

@@ -11,6 +11,12 @@
   The estimator requires the server guard capability; older servers fail closed.
 - Document chronological inputs, shapes, provenance, retention and recovery.
   Dependencies, model weights/configurations and evaluation protocols are unchanged.
+- Restyle the documentation on the Welt console's Graphite design system with
+  self-hosted fonts, a system-following theme, ⌘K search, a reference class index
+  with constructor parameter tables, previous/next navigation and a Models table
+  rendered from a reviewed public-catalogue snapshot. Pages also publish their
+  Markdown source and an `llms.txt` index. Every existing URL and anchor still
+  resolves; older documentation versions keep their original presentation.
 
 # 0.10.1 (2026-10-12) — Current documentation and runnable examples
 

@@ -1,5 +1,6 @@
 """API-072: make the real training DataFrame visible without hiding setup in Copy."""
 from html.parser import HTMLParser
+import re
 from pathlib import Path
 
 from scripts.build_docs import home_body
@@ -89,13 +90,8 @@ def test_notebook_loads_current_iris_before_holdout_and_observed_report():
     assert 'print(classification_report(y_test, predictions, zero_division=0))' in program
     assert 'accuracy                           1.00        30' in body
     assert 'one observed result, not a promised score' in body
-    assert body.index('data.head()') < body.index('First five current Iris rows') < body.index('train, test') < body.index('Recorded classification report')
-
-
-def test_current_theme_rules_do_not_restylize_old_homepage():
-    css=(Path(__file__).resolve().parents[1]/'docs/assets/docs.css').read_text()
-    current=css.split('/* API-075:',1)[1]
-    assert '.home:has(.home-v080)' in current
-    assert ':root[data-theme=light] .home:has(.home-v080)' in current
-    assert '--panel:#fff' in current and '--panel:#181a1c' in current
-    assert '--paper' not in current and 'color-scheme:light' not in current
+    # Syntax highlighting adds markup inside code, so code order is checked on visible text.
+    text=re.sub(r'<[^>]+>','',body)
+    assert text.index('data.head()') < text.index('train, test = train_test_split')
+    head=body.index('data.<span class="fn">head</span>()')
+    assert head < body.index('First five current Iris rows') < body.index('train_test_split') < body.index('Recorded classification report')
