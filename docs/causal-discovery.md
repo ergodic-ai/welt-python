@@ -14,7 +14,7 @@ SDK 0.7 retains the independently accepted ArrowFM observational preview. CDFM a
 AVICI also qualify the same input envelope: 2–500 rows and 2–20 finite continuous
 variables. The service catalogue reports the exact task, version and readiness.
 
-| Model | Select with | Decoding | Native output |
+| Model | Select with | Input and decoding | Native output |
 | --- | --- | --- | --- |
 | ArrowFM | `model="arrow"` | Original native DAG decoder, with separate scores. | Native DAG. |
 | CDFM | `model="cdfm"` | Original native adaptive threshold, with separate native scores. | Directed output, including possible cycles and reciprocal edges. |
@@ -120,7 +120,7 @@ declared a native DAG, including acyclic directed graphs and cycles, without
 projection.
 
 !!! caution "Install only the approved Ergodic artifact"
-    Its repository is private and the public package-index name currently refers to
+    The Ergodic repository is private and the public package-index name currently refers to
     another project; there is no public causal extra yet. Install only the approved
     co-release artifact when available.
 

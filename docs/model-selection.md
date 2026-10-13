@@ -55,7 +55,7 @@ regression profiles first.
   configuration and seed identities. Changing the `model` parameter requires a new fit.
 - **Reopening never switches models.** Reopening by predictor ID reuses that pinned
   identity.
-- **Columns are matched by name.** Named DataFrames preserve the fitted columns and
+- **DataFrame columns are matched by name.** Named DataFrames preserve the fitted columns and
   allow safe reordering.
 - **Idle caches don't lose state.** Predictors keep their support and preprocessing
   state when idle native caches are evicted.

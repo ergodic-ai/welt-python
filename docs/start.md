@@ -181,7 +181,7 @@ print("Keep this predictor ID:", model.predictor_id_)
 No calibrated interval or minimum quality is promised. The task's qualified limits
 are 500 training rows, 20 features and 100 prediction rows.
 
-!!! note "About this split"
+!!! caution "About this split"
     The example uses all observations and an explicitly declared random 80/20 teaching
     split (246/62), not a source-provided benchmark split. Closely related experimental
     rows can make random-split scores optimistic; a study should choose a split that

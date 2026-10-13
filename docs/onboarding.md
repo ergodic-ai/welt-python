@@ -7,7 +7,7 @@ confirm it. The script uses the Iris table from Welt's research catalogue.
     - Python 3.11–3.13.
     - A [Welt](https://welt.ergodic.dev) account. Sign in with Google or a verified
       email and password; GitHub sign-in is paused.
-    - Credits in your workspace. You'll check them in **Workspace → Billing**.
+    - A Welt workspace. You'll check its credits in **Workspace → Billing**.
 
 ## Install the SDK {.step}
 
@@ -30,7 +30,7 @@ spend caps before you run the script.
 !!! caution "This uses workspace credits"
     Modelling and research downloads may consume credits.
     [Usage and recovery](usage.md#usage-and-workspace-credits) explains HTTP 402 and
-    the browser billing authority it requires.
+    the required browser billing authority.
 
 ## Run the first request {.step}
 

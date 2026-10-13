@@ -59,7 +59,7 @@ with Client() as client:
 ```
 
 !!! note "What persists"
-    Predictors and datasets persist until you delete them explicitly. Idle native cache
+    Predictors and datasets persist until they are explicitly deleted. Idle native cache
     eviction is execution state, separate from durable ownership.
 
 Usage records show operation, attempt and lifecycle workload metadata. Several events

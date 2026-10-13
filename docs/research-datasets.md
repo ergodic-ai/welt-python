@@ -5,8 +5,9 @@ it as a file. These are research examples; downloading a table does not upload i
 your private workspace.
 
 !!! need "You'll need"
-    - The SDK, connected to your workspace. See [Connect](connect.md).
-    - Workspace credits. Research downloads may consume them; check **Workspace → Billing**.
+    - The SDK. Searching and inspecting the catalogue need no key; to download or load a table,
+      connect your workspace first. See [Connect](connect.md).
+    - For downloads, check your credits in **Workspace → Billing**. Research downloads may consume them.
 
 ## Find a table
 

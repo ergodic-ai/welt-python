@@ -1,7 +1,7 @@
 # Welt CLI for agents
 
 Run Welt from a terminal, a script or an agent. Successful commands print one JSON
-value on stdout, so you can parse results directly.
+value on stdout. Check the exit status before you parse it.
 
 Install the current `welt-client` release to use these commands. Model readiness, file
 formats and limits depend on the connected service.
@@ -52,9 +52,10 @@ POSIX directory is 0700 and files are 0600, with atomic writes, private per-orig
 files and no symlink following. Profile updates are serialized across CLI processes.
 
 Each origin retains multiple workspace keys; `login` and `use` select the local
-default. Old single-credential files still load. A saved login links its tenant with a
-read-only API probe and preserves the previous key. If the probe is unavailable, the
-CLI keeps that unknown credential privately until it can be linked.
+default. Old single-credential files still load. When you save a login, the CLI links
+any old single credential to its tenant with a read-only API probe and keeps that
+previous key. If the probe is unavailable, the CLI keeps the unknown credential
+privately until it can be linked.
 
 `--no-save` retains access only during the CLI process. `Client().connect()` keeps
 credentials in the Python process unless `save=True` is explicit.
@@ -208,7 +209,7 @@ Error JSON has `error.code`, `message`, `status_code`, `request_id`, `job_id`,
 
 | Exit status | Meaning |
 | --- | --- |
-| 0 | Success. A submitted job is still pending; inspect it separately. |
+| 0 | Success. If the command submitted a job, that job is still pending; inspect it separately. |
 | 1 | API, local file, credential, validation or wait failure. |
 | 2 | Command syntax error (argparse usage text on stderr). |
 | 130 | Interrupted locally; server job state is unchanged. |

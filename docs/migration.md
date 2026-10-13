@@ -104,7 +104,7 @@ Check Workspace Billing before rerunning work; see
 
 <div class="cards" markdown="1">
 
-- [Connect](connect.md): saved profiles, expiry and which key wins.
+- [Connect](connect.md): saved access, expiry and which key wins.
 - [Wait and recover](async-and-errors.md): reconnect to a job instead of refitting.
 - [Workspace resources](usage.md): usage fields, credits and billing errors.
 

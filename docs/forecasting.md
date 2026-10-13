@@ -145,7 +145,7 @@ structure. Without the original submitted context they cannot reconstruct the
 original history, future start, horizon or requested levels. Estimator-created
 handles also validate those exact request expectations.
 
-<details markdown="1"><summary>Can I reconnect from async code?</summary>
+<details markdown="1"><summary>Can I use forecasts from async code?</summary>
 
 `AsyncClient.forecast_job(id)` is a regular factory returning `AsyncForecastJob`.
 Await `inspect()`, `result()` and `cancel()`, and use `async with` for the handle. It

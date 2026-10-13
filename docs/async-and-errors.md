@@ -53,7 +53,7 @@ prediction conveniences wait for it without silently creating another prediction
 A polling budget includes initial inspection, retry waits and final result access.
 Async awaited requests are bounded by the remaining wait budget. Synchronous HTTP
 phases receive the remaining budget, and deadlines are checked after requests. Custom
-blocking sync transports and multiple network phases are therefore not a hard
+blocking sync transports and multiple network phases are not a hard
 wall-clock interrupt.
 
 </details>
