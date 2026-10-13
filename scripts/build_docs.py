@@ -13,6 +13,7 @@ import json
 import os
 import subprocess
 import re
+import secrets
 import shutil
 import tomllib
 from urllib.parse import quote
@@ -86,7 +87,7 @@ PARAMS = {
     'CausalDiscovery': {**_ESTIMATOR, 'model': 'Catalogue discovery model ID: arrow, cdfm or avici.',
                         'random_state': 'Unsigned 32-bit seed recorded with the discovery job.'},
     'CausalResult': {'payload': 'Native result payload. Usually obtained from discover() or causal_result(), not built by hand.'},
-    'Forecast': {'model': 'Forecast model ID.', 'configuration': 'Named model configuration.',
+    'Forecast': {'model': 'Forecast model ID.', 'configuration': "Model configuration. This version accepts only 'default'.",
                  'base_url': _CONNECTION['base_url'], 'api_key': _CONNECTION['api_key'], 'workspace': _CONNECTION['workspace'],
                  'timeout': 'Seconds a blocking prediction waits locally. The run keeps going when it runs out.'},
     'ForecastResult': {'payload': 'Native forecast payload, validated on construction.', 'job_id': 'ID of the run that produced it.'},
@@ -220,8 +221,8 @@ def reference():
             overrides = FORECAST_METHODS if name == 'Forecast' else TYPED_FORECAST_METHODS if name in ('ForecastJob', 'AsyncForecastJob') else {}
             if key not in METHODS and key not in overrides:
                 raise SystemExit(f'Missing annotated method contract: {name}.{key}')
-            purpose, returns, errors = overrides[key] if key in overrides else METHODS[key]
-            parts += [f'### {name}.{key}', purpose, f'```python\n{format_signature(name + "." + key, public_signature(method))}\n```', f'**Returns** {returns}\n{{: .contract }}', f'**Errors and limits** {errors}\n{{: .contract }}']
+            purpose, returns, errors = (html.escape(text, quote=False) for text in (overrides[key] if key in overrides else METHODS[key]))
+            parts += [f'### {name}.{key}', purpose, f'```python\n{format_signature(name + "." + key, public_signature(method))}\n```', f'**Returns:** {returns}\n{{: .contract }}', f'**Errors and limits:** {errors}\n{{: .contract }}']
     parts += ['## Error types', 'All remote errors inherit `WeltError`. Table/schema validation may raise ordinary `ValueError` before upload. Do not catch every error and silently fit again.', '| Type | Next action |', '| --- | --- |']
     types = {'AuthenticationError': 'Configure a missing key locally; replace an invalid, expired or revoked key in Account.', 'PermissionDeniedError': 'Use a key with the required workspace write/fit/predict permission.', 'InvalidInputError': 'Check the named schema, explicit target and task limits.', 'ModelUnavailableError': 'Inspect current task_profiles and worker readiness; no automatic model fallback.', 'CapacityError / RateLimitError': 'Respect retry_after and workspace admission limits; inspect existing work.', 'JobTimeoutError / PredictionPendingError': 'Retain job_id and reconnect; local timeout does not cancel.', 'ExecutionError / JobCancelledError': 'Inspect the durable job and safe request/job IDs; intentional retry needs a new decision.', 'NotFoundError / ConflictError': 'Check workspace ownership and resource dependencies.', 'TransportError': 'Inspect existing job state before replaying a mutation; GET retries are bounded.', 'ResultExpiredError / ResultDeletedError': 'Temporary access expiry and explicit primary deletion are distinct.', 'InvalidCausalResultError': 'Reject malformed native payload without repair.', 'UnsupportedGraphConversionError / OptionalDependencyError': 'Preserve native graph; convert declared DAGs only with approved local co-release dependency. For load_research_dataset, install welt-client[research].'}
     types['InvalidForecastResultError'] = 'Reject malformed, crossed or mismatched native forecast payload without repair.'
@@ -230,7 +231,7 @@ def reference():
     return '\n\n'.join(parts[:-len(types)-2]) + '\n\n' + '\n'.join(parts[-len(types)-2:])
 
 
-FENCE = re.compile(r'^(?P<indent>[ \t]*)(?P<fence>`{3,})(?P<info>[^\n`]*)\n(?P<code>.*?)\n?^(?P=indent)(?P=fence)[ \t]*$', re.M | re.S)
+FENCE = re.compile(r'^(?P<indent>[ \t]*)(?P<fence>`{3,}|~{3,})(?P<info>[^\n`~]*)\n(?P<code>.*?)\n?^(?P=indent)(?P=fence)[ \t]*$', re.M | re.S)
 PYTHON_TOKEN = re.compile(r'("[^"\n]*"|\x27[^\x27\n]*\x27|#[^\n]*|\b\d+(?:\.\d+)?\b|\b[A-Za-z_]\w*\b)')
 PYTHON_KEYWORDS = frozenset('from import with as if elif else for while in not and or is None True False await async try except '
                             'finally raise assert return def class lambda yield pass break continue'.split())
@@ -242,8 +243,12 @@ def highlight(raw, language):
     if language not in ('python', 'py', 'sh', 'bash', 'shell'):
         return html.escape(raw)
     if language in ('sh', 'bash', 'shell'):
-        return ''.join(f'<span class="co">{html.escape(line)}</span>' if line.lstrip().startswith('#') else html.escape(line)
-                       for line in raw.splitlines(keepends=True))
+        lines = []
+        for line in raw.splitlines(keepends=True):
+            content = line.rstrip('\n')
+            ending = line[len(content):]
+            lines.append((f'<span class="co">{html.escape(content)}</span>' if content.lstrip().startswith('#') else html.escape(content)) + ending)
+        return ''.join(lines)
     pieces, cursor = [], 0
     for item in PYTHON_TOKEN.finditer(raw):
         value = item[0]
@@ -257,14 +262,14 @@ def highlight(raw, language):
     return ''.join(pieces)
 
 
-def mark_lines(highlighted, spec):
+def mark_lines(highlighted, spec, count):
     """Wrap 1-based highlighted line ranges such as "2-3,7"; other lines stay unchanged."""
     if not spec:
         return highlighted
     selected = set()
     for part in spec.split(','):
         start, _, stop = part.strip().partition('-')
-        if not start.isdigit() or (stop and not stop.isdigit()):
+        if not start.isdigit() or (stop and not stop.isdigit()) or not 1 <= int(start) <= int(stop or start) <= count:
             raise SystemExit(f'Invalid highlighted line range: {spec!r}')
         selected.update(range(int(start), int(stop or start) + 1))
     return '\n'.join(f'<span class="hl">{line or " "}</span>' if number in selected else line
@@ -273,13 +278,15 @@ def mark_lines(highlighted, spec):
 
 def fence_info(info):
     language, _, rest = info.strip().partition(' ')
+    if not re.fullmatch(r'(?:\s*[a-z]+="[^"]*")*\s*', rest):
+        raise SystemExit(f'Malformed code fence attributes in: {info!r}')
     attributes = dict(re.findall(r'([a-z]+)="([^"]*)"', rest))
     if set(attributes) - {'file', 'tab', 'hl', 'title'}:
         raise SystemExit(f'Unsupported code fence attribute in: {info!r}')
     return (language or 'text'), attributes
 
 
-def code_block(blocks):
+def code_block(blocks, position=0):
     """Render one fence, or adjacent tab="…" fences as one accessible tab group."""
     if len(blocks) == 1 and blocks[0][0] == 'output':
         _, attributes, raw = blocks[0]
@@ -287,14 +294,14 @@ def code_block(blocks):
         return (f'<div class="output"><div class="output-head">{label}</div>'
                 f'<pre tabindex="0" aria-label="{label}"><code>{html.escape(raw)}</code></pre></div>')
     panes = [(language, attributes, f'<pre tabindex="0" aria-label="{html.escape(attributes.get("tab") or language, quote=True)} code">'
-              f'<code>{mark_lines(highlight(raw, language), attributes.get("hl"))}</code></pre>')
+              f'<code>{mark_lines(highlight(raw, language), attributes.get("hl"), len(raw.splitlines()))}</code></pre>')
              for language, attributes, raw in blocks]
     if len(panes) == 1:
         language, attributes, pane = panes[0]
         label = attributes.get('file') or language
         icon = ' code-file' if 'file' in attributes else ''
         return f'<div class="code-wrap"><div class="code-head"><span class="code-language{icon}">{html.escape(label)}</span></div>{pane}</div>'
-    key = 'tabs-' + hashlib.sha256(json.dumps(blocks).encode()).hexdigest()[:10]
+    key = 'tabs-' + hashlib.sha256(json.dumps([position, blocks]).encode()).hexdigest()[:10]
     buttons, panels = [], []
     for index, (_, attributes, pane) in enumerate(panes):
         selected = index == 0
@@ -306,7 +313,7 @@ def code_block(blocks):
             + ''.join(buttons) + '</div></div>' + ''.join(panels) + '</div>')
 
 
-def extract_code(text):
+def extract_code(text, nonce):
     """Replace fences with placeholders; adjacent tab fences at one indent form one group."""
     rendered, output, cursor = [], [], 0
     matches = list(FENCE.finditer(text))
@@ -314,6 +321,8 @@ def extract_code(text):
     while index < len(matches):
         match = matches[index]
         indent = match['indent']
+        if len(indent.expandtabs(4)) % 4:
+            raise SystemExit('Indent fenced code by a multiple of four spaces (inside lists and callouts).')
         group = [match]
         if 'tab="' in match['info']:
             while (index + 1 < len(matches) and 'tab="' in matches[index + 1]['info'] and matches[index + 1]['indent'] == indent
@@ -327,8 +336,8 @@ def extract_code(text):
             blocks.append((language, attributes, raw + '\n' if raw else raw))  # Fenced code keeps its final newline.
         if len(blocks) > 1 and any(language == 'output' for language, _, _ in blocks):
             raise SystemExit('Output panels cannot be tabbed.')
-        token = f'WELTCODEBLOCK{len(rendered)}X'
-        rendered.append(code_block(blocks))
+        token = f'WELTCODE{nonce}N{len(rendered)}X'
+        rendered.append(code_block(blocks, len(rendered)))
         output += [text[cursor:group[0].start()], f'\n{indent}{token}\n']
         cursor = group[-1].end()
         index += 1
@@ -338,7 +347,16 @@ def extract_code(text):
 
 def wrap_steps(body):
     """Group consecutive `## Title {.step}` sections into a numbered steps list."""
-    parts = re.split(r'(?=<h2 )', body)
+    starts, depth, cursor = [], 0, 0
+    for match in re.finditer(r'<(/?)(div|details|section|blockquote|ul|ol|li|table)\b[^>]*>|<h2 [^>]*>', body):
+        if match[0].startswith('<h2 '):
+            if depth == 0:
+                starts.append(match.start())
+            elif re.search(r'class="[^"]*\bstep\b', match[0]):
+                raise SystemExit('Step headings must be top-level, not inside a callout, list or details block.')
+        else:
+            depth += -1 if match[1] else 1
+    parts = [body[a:b] for a, b in zip([0, *starts], [*starts, len(body)]) if body[a:b]]
     result, open_steps = [], False
     for part in parts:
         is_step = re.match(r'<h2 [^>]*class="[^"]*\bstep\b', part) is not None
@@ -358,13 +376,15 @@ def wrap_steps(body):
 
 def render_markdown(text):
     text = re.sub(r'\]\(([^():#]+)\.md(#[^)]*)?\)', lambda m: '](' + m[1] + '.html' + (m[2] or '') + ')', text)
-    text, blocks = extract_code(text)
+    nonce = secrets.token_hex(8)  # Placeholders cannot collide with page text or code.
+    text, blocks = extract_code(text, nonce)
     renderer = markdown.Markdown(extensions=['tables', 'toc', 'admonition', 'attr_list', 'md_in_html'],
                                  extension_configs={'toc': {'permalink': False}})
     body = renderer.convert(text)
-    for index, block in enumerate(blocks):
-        token = f'WELTCODEBLOCK{index}X'
-        body = body.replace(f'<p>{token}</p>', block).replace(token, block)
+    token = f'WELTCODE{nonce}N(\\d+)X'
+    # One pass, so inserted code is never rescanned; an indented placeholder may arrive as code.
+    body = re.sub(rf'<pre><code>{token}\s*</code></pre>|<p>{token}</p>|{token}',
+                  lambda m: blocks[int(next(group for group in m.groups() if group is not None))], body)
     body = body.replace('<table>', '<div class="table-wrap" tabindex="0" role="region" aria-label="Scrollable table"><table>').replace('</table>', '</table></div>')
 
     def heading(match):
@@ -379,12 +399,16 @@ def render_markdown(text):
     body = re.sub(r'<h([23])((?: [\w-]+="[^"]*")*)>(.*?)</h\1>', heading, body, flags=re.S)
 
     def callout(match):
-        kind = match[1]
-        if kind not in CALLOUTS:
-            raise SystemExit(f'Unsupported callout type: {kind}')
-        return f'<div class="callout {"caution" if kind == "warning" else kind}" role="note">'
-    body = re.sub(r'<div class="admonition ([a-z]+)">', callout, body)
-    body = body.replace('<p class="admonition-title">', '<p class="callout-title">')
+        kinds = match[1].split()
+        if len(kinds) != 1 or kinds[0] not in CALLOUTS:
+            raise SystemExit(f'Unsupported callout type: {match[1]}')
+        kind = kinds[0]
+        title = match[2]
+        if title is not None and title == kind.capitalize():  # No explicit title: use the component's label.
+            title = html.escape(CALLOUTS[kind])
+        heading = '' if title is None else f'<p class="callout-title">{title}</p>'
+        return f'<div class="callout {"caution" if kind == "warning" else kind}" role="note">\n{heading}'
+    body = re.sub(r'<div class="admonition ([^"]*)">\s*(?:<p class="admonition-title">(.*?)</p>)?', callout, body, flags=re.S)
     # A short opening paragraph reads as the page lead; long ones stay body text.
     body = re.sub(r'(</h1>\s*)<p>((?:(?!</p>).){1,320}?</p>)', r'\1<p class="lead">\2', body, count=1, flags=re.S)
     return wrap_steps(body), renderer.toc_tokens
@@ -499,12 +523,15 @@ def notebook_actions(name, version):
 
 
 MODELS_SNAPSHOT = ROOT / 'docs/models-snapshot.json'
+PUBLIC_CATALOGUE = 'https://welt.ergodic.dev/v1/models'
 TASK_LABELS = {'classification': 'Classification', 'regression': 'Regression', 'causal_discovery': 'Causal discovery'}
 
 
 def available_models():
     """Available, executable task profiles from the committed public catalogue snapshot (DEC-073 #7)."""
     snapshot = json.loads(MODELS_SNAPSHOT.read_text())
+    if snapshot.get('source') != PUBLIC_CATALOGUE:
+        raise SystemExit(f'The Models table renders only a snapshot of {PUBLIC_CATALOGUE}.')
     def span(limits, low, high):
         if high not in limits:
             return '—'
@@ -713,6 +740,7 @@ def markdown_copy(text, version):
         colab = re.search(r'href="(https://colab[^"]+)"', notebook_actions(name, version))[1]
         return f'[Open in Colab]({colab}) · [Download notebook](downloads/{name}.ipynb) · [View](notebook-{name}.html)'
     text = re.sub(r'\{\{actions:([a-z0-9-]+)\}\}', actions, text)
+    text = re.sub(r'\n\{: \.contract \}', '', text)
     return text.replace('{{models-table}}', models_markdown())
 
 

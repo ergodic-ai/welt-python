@@ -112,6 +112,13 @@ def test_callouts_steps_and_details():
 
 @pytest.mark.parametrize('text, message', [
     ('!!! danger\n    Nope.\n', 'Unsupported callout type'),
+    ('!!! note inline\n    Nope.\n', 'Unsupported callout type'),
+    ('!!! tip-x\n    Nope.\n', 'Unsupported callout type'),
+    ('```python file=first.py\nx = 1\n```\n', 'Malformed code fence attributes'),
+    ('```python hl="3"\nx = 1\n```\n', 'Invalid highlighted line range'),
+    ('```python hl="2-1"\nx = 1\ny = 2\n```\n', 'Invalid highlighted line range'),
+    ('1. Step\n\n   ```sh\n   welt login\n   ```\n', 'multiple of four spaces'),
+    ('!!! note\n    ## Inside {.step}\n\n    Text.\n', 'Step headings must be top-level'),
     ('```python colour="red"\nx = 1\n```\n', 'Unsupported code fence attribute'),
     ('```python hl="a-b"\nx = 1\n```\n', 'Invalid highlighted line range'),
 ])
@@ -141,7 +148,7 @@ def test_long_signatures_wrap_one_parameter_per_line():
     reference = build_docs.reference()
     assert 'Client(\n    base_url=None,\n    api_key=None,\n    *,\n    timeout=60,' in reference
     assert 'Classifier.score(X, y, sample_weight=None)' in reference
-    assert '**Returns** ' in reference and '{: .contract }' in reference
+    assert '**Returns:** ' in reference and '{: .contract }' in reference
 
 
 def test_reference_index_links_only_existing_anchors(site):
@@ -193,7 +200,7 @@ def test_snapshot_keeps_only_rendered_catalogue_fields():
                             'task_profiles': [{'task': 'classification', 'status': 'available', 'execution_available': True,
                                                'version': 'v', 'limits': {'max_rows': 500, 'internal': 1}}]}]}
     reduced = snapshot_models.reduce(catalogue, 'https://example.invalid/v1/models', '2026-10-13T00:00:00Z')
-    assert reduced['models'] == [{'id': 'm', 'name': 'M', 'family': 'tabular', 'tasks': [
+    assert reduced['models'] == [{'id': 'm', 'name': 'M', 'tasks': [
         {'task': 'classification', 'status': 'available', 'execution_available': True, 'limits': {'max_rows': 500}}]}]
 
 
@@ -209,3 +216,47 @@ def test_navigation_covers_every_guide_once(site):
 def test_next_step_cards_render_links_from_markdown():
     body, _ = build_docs.render_markdown('## Next steps\n\n<div class="cards" markdown="1">\n\n- [Reuse a predictor](reuse.md): predict later.\n\n</div>\n')
     assert '<div class="cards">' in body and '<a href="reuse.html">Reuse a predictor</a>: predict later.' in body
+
+
+def test_placeholders_render_valid_blocks_in_every_position():
+    cases = ['Run this:\n```sh\nwelt login\n```\nThen continue.\n',
+             'Intro.\n\n    ```sh\n    welt login\n    ```\n',
+             '1. Step\n\n    ```sh\n    welt login\n    ```\n\n2. Next\n']
+    for text in cases:
+        body, _ = build_docs.render_markdown(text)
+        assert 'WELTCODE' not in body and body.count('class="code-wrap') == 1, text
+        assert not re.search(r'<p>[^<]*<div', body) and '<pre><code><div' not in body, body
+    numbered, _ = build_docs.render_markdown(cases[2])
+    assert numbered.count('<ol>') == 1
+    # Text that looks like an old placeholder stays literal.
+    body, _ = build_docs.render_markdown('WELTCODEBLOCK0X\n\n```sh\nWELTCODEBLOCK0X\n```\n')
+    assert body.count('WELTCODEBLOCK0X') == 2
+
+
+def test_identical_tab_groups_get_distinct_ids_and_shell_highlights_nest():
+    group = '```sh tab="pip"\npip install a\n```\n\n```sh tab="uv"\nuv pip install a\n```\n\nText.\n\n'
+    body, _ = build_docs.render_markdown(group + group)
+    ids = re.findall(r' id="(tabs-[^"]+)"', body)
+    assert len(ids) == 8 and len(set(ids)) == 8
+    body, _ = build_docs.render_markdown('```sh hl="2"\n# comment\nwelt login\n```\n')
+    assert '<span class="co"># comment</span>\n<span class="hl">welt login</span>' in body
+
+
+def test_tilde_fences_and_default_callout_labels():
+    body, _ = build_docs.render_markdown('~~~sh\nwelt login\n~~~\n\n!!! need\n    - Python\n')
+    assert 'class="code-wrap' in body and "<p class=\"callout-title\">You'll need</p>" in body.replace('&#x27;', "'")
+
+
+def test_reference_escapes_raw_angle_text_and_markdown_copy_is_clean(site):
+    _, out, _ = site
+    assert '&lt;path&gt;.metadata.json' in (out / 'reference.html').read_text()
+    assert '{: .contract }' not in (out / 'reference.md').read_text()
+
+
+def test_models_table_refuses_a_non_public_snapshot(tmp_path):
+    snapshot = json.loads(build_docs.MODELS_SNAPSHOT.read_text())
+    snapshot['source'] = 'https://staging.invalid/v1/models'
+    path = tmp_path / 'snapshot.json'
+    path.write_text(json.dumps(snapshot))
+    with patch.object(build_docs, 'MODELS_SNAPSHOT', path), pytest.raises(SystemExit, match='only a snapshot of'):
+        build_docs.models_table()

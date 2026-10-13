@@ -23,7 +23,7 @@ def reduce(catalogue, source, taken_at):
                       execution_available=bool(profile.get('execution_available')),
                       limits={key: profile['limits'][key] for key in LIMITS if key in (profile.get('limits') or {})})
                  for profile in model.get('task_profiles') or []]
-        models.append(dict(id=model['id'], name=model['name'], family=model['family'], tasks=tasks))
+        models.append(dict(id=model['id'], name=model['name'], tasks=tasks))
     return dict(source=source, taken_at=taken_at, models=models)
 
 

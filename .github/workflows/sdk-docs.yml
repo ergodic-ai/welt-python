@@ -25,6 +25,9 @@ jobs:
         with:
           ref: ${{ inputs.docs_presentation_ref || format('refs/tags/{0}', github.event.release.tag_name || inputs.release_tag) }}
           fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -170,7 +173,7 @@ jobs:
         if: github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0'
         working-directory: .legacy-sdk0101
       - name: Check current documentation contracts
-        run: .venv/bin/python -m pytest -q scripts/test_audit_navigation.py scripts/test_audit_content.py scripts/test_homepage_presentation.py scripts/test_learning_materials.py scripts/test_notebook_views.py
+        run: .venv/bin/python -m pytest -q scripts/test_audit_navigation.py scripts/test_audit_content.py scripts/test_homepage_presentation.py scripts/test_learning_materials.py scripts/test_notebook_views.py scripts/test_graphite_presentation.py scripts/test_docs_browser.py
       - run: .venv/bin/python scripts/build_docs.py
         env:
           DOCS_NOTEBOOK_REF: ${{ inputs.docs_presentation_ref || github.sha }}
