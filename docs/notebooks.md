@@ -1,21 +1,32 @@
 # Learn in a notebook
 
-Start with classification. Each notebook downloads real research data, prints the
-table, and explains what happens next. No helper file or testing context is needed.
-The first cell installs the reader; the next cell connects your workspace.
+Work through Welt's workflows as notebooks on real research data. Start with
+classification.
 
-Open in Colab to run an example, download the `.ipynb` file for Jupyter,
-or choose View to read its formatted cells here. Each action uses the same notebook.
+Each notebook downloads real research data, prints the table and explains what happens
+next. You don't need a helper file or a testing context. The first cell installs the
+reader; the next cell connects your workspace.
+
+For each notebook, choose **Open in Colab** to run it, download the `.ipynb` file for
+Jupyter, or choose **View** to read its formatted cells here. All three use the same
+notebook.
+
+!!! caution "Notebooks use workspace credits"
+    Modelling and research downloads may consume credits. Check **Workspace → Billing**
+    for available credits and spend caps before you run the notebooks. See
+    [usage and recovery](usage.md#usage-and-workspace-credits).
 
 ## [Classification](notebook-classification.html)
 
-Iris → inspect → train/test → fit → predict → accuracy and per-class report.
+Download Iris, inspect it, split train and test rows, fit, predict, then read accuracy
+and a per-class report.
 
 {{actions:classification}}
 
 ## [Regression](notebook-regression.html)
 
-Yacht → inspect → train/test → fit → predict → MAE, RMSE and R².
+Download Yacht, inspect it, split train and test rows, fit, predict, then read MAE,
+RMSE and R².
 
 {{actions:regression}}
 
@@ -27,19 +38,20 @@ The Iris workflow with durable submission and async waiting.
 
 ## [Artifacts and usage](notebook-artifacts-and-usage.html)
 
-Evaluate Iris, reopen the same predictor and inspect operation events.
+Evaluate Iris, reopen the same predictor and inspect its operation events.
 
 {{actions:artifacts-and-usage}}
 
 ## [Research datasets](notebook-research-datasets.html)
 
-Search, inspect a fixed eligible asset and complete your first classification.
+Search the catalogue, inspect a fixed eligible asset and complete your first
+classification.
 
 {{actions:research-datasets}}
 
 ## [Causal discovery](notebook-causal-discovery.html)
 
-Inspect real Iris measurements and native proposed graph structure.
+Inspect real Iris measurements and the graph structure Welt's native model proposes.
 
 {{actions:causal-discovery}}
 
@@ -51,21 +63,38 @@ Choose **Open in Colab** and run the cells in order. Each notebook starts with:
 !pip install "welt-client[parquet]"
 ```
 
-If Colab asks you to restart the session, restart it after installation, then
-continue with the connection cell. Open its printed verification link and approve
+If Colab asks you to restart the session, restart it after installation. Then
+continue with the connection cell: open its printed verification link and approve
 your workspace. View pages let you read the same cells without running them.
 
-Use a fresh Python3.11–3.13 environment with `welt-client[parquet]`. Outputs in
-notebook sources are cleared; your own run shows actual data and measurements.
-Keep credentials in `WELT_API_KEY`, never in saved notebook cells. Every modelling
-call goes to Welt; created private training data/predictors/results persist.
-Check **Workspace → Billing** for available credits and spend caps before running
-the notebooks. Modelling and research downloads may consume credits; see
-[usage and recovery](usage.md#usage-and-workspace-credits).
+## Before you run
 
-The causal example has no ground-truth graph and makes no causal-accuracy claim.
-Native scores are not calibrated confidence; approved public Ergodic continuation
-remains gated. Local release checks patch transport outside the public notebook and execute
-using authorized SHA-pinned research files. Public CI validates sources/contracts
-without downloading research bytes or using account credentials. Fixture scores
-never measure model quality; actual hosted acceptance is separately recorded.
+- Use a fresh Python 3.11–3.13 environment with `welt-client[parquet]`.
+- Outputs in the notebook sources are cleared. Your own run shows actual data and
+  measurements.
+- Keep credentials in `WELT_API_KEY`, never in saved notebook cells.
+- Every modelling call goes to Welt. The private training data, predictors and results
+  you create persist.
+
+!!! note "About the causal example"
+    It has no ground-truth graph and makes no causal-accuracy claim. Native scores are
+    not calibrated confidence. Approved public Ergodic continuation remains gated.
+
+<details markdown="1"><summary>How are these notebooks checked?</summary>
+
+Local release checks patch transport outside the public notebook and execute using
+authorized SHA-pinned research files. Public CI validates sources and contracts
+without downloading research bytes or using account credentials. Fixture scores never
+measure model quality; actual hosted acceptance is recorded separately.
+
+</details>
+
+## Next steps
+
+<div class="cards" markdown="1">
+
+- [Your first prediction](start.md): the same classification and regression steps as a page.
+- [Use your own table](own-data.md): run the workflow on your data.
+- [Connect your workspace](connect.md): connection, saved access and remote use.
+
+</div>

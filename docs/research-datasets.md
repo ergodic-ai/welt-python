@@ -1,9 +1,16 @@
 # Research datasets
 
-Find a table, download it, or load it directly into a DataFrame. These are research
-examples; downloading a table does not upload it into your private workspace.
+Find a real table in Welt's research catalogue, then load it into a DataFrame or save
+it as a file. These are research examples; downloading a table does not upload it into
+your private workspace.
+
+!!! need "You'll need"
+    - The SDK, connected to your workspace. See [Connect](connect.md).
+    - Workspace credits. Research downloads may consume them; check **Workspace → Billing**.
 
 ## Find a table
+
+Search the catalogue by keyword:
 
 ```python
 from welt import Client
@@ -13,6 +20,9 @@ with Client() as client:
     for item in page["items"]:
         print(item["id"], item["name"], item["rows"], item["columns"])
 ```
+
+Search filters include `q`, `source` and `availability`, with `limit` from 1 to 50.
+A listing returns `next_cursor`; pass it as `cursor` to get the next page.
 
 Use the dataset ID to inspect its columns and recorded targets:
 
@@ -38,9 +48,11 @@ print(data.head())
 print(data.shape)
 ```
 
-The loader downloads the current published content, verifies it, reads it with
-pandas and removes its temporary file. It handles supported Parquet and archive
-content. Pass `metadata=True` when you also want the table's column descriptions:
+The loader downloads the current published content and verifies it. It then reads the
+table with pandas and removes its temporary file. It handles supported Parquet and
+archive content.
+
+Pass `metadata=True` when you also want the table's column descriptions:
 
 ```python
 with Client() as client:
@@ -49,10 +61,13 @@ print(meta.name)
 print(meta.column_descriptions)
 ```
 
-Continue with [your first prediction](start.md) to split Iris into training and
-test rows, fit a classifier and evaluate its predictions.
+!!! tip "Ready to model?"
+    Continue with [your first prediction](start.md) to split Iris into training and
+    test rows, fit a classifier and evaluate its predictions.
 
 ## Save a file
+
+To keep a copy on disk, download the table to a new path:
 
 ```python
 from pathlib import Path
@@ -64,12 +79,13 @@ with Client() as client:
 print(path)
 ```
 
-With no version argument, the SDK downloads the current published content.
-It verifies the byte size and SHA-256 before publishing the file. An existing
-file or symlink raises `FileExistsError`; choose a new path to save another copy.
-Interrupted downloads leave no partial destination.
+- With no version argument, the SDK downloads the current published content.
+- It verifies the byte size and SHA-256 before the file appears at your path.
+  Interrupted downloads leave no partial destination.
+- An existing file or symlink raises `FileExistsError`. Choose a new path to save
+  another copy.
 
-Pass `metadata=True` to also save `<path>.metadata.json` and return a
+Pass `metadata=True` to also save `<path>.metadata.json`. You get back a
 `ResearchDownload` containing both paths and the dataset metadata:
 
 ```python
@@ -80,13 +96,17 @@ with Client() as client:
 print(saved.path, saved.metadata_path)
 ```
 
-`download_research_dataset` saves the served file as-is. Inspect
-`info["content"]["media_type"]` when choosing how to open it; use
-`load_research_dataset` to read supported archives directly into a DataFrame.
-The default download size limit is 128 MiB; pass `max_bytes` for a larger table,
-up to 2 GiB. A dataset whose `content` is `None` has no downloadable file.
+`download_research_dataset` saves the served file as-is. Check
+`info["content"]["media_type"]` to choose how to open it. To read supported archives
+directly into a DataFrame, use `load_research_dataset` instead.
+
+!!! note "Size limit"
+    The default download size limit is 128 MiB. Pass `max_bytes` for a larger table,
+    up to 2 GiB. A dataset whose `content` is `None` has no downloadable file.
 
 ## Async downloads
+
+`AsyncClient` offers the same download:
 
 ```python
 from welt import AsyncClient
@@ -97,9 +117,16 @@ async def fetch(dataset_id, path):
 ```
 
 Both clients use your workspace credentials and the same download checks.
-A listing returns `next_cursor`; pass it as `cursor` to get the next page.
-Search filters include `q`, `source` and `availability`, with `limit` from 1 to 50.
 
-Before fitting, inspect the [model's limits](capabilities.md). Keep test rows
-separate from training rows and select a target explicitly. The [notebooks](notebooks.md)
-show complete classification, regression, async and causal workflows.
+## Next steps
+
+Before fitting, inspect the model's limits. Keep test rows separate from training rows,
+and select a target explicitly.
+
+<div class="cards" markdown="1">
+
+- [Models and limits](capabilities.md): check what a model accepts before you fit.
+- [Your first prediction](start.md): train and evaluate on a research table.
+- [Notebook examples](notebooks.md): complete classification, regression, async and causal workflows.
+
+</div>

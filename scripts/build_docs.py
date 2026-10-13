@@ -40,7 +40,7 @@ TASKS = [('Classify rows', 'start', 'Predict a category for each row of a table.
          ('Predict a number', 'regression', "Regression that returns values in your target's units."),
          ('Use your own table', 'own-data', 'DataFrames, CSV and Parquet with a named target.'),
          ('Discover a causal graph', 'causal-discovery', 'Native graphs from observational data.'),
-         ('Research datasets', 'research-datasets', 'Search, check the licence and load real tables.'),
+         ('Research datasets', 'research-datasets', 'Search, inspect and load real tables to practise on.'),
          ('Work from the CLI', 'cli', 'Scriptable commands with JSON output for agents.')]
 REPOSITORY = 'https://github.com/ergodic-ai/welt-python'
 ICONS = {
