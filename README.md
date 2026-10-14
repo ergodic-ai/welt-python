@@ -185,17 +185,15 @@ eligible model (or up to 8 you name with `models=[...]`) on the same seeded fold
 returns an `Evaluation`: `summary()` is the leaderboard against a baseline, `folds()`
 and `predictions()` are DataFrames, `show()` displays the HTML report in Jupyter and
 `report_link()` creates a signed link anyone holding it can open for up to seven days.
-`evaluation.fit()` then fits the chosen model on the full dataset. Requires SDK0.12
-and a server release with evaluations; an older server raises `NotFoundError` with
+`evaluation.fit()` then fits the chosen model on the full dataset. It requires SDK 0.12
+or later and a server release with evaluations; an older server raises `NotFoundError` with
 `code="evaluations_unavailable"`. [Evaluations guide](https://ergodic-ai.github.io/welt-python/evaluations.html).
 
 ## Forecast a time series
 
 `Forecast` snapshots regular timezone-aware history and submits guarded zero-shot
-Chronos-2 runs. Requires SDK0.11 and the matching server capability:
+Chronos-2 runs. It requires SDK 0.11 or later and the matching server capability.
 
-
-
-Supply your own 16–512 finite observations; horizon1–64. Fit uploads no history;
+Supply your own 16–512 finite observations and a horizon of 1–64. Fit uploads no history;
 each prediction call creates one run. Native quantiles are not calibrated
 intervals. [Forecast guide](https://ergodic-ai.github.io/welt-python/forecasting.html).
