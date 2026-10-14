@@ -254,28 +254,34 @@ def test_scores_require_owned_result_axis_identity_and_native_probability_semant
         validated_scores(CausalResult(result_payload()), payload)
 
 
-def test_explicit_native_conversion_preserves_direction_order_and_isolate(monkeypatch):
-    import welt.causal as causal
-
+def fake_ergodic(monkeypatch, graph_format="ergodic.graph/1", graph=None):
+    """Install a stand-in ``ergodic`` module; ``graph_format=None`` omits the field."""
     observed = []
 
     class Graph:
         @classmethod
         def from_dict(cls, payload):
             observed.append(payload)
-            graph = cls()
-            graph.nodes = frozenset(payload["nodes"])
-            return graph
+            made = cls()
+            made.nodes = frozenset(payload["nodes"])
+            return made
 
     module = ModuleType("ergodic")
-    module.MixedGraph = Graph
+    module.MixedGraph = graph or Graph
+    if graph_format is not None:
+        module.GRAPH_FORMAT = graph_format
     monkeypatch.setitem(sys.modules, "ergodic", module)
-    monkeypatch.setattr(causal, "version", lambda name: "0.1.1")
+    return observed
+
+
+def test_explicit_native_conversion_preserves_direction_order_and_isolate(monkeypatch):
+    observed = fake_ergodic(monkeypatch)
     result = CausalResult(result_payload())
     graph = result.to_ergodic()
     assert graph.nodes == frozenset(result.variables)
     assert observed == [
         dict(
+            format="ergodic.graph/1",
             kind="dag",
             nodes=["z", "isolated", "a"],
             edges=[dict(u="z", v="a", u_mark="tail", v_mark="arrow")],
@@ -286,59 +292,82 @@ def test_explicit_native_conversion_preserves_direction_order_and_isolate(monkey
 def test_native_directed_cycle_preserved_but_dag_conversion_refused_before_optional_import(
     monkeypatch,
 ):
-    payload = result_payload()
-    payload["native_graph_type"] = "directed"
-    payload["edge_marks"].append(dict(u="a", v="z", u_mark="tail", v_mark="arrow"))
-    result = CausalResult(payload)
-    assert len(result.edge_marks) == 2
-    with pytest.raises(UnsupportedGraphConversionError):
-        result.to_ergodic()
-
-
-def test_unavailable_or_unrelated_ergodic_distribution_has_typed_optional_error(
-    monkeypatch,
-):
-    import welt.causal as causal
-
-    module = ModuleType("ergodic")
-    monkeypatch.setitem(sys.modules, "ergodic", module)
-    monkeypatch.setattr(causal, "version", lambda name: "1.0.0")
-    with pytest.raises(OptionalDependencyError):
-        CausalResult(result_payload()).to_ergodic()
-
-
-def test_unrelated_distribution_is_refused_before_optional_module_import(monkeypatch):
     import builtins
-    import welt.causal as causal
 
     original = builtins.__import__
 
     def observed(name, *args, **kwargs):
         if name == "ergodic":
-            pytest.fail("Unrelated distribution must not import.")
+            pytest.fail("Non-DAG conversion must refuse before importing ergodic.")
         return original(name, *args, **kwargs)
 
+    payload = result_payload()
+    payload["native_graph_type"] = "directed"
+    payload["edge_marks"].append(dict(u="a", v="z", u_mark="tail", v_mark="arrow"))
+    result = CausalResult(payload)
+    assert len(result.edge_marks) == 2
     monkeypatch.setattr(builtins, "__import__", observed)
-    monkeypatch.setattr(causal, "version", lambda name: "1.0.0")
+    with pytest.raises(UnsupportedGraphConversionError):
+        result.to_ergodic()
+
+
+@pytest.mark.parametrize(
+    "graph_format", [None, "ergodic.graph/2", "", ["ergodic.graph/1"], 1]
+)
+def test_ergodic_without_a_supported_graph_format_has_typed_optional_error(
+    monkeypatch, graph_format
+):
+    """0.1.x has no GRAPH_FORMAT; a future or malformed format is refused, not guessed."""
+    observed = fake_ergodic(monkeypatch, graph_format=graph_format)
+    with pytest.raises(OptionalDependencyError) as error:
+        CausalResult(result_payload()).to_ergodic()
+    assert error.value.code == "optional_dependency_unavailable"
+    assert "welt-client[ergodic]" in str(error.value)
+    assert "ergodic>=0.2" in str(error.value)
+    assert observed == []
+
+
+def test_ergodic_module_without_mixed_graph_is_refused(monkeypatch):
+    module = ModuleType("ergodic")
+    module.GRAPH_FORMAT = "ergodic.graph/1"
+    monkeypatch.setitem(sys.modules, "ergodic", module)
     with pytest.raises(OptionalDependencyError):
         CausalResult(result_payload()).to_ergodic()
 
 
-def test_unexpected_local_conversion_rejection_is_typed_and_sanitized(monkeypatch):
-    import welt.causal as causal
+def test_missing_ergodic_has_typed_optional_error_naming_the_extra(monkeypatch):
+    # A None entry in sys.modules makes `import ergodic` raise ImportError.
+    monkeypatch.setitem(sys.modules, "ergodic", None)
+    with pytest.raises(OptionalDependencyError) as error:
+        CausalResult(result_payload()).to_ergodic()
+    assert isinstance(error.value, ImportError)
+    assert "welt-client[ergodic]" in str(error.value)
+    assert "https://ergodic.dev/" in str(error.value)
 
+
+def test_unexpected_local_conversion_rejection_is_typed_and_sanitized(monkeypatch):
     class Graph:
         @classmethod
         def from_dict(cls, payload):
             raise ValueError("private-customer-value")
 
-    module = ModuleType("ergodic")
-    module.MixedGraph = Graph
-    monkeypatch.setitem(sys.modules, "ergodic", module)
-    monkeypatch.setattr(causal, "version", lambda name: "0.1.1")
+    fake_ergodic(monkeypatch, graph=Graph)
     with pytest.raises(InvalidCausalResultError) as error:
         CausalResult(result_payload()).to_ergodic()
     assert "private-customer-value" not in str(error.value)
+
+
+def test_conversion_that_drops_a_variable_is_refused(monkeypatch):
+    class Graph:
+        @classmethod
+        def from_dict(cls, payload):
+            made = cls()
+            made.nodes = frozenset(payload["nodes"][:-1])
+            return made
+
+    fake_ergodic(monkeypatch, graph=Graph)
+    with pytest.raises(InvalidCausalResultError):
+        CausalResult(result_payload()).to_ergodic()
 
 
 @pytest.mark.parametrize("kind", ["dataframe", "array", "csv", "dataset-id"])
@@ -425,3 +454,16 @@ def test_dataset_provenance_accessor_is_immutable():
     assert result.dataset_id == 'dataset_fixture'
     with pytest.raises(AttributeError):
         result.dataset_id = 'different_dataset'
+
+
+def test_ergodic_docs_link_lives_in_one_constant():
+    """Guides use the {{ergodic-docs}} placeholder; the URL is welt.causal.ERGODIC_DOCS_URL."""
+    from pathlib import Path
+
+    from welt.causal import ERGODIC_DOCS_URL
+
+    docs = Path(__file__).resolve().parents[1] / "docs"
+    text = "".join(path.read_text() for path in docs.glob("*.md"))
+    assert ERGODIC_DOCS_URL not in text
+    assert "{{ergodic-docs}}" in (docs / "causal-discovery.md").read_text()
+    assert "{{ergodic-docs}}" in (docs / "capabilities.md").read_text()

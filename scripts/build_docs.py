@@ -20,6 +20,7 @@ from urllib.parse import quote
 
 import markdown
 import welt
+from welt.causal import ERGODIC_DOCS_URL
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = "https://ergodic-ai.github.io/welt-python"
@@ -141,7 +142,7 @@ METHODS = {
  'causal_result': ('Reopen an owned discovery job result and validate identity/provenance.', 'Immutable CausalResult with job_id.', 'NotFoundError, ResultDeletedError, authentication or InvalidCausalResultError; no graph repair.'),
  'causal_scores': ('Fetch separate native scores while preserving original axes and score semantics.', 'Score dictionary with values, variables, source_row_target_column axes and score_reference.', 'Authorization, deleted/missing result or InvalidCausalResultError; no thresholding or graph rewriting.'),
  'to_dict': ('Make an independent ordinary copy of the original native wire payload.', 'Fresh dictionary retaining graph type, endpoint marks and provenance.', 'No remote request and no hidden client or credentials.'),
- 'to_ergodic': ('Convert only a declared native DAG locally, preserving isolates and direction; never project directed graphs.', 'Approved Ergodic MixedGraph. Use to_adjacency(order=list(result.variables)) for original axes.', 'OptionalDependencyError for missing/unrelated co-release dependency; UnsupportedGraphConversionError for every non-declared-DAG graph.'),
+ 'to_ergodic': ('Convert only a declared native DAG locally, preserving isolates and direction; never project directed graphs.', 'ergodic.MixedGraph (install welt-client[ergodic]). Use to_adjacency(order=list(result.variables)) for original axes.', 'OptionalDependencyError when ergodic is missing or reads no supported graph format (ergodic.GRAPH_FORMAT); UnsupportedGraphConversionError for every non-declared-DAG graph.'),
  'get_params': ('Inspect sklearn constructor parameters; credentials remain redacted.', 'Parameter dictionary; includes nested parameters when deep=True.', 'No remote request. Do not save runtime credentials; pickle drops explicit keys.'),
  'set_params': ('Set sklearn constructor parameters; a changed model/configuration requires a new fit.', 'The same estimator (self).', 'ValueError for an invalid parameter. Does not mutate existing pinned server artifacts.'),
  'score': ('Use the inherited sklearn scoring convention on explicit held-out rows.', 'Classifier: accuracy. Regressor: R². This is not an automatic hosted benchmark.', 'Prediction/schema/task errors; caller owns the split and evaluation protocol.'),
@@ -262,7 +263,7 @@ def reference():
             purpose, returns, errors = (html.escape(text, quote=False) for text in (overrides[key] if key in overrides else METHODS[key]))
             parts += [f'### {name}.{key}', purpose, f'```python\n{format_signature(name + "." + key, public_signature(method))}\n```', f'**Returns:** {returns}\n{{: .contract }}', f'**Errors and limits:** {errors}\n{{: .contract }}']
     parts += ['## Error types', 'All remote errors inherit `WeltError`. Table/schema validation may raise ordinary `ValueError` before upload. Do not catch every error and silently fit again.', '| Type | Next action |', '| --- | --- |']
-    types = {'AuthenticationError': 'Configure a missing key locally; replace an invalid, expired or revoked key in Account.', 'PermissionDeniedError': 'Use a key with the required workspace write/fit/predict permission.', 'InvalidInputError': 'Check the named schema, explicit target and task limits.', 'ModelUnavailableError': 'Inspect current task_profiles and worker readiness; no automatic model fallback.', 'CapacityError / RateLimitError': 'Respect retry_after and workspace admission limits; inspect existing work.', 'JobTimeoutError / PredictionPendingError': 'Retain job_id and reconnect; local timeout does not cancel.', 'ExecutionError / JobCancelledError': 'Inspect the durable job and safe request/job IDs; intentional retry needs a new decision.', 'NotFoundError / ConflictError': 'Check workspace ownership and resource dependencies.', 'TransportError': 'Inspect existing job state before replaying a mutation; GET retries are bounded.', 'ResultExpiredError / ResultDeletedError': 'Temporary access expiry and explicit primary deletion are distinct.', 'InvalidCausalResultError': 'Reject malformed native payload without repair.', 'UnsupportedGraphConversionError / OptionalDependencyError': 'Preserve native graph; convert declared DAGs only with approved local co-release dependency. For load_research_dataset, install welt-client[research].'}
+    types = {'AuthenticationError': 'Configure a missing key locally; replace an invalid, expired or revoked key in Account.', 'PermissionDeniedError': 'Use a key with the required workspace write/fit/predict permission.', 'InvalidInputError': 'Check the named schema, explicit target and task limits.', 'ModelUnavailableError': 'Inspect current task_profiles and worker readiness; no automatic model fallback.', 'CapacityError / RateLimitError': 'Respect retry_after and workspace admission limits; inspect existing work.', 'JobTimeoutError / PredictionPendingError': 'Retain job_id and reconnect; local timeout does not cancel.', 'ExecutionError / JobCancelledError': 'Inspect the durable job and safe request/job IDs; intentional retry needs a new decision.', 'NotFoundError / ConflictError': 'Check workspace ownership and resource dependencies.', 'TransportError': 'Inspect existing job state before replaying a mutation; GET retries are bounded.', 'ResultExpiredError / ResultDeletedError': 'Temporary access expiry and explicit primary deletion are distinct.', 'InvalidCausalResultError': 'Reject malformed native payload without repair.', 'UnsupportedGraphConversionError / OptionalDependencyError': 'Preserve native graph; convert declared DAGs only, with welt-client[ergodic] (ergodic>=0.2,<0.3). For load_research_dataset, install welt-client[research].'}
     types['InvalidForecastResultError'] = 'Reject malformed, crossed or mismatched native forecast payload without repair.'
     types['WeltError (HTTP 402)'] = 'Inspect status_code and code: insufficient_credits, spend_cap_reached or plan_past_due. Open Workspace Billing to review available credits and pending reservations, the spend cap or unpaid plan. Resolve the cause before intentionally retrying; this is not an automatic backoff or SDK payment operation.'
     parts += [f'| `{name}` | {meaning} |' for name, meaning in types.items()]
@@ -493,7 +494,7 @@ def current_redirect(page):
 
 
 # Published historical documentation folders (v<version>/), oldest first.
-HISTORICAL_VERSIONS = ('0.6.0', '0.7.0', '0.7.1', '0.8.0', '0.9.1', '0.10.0', '0.10.1', '0.11.0', '0.11.1')
+HISTORICAL_VERSIONS = ('0.6.0', '0.7.0', '0.7.1', '0.8.0', '0.9.1', '0.10.0', '0.10.1', '0.11.0', '0.11.1', '0.12.0')
 
 
 def release_tuple(version):
@@ -805,7 +806,8 @@ def main():
         raise SystemExit('Installed SDK version must match the documentation source version.')
     if any(not hasattr(welt,name) for name in REQUIRED):
         raise SystemExit('Installed SDK is missing a required documented public symbol.')
-    pages={p.stem:p.read_text() for p in sorted((ROOT/'docs').glob('*.md'))}
+    # The ergodic continuation link lives in one constant (welt.causal.ERGODIC_DOCS_URL).
+    pages={p.stem:p.read_text().replace('{{ergodic-docs}}', ERGODIC_DOCS_URL) for p in sorted((ROOT/'docs').glob('*.md'))}
     pages['reference']=reference()
     if any(re.search(r'github(?:usercontent)?\.com/ergodic-ai/welt-python/(?:blob/|tree/)?(?:main|feat/)', text) for text in pages.values()):
         raise SystemExit('Versioned documentation cannot link to mutable SDK source.')

@@ -5,7 +5,6 @@ No model runtime or optional causal dependency is imported during SDK import.
 
 from copy import deepcopy
 from dataclasses import dataclass, field
-from importlib.metadata import PackageNotFoundError, version
 from types import MappingProxyType
 
 from sklearn.base import BaseEstimator
@@ -15,6 +14,17 @@ from .errors import (
     InvalidCausalResultError,
     OptionalDependencyError,
     UnsupportedGraphConversionError,
+)
+
+#: Serialized ergodic graph formats this SDK can hand to ``MixedGraph.from_dict``.
+#: ergodic 0.2 exports the one it writes as ``ergodic.GRAPH_FORMAT`` (DEC-078).
+SUPPORTED_ERGODIC_GRAPH_FORMATS = frozenset({"ergodic.graph/1"})
+#: The ergodic guide for continuing from a Welt result. The SDK docs read this
+#: constant through the ``{{ergodic-docs}}`` placeholder, so change it only here.
+ERGODIC_DOCS_URL = "https://ergodic.dev/welt.html"
+_ERGODIC_INSTALL = (
+    "Install it with `pip install 'welt-client[ergodic]'` (ergodic>=0.2,<0.3); "
+    "see " + ERGODIC_DOCS_URL + "."
 )
 
 
@@ -180,31 +190,41 @@ class CausalResult:
         return self._payload["native_graph_type"]
 
     def to_ergodic(self):
-        """Convert a declared native DAG locally, preserving marks and all nodes."""
+        """Convert a declared native DAG locally, preserving marks and all nodes.
+
+        Needs the optional ``ergodic`` package (``welt-client[ergodic]``) whose
+        ``GRAPH_FORMAT`` is one of ``SUPPORTED_ERGODIC_GRAPH_FORMATS``. The
+        package version is not checked; the graph format is.
+        """
         if self.native_graph_type != "dag":
             raise UnsupportedGraphConversionError(
                 "Only native DAG conversion is qualified; no projection was applied.",
                 code="unsupported_graph_conversion",
             )
         try:
-            if version("ergodic") != "0.1.1":
-                raise OptionalDependencyError(
-                    "Install the approved Ergodic co-release artifact; the public dependency is not yet available.",
-                    code="optional_dependency_unavailable",
-                )
             import ergodic
-
-            if not hasattr(ergodic, "MixedGraph"):
-                raise OptionalDependencyError(
-                    "The installed Ergodic package lacks the approved graph API.",
-                    code="optional_dependency_unavailable",
-                )
-        except (ImportError, PackageNotFoundError):
+        except ImportError:
             raise OptionalDependencyError(
-                "Install the approved Ergodic co-release artifact; Welt does not download it automatically.",
+                "Converting to an ergodic graph needs the optional ergodic package. "
+                + _ERGODIC_INSTALL,
                 code="optional_dependency_unavailable",
             ) from None
+        graph_format = getattr(ergodic, "GRAPH_FORMAT", None)
+        if (
+            not isinstance(graph_format, str)
+            or graph_format not in SUPPORTED_ERGODIC_GRAPH_FORMATS
+            or not hasattr(ergodic, "MixedGraph")
+        ):
+            raise OptionalDependencyError(
+                "The installed ergodic package does not read a supported graph format "
+                "("
+                + ", ".join(sorted(SUPPORTED_ERGODIC_GRAPH_FORMATS))
+                + "). "
+                + _ERGODIC_INSTALL,
+                code="optional_dependency_unavailable",
+            )
         payload = dict(
+            format=graph_format,
             kind="dag",
             nodes=list(self.variables),
             edges=[_thaw(edge) for edge in self.edge_marks],
