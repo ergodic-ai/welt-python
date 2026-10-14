@@ -1,4 +1,4 @@
-# 0.12.0 (unreleased) — Cross-validated evaluations
+# 0.12.0 (2026-10-14) — Cross-validated evaluations
 
 - Add `Client.submit_evaluation`, `evaluate`, `evaluation(id)` and `evaluations()`
   (and the `AsyncClient` equivalents) for the `/v1/evaluations` resource (DEC-076).
