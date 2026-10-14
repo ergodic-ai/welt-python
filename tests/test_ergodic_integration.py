@@ -49,11 +49,12 @@ def test_real_ergodic_receives_every_node_and_native_direction():
     assert graph.is_dag()
     matrix, order = graph.to_adjacency(order=list(result.variables))
     assert order == ["z", "isolated", "a", "b"]
+    # z -> a, and the arrow-first edge {u: b, v: a, u_mark: arrow} is a -> b.
     assert matrix.tolist() == [
         [0, 0, 1, 0],
         [0, 0, 0, 0],
+        [0, 0, 0, 1],
         [0, 0, 0, 0],
-        [0, 0, 1, 0],
     ]
     written = graph.to_dict()
     assert written["format"] == ergodic.GRAPH_FORMAT
