@@ -1,3 +1,13 @@
+# 0.11.1 (2026-10-14) — Package description and agent index
+
+- Correct the package README's Forecast section, which was missing its text in 0.11.0
+  and appears on the PyPI page.
+- The documentation's `llms.txt` now points agents to the product-level index at
+  https://welt.ergodic.dev/llms.txt for the hosted MCP server, the CLI and agent docs.
+- Keep the 0.11.0 documentation as a retained version.
+- Runtime behavior, dependencies, model semantics and evaluation protocols are
+  unchanged from 0.11.0; only the declared version changes in the package.
+
 # 0.11.0 (2026-10-13) — Forecast estimator and redesigned documentation
 
 - Add zero-shot `Forecast.fit`, `predict`, `predict_quantiles`, `predict_details`

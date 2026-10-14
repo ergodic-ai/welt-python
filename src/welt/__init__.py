@@ -39,4 +39,4 @@ __all__ = [
     "OptionalDependencyError", "UnsupportedGraphConversionError",
     "ResearchDownload", "ResearchMetadata", "ResearchNoticeWarning",
 ]
-__version__ = "0.11.0"
+__version__ = "0.11.1"

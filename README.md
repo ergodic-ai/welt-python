@@ -181,10 +181,8 @@ results. API errors, cancellation and timeouts retain existing typed semantics.
 ## Forecast a time series
 
 `Forecast` snapshots regular timezone-aware history and submits guarded zero-shot
-Chronos-2 runs. Requires SDK0.11 and the matching server capability:
+Chronos-2 runs. It requires SDK 0.11 or later and the matching server capability.
 
-
-
-Supply your own 16–512 finite observations; horizon1–64. Fit uploads no history;
+Supply your own 16–512 finite observations and a horizon of 1–64. Fit uploads no history;
 each prediction call creates one run. Native quantiles are not calibrated
 intervals. [Forecast guide](https://ergodic-ai.github.io/welt-python/forecasting.html).

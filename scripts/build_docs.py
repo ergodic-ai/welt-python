@@ -460,7 +460,7 @@ def current_redirect(page):
 
 
 # Published historical documentation folders (v<version>/), oldest first.
-HISTORICAL_VERSIONS = ('0.6.0', '0.7.0', '0.7.1', '0.8.0', '0.9.1', '0.10.0', '0.10.1')
+HISTORICAL_VERSIONS = ('0.6.0', '0.7.0', '0.7.1', '0.8.0', '0.9.1', '0.10.0', '0.10.1', '0.11.0')
 
 
 def release_tuple(version):
@@ -756,7 +756,7 @@ def llms_index(version, titles):
     lines = [f'# Welt Python SDK {version}', '',
              '> Python SDK for Welt: fit qualified tabular models on DataFrames, reuse predictors, forecast, '
              'load research datasets and run native causal discovery. Each link is this release\'s Markdown source.', '',
-             'The Welt console and service: https://welt.ergodic.dev', '']
+             'For the hosted MCP server, the CLI and product-level agent docs, see https://welt.ergodic.dev/llms.txt', '']
     for label, pages in GUIDES:
         lines += [f'## {label}', '']
         lines += [f'- [{titles[page]}]({PUBLIC}/v{version}/{page}.md)' for _, page in pages if page in titles]
