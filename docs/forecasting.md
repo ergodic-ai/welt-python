@@ -9,6 +9,19 @@ model. You get median points and native quantiles for each future step.
     - A server advertising `supports_version_expectations` for the model.
     - Your own regular observations with timezone-aware timestamps.
 
+!!! note "Panels and covariates (welt-client 0.14)"
+    On a server that advertises the `forecasting` task, `Forecast.fit` also accepts a
+    long-format DataFrame with an `id` column, several targets and past, future and
+    categorical covariates, and `forecast(horizon, future=...)` forecasts every series
+    and target in one `POST /v1/forecasts` request. There, limits come from the
+    model's published envelopes rather than the 16–512 and 1–64 bounds below,
+    quantile levels are the published native levels, crossed native quantiles are
+    sorted and reported as `rearranged_steps`, and single-series prediction also uses
+    that endpoint, so `to_frame()` returns the long layout (`id`, `target`,
+    `timestamp`, `median`, `q_<level>`). See the [Python reference](reference.md#forecast) and the
+    changelog. This page describes the univariate model-run route that older servers
+    keep.
+
 `Forecast` provides the same constructor → `fit` → prediction flow as `Classifier`
 and `Regressor`. The initial estimator accepts `configuration="default"` only. Model
 metadata may set narrower context and horizon limits within the bounds below. `fit`

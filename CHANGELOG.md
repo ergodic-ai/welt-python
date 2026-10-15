@@ -1,3 +1,82 @@
+# 0.14.0 (unreleased) — Forecasting panels and covariates
+
+SDK side of public Chronos-2 forecasting (DEC-085 §7, API-161). Needs a server that
+advertises the `forecasting` task; against older servers the 0.13 univariate behaviour
+is unchanged.
+
+- `Forecast.fit` accepts a long-format DataFrame: `time`, optional `id` (one series per
+  ID; string or integer cells, rendered as strings in results), `target` as a column
+  name or a list (targets are forecast jointly), `past_covariates`,
+  `future_covariates` and `categorical` (a subset of the covariates; string or integer
+  cells). Rows may come in any order; duplicate (id, time) pairs, gaps, naive
+  timestamps, booleans, text in numeric columns, nonfinite or non-FP32 values,
+  incomplete future covariates or categories, and a target missing for a whole series
+  are refused before any request. Missing target and numeric past-covariate cells are
+  sent as null (native missing-value handling). The fit uploads nothing.
+- `frequency=` takes `{"unit", "every"}` (second, minute, hour, day, week, month,
+  quarter, year) or an alias, optionally with a multiple such as `"15min"`:
+  `s`/`S`/`sec` second, `min`/`T` minute, `h`/`H` hour, `D`/`d` day, `W` week,
+  `M`/`MS`/`ME` month, `Q`/`QS`/`QE` quarter, `Y`/`YS`/`YE`/`A`/`AS` year (also the
+  unit names). Month, quarter and year use calendar arithmetic anchored on a day of
+  the month (1–28) or on month-ends, taken from the observations. It is sent in its
+  largest whole unit (`{"unit": "hour", "every": 24}` is sent as one day). Without it
+  the spacing is checked locally (one frequency shared by every series) and the
+  server infers it; a single regular series sends its spacing explicitly.
+- New `Forecast.forecast(horizon, *, future=None, quantile_levels=(0.1, 0.5, 0.9),
+  cross_learning=False, idempotency_key=None)` and `submit_forecast(...)` submit one
+  guarded `POST /v1/forecasts` request. `future` is the known-future table (time, id
+  and future covariates; exactly `horizon` rows per series at its next timestamps),
+  required exactly when the fit named future covariates. Quantile levels are any
+  increasing subset of the levels the model publishes (default the 21 native levels
+  0.01, 0.05, 0.10, …, 0.95, 0.99).
+- Limits come from model metadata, never from SDK constants: a request must be
+  dominated by one published `forecast_envelopes` corner (context, variates = targets +
+  covariates, series, horizon) and every series needs `min_context` observations.
+  Refusals raise `InvalidInputError` (`workload_limit`, a `ValueError`) naming the
+  published corners. This also lifts the 512-observation/64-step univariate limits
+  wherever the server publishes larger envelopes.
+- Transport: the history and future tables are sent inline when each is at most
+  `welt.forecast.INLINE_TABLE_BYTES` (1 MiB of compact JSON); a larger table is first
+  uploaded as a workspace dataset (`Client.upload`) and sent by ID. Uploaded datasets
+  remain in the workspace and are listed on `job.datasets`. A transport failure after an
+  upload names the datasets so the same body and `idempotency_key` can be replayed.
+  Requests carry `Idempotency-Key` and paired `X-Welt-Model-Version` /
+  `X-Welt-Configuration-Version` guards exactly like model runs (DEC-066).
+- `ForecastResult` also holds `forecasting` results, validated strictly (exact fields,
+  finite values, sorted quantiles, median equal to q_0.5, timestamps stepping at the
+  reported frequency) and against the request (column roles, series order by first ID
+  appearance then target order, context lengths, horizon, levels, cross_learning,
+  frequency and each series' future timestamps). New properties: `task`, `series`
+  (`ForecastSeries` with `id`, `target`, `context_length`, `timestamps`, `predictions`,
+  `quantiles`), `rearranged_steps` (steps whose crossing native quantiles the server
+  sorted; 0 for legacy results), `horizon`, `frequency`, `cross_learning`, `columns`.
+  For `forecasting` results `to_frame()` is long: `id`, `target`, `timestamp` (UTC),
+  `median`, `q_<level>`. `timestamps`, `predictions` and `quantiles` remain for a single
+  series and target.
+- `predict(horizon, future=None)` still returns a `(horizon,)` median array, and
+  `predict_quantiles`/`predict_details`/`submit_predict` accept `future`; for a panel or
+  several targets they raise `ValueError` pointing to `forecast()`. On servers with the
+  `forecasting` task, single-series prediction uses `POST /v1/forecasts` and returns a
+  `forecasting` result, so `predict_details().to_frame()` is in the long layout there;
+  on older servers it keeps the legacy model run and layout. `forecast()` needs the
+  `forecasting` task and raises `WeltError` (`unsupported_capability`) otherwise; panels,
+  covariates and calendar frequencies are refused the same way at fit.
+- The univariate form (an array, a Series, or a DataFrame with one string target and no
+  id or covariates) keeps the 0.13 validation: ordered, complete, finite FP32 history.
+  Pass the target as a list for long-format semantics, including missing values.
+  Timezone-aware timestamps are still required everywhere. The 16-observation minimum
+  is now the server's published `min_context`, read at fit.
+- `Client.submit_forecast` and `AsyncClient.submit_forecast` submit a raw
+  `/v1/forecasts` body with optional paired version guards; `Job.result()` returns its
+  result dictionary and `forecast_job(id)` reconnects to either task with typed
+  validation. `welt forecast --input request.json [--idempotency-key KEY]` mirrors
+  `welt run`.
+- Fitted attributes: `task_`, `n_series_`, `series_ids_`, `targets_`, `frequency_` join
+  `context_length_` (the longest series), `frequency_seconds_` (None for calendar
+  frequencies) and `cutoff_` (latest observation).
+- The legacy `univariate_forecasting` model-run request, result schema, limits and
+  levels are unchanged (DEC-085 §8). Runtime dependencies are unchanged.
+
 # 0.13.1 (2026-10-15) — ergodic documentation address
 
 - The ergodic documentation moved to https://docs.ergodic.dev before it went live.
