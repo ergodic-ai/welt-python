@@ -1,4 +1,16 @@
-# 0.13.0 (unreleased) — ergodic 0.2 bridge
+# 0.13.1 (2026-10-15) — ergodic documentation address
+
+- The ergodic documentation moved to https://docs.ergodic.dev before it went live.
+  The README, the causal discovery and Models pages, the product switcher and the
+  `to_ergodic()` error message now link there; 0.13.0 linked the unassigned
+  `ergodic.dev`. No API change. The 0.13.0 documentation was never published; this
+  release's documentation replaces it.
+- The Models table lists every accepted (rows × columns) shape as each model's
+  context, not only the largest-row one, and the Models page defines context per task.
+  The evaluation guide's fold limits are corrected from the old 500 × 20 to each
+  model's shapes. Documentation only.
+
+# 0.13.0 (2026-10-15) — ergodic 0.2 bridge
 
 - `CausalResult.to_ergodic()` now checks the graph format the installed ergodic reads
   (`ergodic.GRAPH_FORMAT`, supported: `ergodic.graph/1`) instead of requiring
@@ -11,7 +23,7 @@
   `ergodic>=0.2,<0.3`. CI tests conversion against the oldest and latest supported
   ergodic from PyPI once ergodic 0.2.0 is published.
 - Documentation: the causal discovery and Models pages drop the private-repository and
-  gated co-release wording and link the ergodic documentation at https://ergodic.dev.
+  gated co-release wording and link the ergodic documentation at `ergodic.dev` (moved to docs.ergodic.dev in 0.13.1).
   Model limits in the guides, README and Models table now follow the measured
   envelopes live since API-137 (DEC-077): for example TabICLv2 and Kumo Medium up to
   8,000 × 20, Mitra-v2 4,000 × 20, TabDPT1.3 500 × 20, Arrow and CDFM 8,000 × 20,

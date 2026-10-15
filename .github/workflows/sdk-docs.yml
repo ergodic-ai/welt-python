@@ -7,7 +7,7 @@ on:
       release_tag:
         description: Published SDK release to document
         required: true
-        default: v0.13.0
+        default: v0.13.1
       docs_presentation_ref:
         description: Optional exact reviewed documentation-only commit (SDK0.8 or SDK0.10)
         required: false
@@ -146,78 +146,78 @@ jobs:
         working-directory: .legacy-sdk091
       # Keep the accepted 0.10.0 presentation with its immutable runtime.
       - uses: actions/checkout@v4
-        if: github.event.release.tag_name == 'v0.10.1' || inputs.release_tag == 'v0.10.1' || github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0'
+        if: github.event.release.tag_name == 'v0.10.1' || inputs.release_tag == 'v0.10.1' || github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0' || github.event.release.tag_name == 'v0.13.1' || inputs.release_tag == 'v0.13.1'
         with:
           ref: 3d2a805fd334636df3470b08eb3b451a630e6968
           path: .legacy-sdk010
       - run: uv sync --frozen --extra parquet
-        if: github.event.release.tag_name == 'v0.10.1' || inputs.release_tag == 'v0.10.1' || github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0'
+        if: github.event.release.tag_name == 'v0.10.1' || inputs.release_tag == 'v0.10.1' || github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0' || github.event.release.tag_name == 'v0.13.1' || inputs.release_tag == 'v0.13.1'
         working-directory: .legacy-sdk010
       - run: uv pip install --python .venv/bin/python --reinstall --no-deps "https://github.com/ergodic-ai/welt-python/releases/download/v0.10.0/welt_client-0.10.0-py3-none-any.whl"
-        if: github.event.release.tag_name == 'v0.10.1' || inputs.release_tag == 'v0.10.1' || github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0'
+        if: github.event.release.tag_name == 'v0.10.1' || inputs.release_tag == 'v0.10.1' || github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0' || github.event.release.tag_name == 'v0.13.1' || inputs.release_tag == 'v0.13.1'
         working-directory: .legacy-sdk010
       - run: .venv/bin/python scripts/build_docs.py --output ../site
-        if: github.event.release.tag_name == 'v0.10.1' || inputs.release_tag == 'v0.10.1' || github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0'
+        if: github.event.release.tag_name == 'v0.10.1' || inputs.release_tag == 'v0.10.1' || github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0' || github.event.release.tag_name == 'v0.13.1' || inputs.release_tag == 'v0.13.1'
         working-directory: .legacy-sdk010
       # Retain the preceding documentation-only release with its exact wheel.
       - uses: actions/checkout@v4
-        if: github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0'
+        if: github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0' || github.event.release.tag_name == 'v0.13.1' || inputs.release_tag == 'v0.13.1'
         with:
           ref: 1bc1c2992e74b687775735c1aa0aa9c0ceacccea
           path: .legacy-sdk0101
       - run: uv sync --frozen --extra parquet
-        if: github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0'
+        if: github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0' || github.event.release.tag_name == 'v0.13.1' || inputs.release_tag == 'v0.13.1'
         working-directory: .legacy-sdk0101
       - run: uv pip install --python .venv/bin/python --reinstall --no-deps "https://github.com/ergodic-ai/welt-python/releases/download/v0.10.1/welt_client-0.10.1-py3-none-any.whl"
-        if: github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0'
+        if: github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0' || github.event.release.tag_name == 'v0.13.1' || inputs.release_tag == 'v0.13.1'
         working-directory: .legacy-sdk0101
       - run: .venv/bin/python scripts/build_docs.py --output ../site
-        if: github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0'
+        if: github.event.release.tag_name == 'v0.11.0' || inputs.release_tag == 'v0.11.0' || github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0' || github.event.release.tag_name == 'v0.13.1' || inputs.release_tag == 'v0.13.1'
         working-directory: .legacy-sdk0101
       # Retain the Forecast release documentation with its exact wheel.
       - uses: actions/checkout@v4
-        if: github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0'
+        if: github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0' || github.event.release.tag_name == 'v0.13.1' || inputs.release_tag == 'v0.13.1'
         with:
           ref: b306db9767f48bae3d14fed5da2f59815c644b0b
           path: .legacy-sdk0110
       - run: uv sync --frozen --extra parquet
-        if: github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0'
+        if: github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0' || github.event.release.tag_name == 'v0.13.1' || inputs.release_tag == 'v0.13.1'
         working-directory: .legacy-sdk0110
       - run: uv pip install --python .venv/bin/python --reinstall --no-deps "https://github.com/ergodic-ai/welt-python/releases/download/v0.11.0/welt_client-0.11.0-py3-none-any.whl"
-        if: github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0'
+        if: github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0' || github.event.release.tag_name == 'v0.13.1' || inputs.release_tag == 'v0.13.1'
         working-directory: .legacy-sdk0110
       - run: .venv/bin/python scripts/build_docs.py --output ../site
-        if: github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0'
+        if: github.event.release.tag_name == 'v0.11.1' || inputs.release_tag == 'v0.11.1' || github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0' || github.event.release.tag_name == 'v0.13.1' || inputs.release_tag == 'v0.13.1'
         working-directory: .legacy-sdk0110
       # Retain the preceding package-description release with its exact wheel.
       - uses: actions/checkout@v4
-        if: github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0'
+        if: github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0' || github.event.release.tag_name == 'v0.13.1' || inputs.release_tag == 'v0.13.1'
         with:
           ref: 001a1ede1144b53423c1f1e44e7e9af49ad4fd7f
           path: .legacy-sdk0111
       - run: uv sync --frozen --extra parquet
-        if: github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0'
+        if: github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0' || github.event.release.tag_name == 'v0.13.1' || inputs.release_tag == 'v0.13.1'
         working-directory: .legacy-sdk0111
       - run: uv pip install --python .venv/bin/python --reinstall --no-deps "https://github.com/ergodic-ai/welt-python/releases/download/v0.11.1/welt_client-0.11.1-py3-none-any.whl"
-        if: github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0'
+        if: github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0' || github.event.release.tag_name == 'v0.13.1' || inputs.release_tag == 'v0.13.1'
         working-directory: .legacy-sdk0111
       - run: .venv/bin/python scripts/build_docs.py --output ../site
-        if: github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0'
+        if: github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0' || github.event.release.tag_name == 'v0.13.1' || inputs.release_tag == 'v0.13.1'
         working-directory: .legacy-sdk0111
       # Retain the Evaluations release guides with their exact wheel.
       - uses: actions/checkout@v4
-        if: github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0'
+        if: github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0' || github.event.release.tag_name == 'v0.13.1' || inputs.release_tag == 'v0.13.1'
         with:
           ref: 72fd33f751094301dfa8ae8962a23fa7e4e51d55
           path: .legacy-sdk0120
       - run: uv sync --frozen --extra parquet
-        if: github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0'
+        if: github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0' || github.event.release.tag_name == 'v0.13.1' || inputs.release_tag == 'v0.13.1'
         working-directory: .legacy-sdk0120
       - run: uv pip install --python .venv/bin/python --reinstall --no-deps "https://github.com/ergodic-ai/welt-python/releases/download/v0.12.0/welt_client-0.12.0-py3-none-any.whl"
-        if: github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0'
+        if: github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0' || github.event.release.tag_name == 'v0.13.1' || inputs.release_tag == 'v0.13.1'
         working-directory: .legacy-sdk0120
       - run: .venv/bin/python scripts/build_docs.py --output ../site
-        if: github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0'
+        if: github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0' || github.event.release.tag_name == 'v0.13.1' || inputs.release_tag == 'v0.13.1'
         working-directory: .legacy-sdk0120
       - name: Check current documentation contracts
         run: .venv/bin/python -m pytest -q scripts/test_audit_navigation.py scripts/test_audit_content.py scripts/test_homepage_presentation.py scripts/test_learning_materials.py scripts/test_notebook_views.py scripts/test_graphite_presentation.py scripts/test_docs_browser.py
@@ -241,7 +241,7 @@ jobs:
           test -f site/v0.11.1/forecasting.html
           grep -q 'Forecast.predict_quantiles' site/v0.11.1/reference.html
       - name: Verify Evaluations and preceding release documentation
-        if: github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0'
+        if: github.event.release.tag_name == 'v0.12.0' || inputs.release_tag == 'v0.12.0' || github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0' || github.event.release.tag_name == 'v0.13.1' || inputs.release_tag == 'v0.13.1'
         run: |
           test -f site/v0.10.0/index.html
           test -f site/v0.10.1/index.html
@@ -266,18 +266,19 @@ jobs:
           grep -q '/v0.11.0/' site/sitemap.xml
           python3 -c "import json; v = json.load(open('site/v0.12.0/manifest.json'))['historical_versions']; assert {'0.11.0', '0.11.1'} <= set(v), v"
       - name: Verify ergodic bridge and preceding release documentation
-        if: github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0'
+        if: github.event.release.tag_name == 'v0.13.0' || inputs.release_tag == 'v0.13.0' || github.event.release.tag_name == 'v0.13.1' || inputs.release_tag == 'v0.13.1'
         run: |
           test -f site/v0.12.0/index.html
           test -f site/v0.12.0/evaluations.html
           test -f site/v0.11.1/index.html
-          test -f site/v0.13.0/causal-discovery.html
-          grep -q 'welt-client\[ergodic\]' site/v0.13.0/causal-discovery.html
-          grep -q 'https://ergodic.dev/' site/v0.13.0/causal-discovery.html
-          grep -q 'value="../v0.12.0/"' site/v0.13.0/index.html
+          test -f site/v$SDK_VERSION/causal-discovery.html
+          grep -q 'welt-client\[ergodic\]' site/v$SDK_VERSION/causal-discovery.html
+          grep -q 'https://docs.ergodic.dev/' site/v$SDK_VERSION/causal-discovery.html
+          if grep -rqE 'https?://(www\.)?ergodic\.dev' site/v$SDK_VERSION site/index.html site/llms.txt; then echo '::error::apex ergodic.dev link in the published docs'; exit 1; fi
+          grep -q 'value="../v0.12.0/"' site/v$SDK_VERSION/index.html
           grep -q 'value="v0.12.0/"' site/index.html
           grep -q '/v0.12.0/' site/sitemap.xml
-          python3 -c "import json; v = json.load(open('site/v0.13.0/manifest.json'))['historical_versions']; assert {'0.11.1', '0.12.0'} <= set(v), v"
+          python3 -c "import json; v = json.load(open('site/v$SDK_VERSION/manifest.json'))['historical_versions']; assert {'0.11.1', '0.12.0'} <= set(v), v"
       - name: Bind documentation presentation proof
         if: inputs.docs_presentation_ref != ''
         run: cp /tmp/welt-docs-presentation-proof.json site/docs-presentation-proof.json

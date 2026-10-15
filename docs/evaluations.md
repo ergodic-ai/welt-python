@@ -243,12 +243,22 @@ the settled charge once the evaluation finishes (`None` until then). `max_credit
 refuses an evaluation whose estimate is higher (`InvalidInputError`,
 `code="budget_exceeded"`).
 
-Each training fold must fit the model's [limits](capabilities.md): at most 500
-training rows, 20 features and 10 classes for the current tabular models. With 5
-folds, each training fold holds about four fifths of the rows. A larger table is
-refused, never silently sampled. To evaluate on a subset, opt in with
-`sample_rows=500`: Welt draws a seeded sample (stratified for classification) and the
-report records it.
+The largest training fold (the rows minus the smallest fold, about rows × (folds − 1) /
+folds) must fit one of the model's [shapes](capabilities.md#available-models), and
+classification takes up to 10 classes. With the default 5 folds, up to 20 features
+and a stratified or k-fold split (group and custom folds can be uneven), that is:
+
+| Model | Rows you can evaluate |
+| --- | --- |
+| TabICLv2, Kumo Tabular Medium | up to 10,000 |
+| Mitra-v2 | up to 5,000 |
+| TabDPT 1.3 | up to 625 |
+
+A larger table is never silently sampled. If a model you list does not fit, the
+evaluation is refused; with no models listed, Welt skips that model. To evaluate on a
+subset, opt in with `sample_rows`: `sample_rows=10000` fits TabICLv2 and Kumo Tabular
+Medium at up to 20 features. Welt draws a seeded sample (stratified for
+classification) and the report records it.
 
 <details markdown="1"><summary>Can I evaluate from async code?</summary>
 

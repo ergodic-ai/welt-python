@@ -21,7 +21,7 @@ from .errors import (
 SUPPORTED_ERGODIC_GRAPH_FORMATS = frozenset({"ergodic.graph/1"})
 #: The ergodic guide for continuing from a Welt result. The SDK docs read this
 #: constant through the ``{{ergodic-docs}}`` placeholder, so change it only here.
-ERGODIC_DOCS_URL = "https://ergodic.dev/welt.html"
+ERGODIC_DOCS_URL = "https://docs.ergodic.dev/welt.html"
 _ERGODIC_INSTALL = (
     "Install it with `pip install 'welt-client[ergodic]'` (ergodic>=0.2,<0.3); "
     "see " + ERGODIC_DOCS_URL + "."

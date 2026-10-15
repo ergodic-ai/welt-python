@@ -342,7 +342,7 @@ def test_missing_ergodic_has_typed_optional_error_naming_the_extra(monkeypatch):
         CausalResult(result_payload()).to_ergodic()
     assert isinstance(error.value, ImportError)
     assert "welt-client[ergodic]" in str(error.value)
-    assert "https://ergodic.dev/" in str(error.value)
+    assert "https://docs.ergodic.dev/" in str(error.value)
 
 
 def test_unexpected_local_conversion_rejection_is_typed_and_sanitized(monkeypatch):
