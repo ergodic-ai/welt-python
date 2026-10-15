@@ -10,9 +10,11 @@ inspect its native edges and scores.
 
 ## Choose a model
 
-SDK 0.7 retains the independently accepted ArrowFM observational preview. CDFM and
-AVICI also qualify the same input envelope: 2–500 rows and 2–20 finite continuous
-variables. The service catalogue reports the exact task, version and readiness.
+ArrowFM, CDFM and AVICI are observational previews. Arrow and CDFM take up to
+8,000 rows × 20 variables, with measured wider shapes of 4,000 × 40 and 2,000 × 80.
+AVICI takes up to 1,000 × 20 (or 500 × 40). Every model needs at least 2 rows and 2
+finite continuous variables. The service catalogue (`client.models()`) reports the
+current limits, shapes, version and readiness.
 
 | Model | Select with | Input and decoding | Native output |
 | --- | --- | --- | --- |

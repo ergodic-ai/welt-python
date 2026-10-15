@@ -73,7 +73,9 @@ Inspect real Iris measurements and the graph structure Welt's native model propo
 
 !!! note "About the causal example"
     It has no ground-truth graph and makes no causal-accuracy claim. Native scores are
-    not calibrated confidence. Approved public Ergodic continuation remains gated.
+    not calibrated confidence. To continue in ergodic, install `welt-client[ergodic]` and
+    call `result.to_ergodic()` (declared DAGs only); see
+    [Convert to an Ergodic graph](causal-discovery.md#convert-to-an-ergodic-graph).
 
 <details markdown="1"><summary>How are these notebooks checked?</summary>
 

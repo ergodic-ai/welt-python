@@ -16,7 +16,7 @@ qualify observational discovery.
 | --- | --- | --- |
 | Classification | TabICLv2, Kumo Medium, TabDPT1.3, Mitra-v2 | At most 500 training rows, 20 features and 100 query rows. Up to 10 classes. |
 | Regression | TabICLv2, Kumo Medium, TabDPT1.3, Mitra-v2 | At most 500 training rows, 20 features and 100 query rows. Returns mean points with its explicit constant-target policy. |
-| Observational causal discovery | ArrowFM, CDFM, AVICI | 2–500 rows and 2–20 finite continuous variables. |
+| Observational causal discovery | ArrowFM, CDFM, AVICI | Arrow and CDFM: up to 8,000 rows × 20 variables (measured 4,000 × 40 and 2,000 × 80). AVICI: up to 1,000 × 20 (or 500 × 40). At least 2 rows and 2 finite continuous variables. |
 
 The catalogue also reports matching-worker readiness for each task. Other selected
 families require their own gates; no classical or older-generation fallback is
@@ -42,7 +42,7 @@ This is not a claim to reproduce publisher benchmark recipes.
 | Cross-validated evaluations | Up to 8 classification or regression models (or every eligible one) on the same seeded folds, 2–10 folds, with a leaderboard, fold metrics, seven-day out-of-fold predictions, an HTML report and signed report links. Each training fold must fit the model limits above; larger tables are refused unless you opt into `sample_rows`. No time-ordered splits yet. See [evaluations](evaluations.md). |
 | Resumable files and true large batch jobs | Released sync and async upload-session, chunk and file resume, and batch methods. The server sets the enabled formats, parser envelopes and batch limits. Estimator file convenience reads still load into memory. |
 | Metadata export, recipes and deletion plans | `export_metadata()` returns pinned server provenance. Recipes and deletion plans require released routes. There is no executable, context or credential export. |
-| Causal discovery and Ergodic | ArrowFM is a bounded observational preview: 2–500 rows and 2–20 finite continuous variables, native DAG, owned scores and durable reopening. `to_ergodic()` converts a declared native DAG into an [ergodic]({{ergodic-docs}}) graph with `welt-client[ergodic]` (ergodic>=0.2,<0.3). CDFM preserves native directed output and its adaptive threshold. AVICI preserves native directed output and strict >0.5 decoding with fixed native PRNG 0. CDFM and AVICI both refuse to convert any graph that is not a declared DAG, including acyclic directed output. The remaining engines are gated. |
+| Causal discovery and Ergodic | ArrowFM is a bounded observational preview (limits in the table above), native DAG, owned scores and durable reopening. `to_ergodic()` converts a declared native DAG into an [ergodic]({{ergodic-docs}}) graph with `welt-client[ergodic]` (ergodic>=0.2,<0.3). CDFM preserves native directed output and its adaptive threshold. AVICI preserves native directed output and strict >0.5 decoding with fixed native PRNG 0. CDFM and AVICI both refuse to convert any graph that is not a declared DAG, including acyclic directed output. The remaining engines are gated. |
 | Confidence and conformal | Native probabilities are not calibrated coverage or conformal intervals; conformal comes later. |
 
 <details markdown="1"><summary>What do the scikit-learn, version and cache checks cover?</summary>

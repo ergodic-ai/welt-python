@@ -41,12 +41,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        python: ['3.11', '3.12', '3.13']
         ergodic: ['oldest', 'latest']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: ${{ matrix.python }}
       - name: Choose the supported ergodic release from PyPI
         id: pick
         env:
