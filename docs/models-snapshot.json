@@ -1,6 +1,6 @@
 {
   "source": "https://welt.ergodic.dev/v1/models",
-  "taken_at": "2026-10-15T03:28:35Z",
+  "taken_at": "2026-10-15T10:06:40Z",
   "models": [
     {
       "id": "welt",
@@ -10,13 +10,15 @@
           "task": "classification",
           "status": "planned",
           "execution_available": false,
-          "limits": {}
+          "limits": {},
+          "shapes": []
         },
         {
           "task": "regression",
           "status": "planned",
           "execution_available": false,
-          "limits": {}
+          "limits": {},
+          "shapes": []
         }
       ]
     },
@@ -33,7 +35,21 @@
             "max_columns": 20,
             "max_classes": 10,
             "max_prediction_rows": 100
-          }
+          },
+          "shapes": [
+            {
+              "rows": 8000,
+              "columns": 20
+            },
+            {
+              "rows": 4000,
+              "columns": 40
+            },
+            {
+              "rows": 2000,
+              "columns": 80
+            }
+          ]
         },
         {
           "task": "regression",
@@ -43,7 +59,21 @@
             "max_rows": 8000,
             "max_columns": 20,
             "max_prediction_rows": 100
-          }
+          },
+          "shapes": [
+            {
+              "rows": 8000,
+              "columns": 20
+            },
+            {
+              "rows": 4000,
+              "columns": 40
+            },
+            {
+              "rows": 2000,
+              "columns": 80
+            }
+          ]
         }
       ]
     },
@@ -55,13 +85,15 @@
           "task": "classification",
           "status": "planned",
           "execution_available": false,
-          "limits": {}
+          "limits": {},
+          "shapes": []
         },
         {
           "task": "regression",
           "status": "planned",
           "execution_available": false,
-          "limits": {}
+          "limits": {},
+          "shapes": []
         }
       ]
     },
@@ -73,13 +105,15 @@
           "task": "classification",
           "status": "planned",
           "execution_available": false,
-          "limits": {}
+          "limits": {},
+          "shapes": []
         },
         {
           "task": "regression",
           "status": "planned",
           "execution_available": false,
-          "limits": {}
+          "limits": {},
+          "shapes": []
         }
       ]
     },
@@ -96,7 +130,21 @@
             "max_columns": 20,
             "max_classes": 10,
             "max_prediction_rows": 100
-          }
+          },
+          "shapes": [
+            {
+              "rows": 4000,
+              "columns": 20
+            },
+            {
+              "rows": 2000,
+              "columns": 40
+            },
+            {
+              "rows": 500,
+              "columns": 80
+            }
+          ]
         },
         {
           "task": "regression",
@@ -106,7 +154,21 @@
             "max_rows": 4000,
             "max_columns": 20,
             "max_prediction_rows": 100
-          }
+          },
+          "shapes": [
+            {
+              "rows": 4000,
+              "columns": 20
+            },
+            {
+              "rows": 2000,
+              "columns": 40
+            },
+            {
+              "rows": 500,
+              "columns": 80
+            }
+          ]
         }
       ]
     },
@@ -118,13 +180,15 @@
           "task": "classification",
           "status": "planned",
           "execution_available": false,
-          "limits": {}
+          "limits": {},
+          "shapes": []
         },
         {
           "task": "regression",
           "status": "planned",
           "execution_available": false,
-          "limits": {}
+          "limits": {},
+          "shapes": []
         }
       ]
     },
@@ -141,7 +205,21 @@
             "max_columns": 20,
             "max_classes": 10,
             "max_prediction_rows": 100
-          }
+          },
+          "shapes": [
+            {
+              "rows": 8000,
+              "columns": 20
+            },
+            {
+              "rows": 4000,
+              "columns": 40
+            },
+            {
+              "rows": 2000,
+              "columns": 80
+            }
+          ]
         },
         {
           "task": "regression",
@@ -151,7 +229,21 @@
             "max_rows": 8000,
             "max_columns": 20,
             "max_prediction_rows": 100
-          }
+          },
+          "shapes": [
+            {
+              "rows": 8000,
+              "columns": 20
+            },
+            {
+              "rows": 4000,
+              "columns": 40
+            },
+            {
+              "rows": 2000,
+              "columns": 80
+            }
+          ]
         }
       ]
     },
@@ -168,7 +260,13 @@
             "max_columns": 20,
             "max_classes": 10,
             "max_prediction_rows": 100
-          }
+          },
+          "shapes": [
+            {
+              "rows": 500,
+              "columns": 20
+            }
+          ]
         },
         {
           "task": "regression",
@@ -178,7 +276,13 @@
             "max_rows": 500,
             "max_columns": 20,
             "max_prediction_rows": 100
-          }
+          },
+          "shapes": [
+            {
+              "rows": 500,
+              "columns": 20
+            }
+          ]
         }
       ]
     },
@@ -190,7 +294,8 @@
           "task": "causal_discovery",
           "status": "planned",
           "execution_available": false,
-          "limits": {}
+          "limits": {},
+          "shapes": []
         }
       ]
     },
@@ -207,7 +312,17 @@
             "max_rows": 1000,
             "min_features": 2,
             "max_features": 20
-          }
+          },
+          "shapes": [
+            {
+              "rows": 1000,
+              "columns": 20
+            },
+            {
+              "rows": 500,
+              "columns": 40
+            }
+          ]
         }
       ]
     },
@@ -224,7 +339,21 @@
             "max_rows": 8000,
             "min_features": 2,
             "max_features": 20
-          }
+          },
+          "shapes": [
+            {
+              "rows": 8000,
+              "columns": 20
+            },
+            {
+              "rows": 4000,
+              "columns": 40
+            },
+            {
+              "rows": 2000,
+              "columns": 80
+            }
+          ]
         }
       ]
     },
@@ -241,7 +370,21 @@
             "max_rows": 8000,
             "min_features": 2,
             "max_features": 20
-          }
+          },
+          "shapes": [
+            {
+              "rows": 8000,
+              "columns": 20
+            },
+            {
+              "rows": 4000,
+              "columns": 40
+            },
+            {
+              "rows": 2000,
+              "columns": 80
+            }
+          ]
         }
       ]
     },
@@ -253,7 +396,8 @@
           "task": "causal_discovery",
           "status": "planned",
           "execution_available": false,
-          "limits": {}
+          "limits": {},
+          "shapes": []
         }
       ]
     }

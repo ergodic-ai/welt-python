@@ -579,49 +579,60 @@ TASK_LABELS = {'classification': 'Classification', 'regression': 'Regression', '
 
 
 def available_models():
-    """Available, executable task profiles from the committed public catalogue snapshot (DEC-073 #7)."""
+    """Available, executable task profiles from the committed public catalogue snapshot (DEC-073 #7).
+
+    Context is the list of admitted (rows, columns) shapes (DEC-077); a snapshot without
+    shapes falls back to the max_rows x max_columns compatibility rectangle."""
     snapshot = json.loads(MODELS_SNAPSHOT.read_text())
     if snapshot.get('source') != PUBLIC_CATALOGUE:
         raise SystemExit(f'The Models table renders only a snapshot of {PUBLIC_CATALOGUE}.')
-    def span(limits, low, high):
-        if high not in limits:
-            return '—'
-        return f'{limits[low]}–{limits[high]}' if low in limits else f'up to {limits[high]}'
-    rows = []
+    def upto(limits, key):
+        return f'up to {limits[key]:,}' if key in limits else '—'
+    rows, minimums = [], set()
     for model in snapshot['models']:
         for task in model['tasks']:
             if task['status'] != 'available' or not task['execution_available']:
                 continue
             limits = task['limits']
-            columns = span(limits, 'min_features', 'max_features') if 'max_features' in limits else span(limits, 'min_columns', 'max_columns')
-            rows.append((model['name'], model['id'], TASK_LABELS.get(task['task'], task['task']), span(limits, 'min_rows', 'max_rows'),
-                         columns, span(limits, '', 'max_prediction_rows'), span(limits, '', 'max_classes')))
+            width = 'max_features' if 'max_features' in limits else 'max_columns'
+            shapes = [(s['rows'], s['columns']) for s in task.get('shapes') or []] or [(limits['max_rows'], limits[width])]
+            context = ', '.join(f'{r:,} × {c:,}' for r, c in sorted(shapes, key=lambda s: (-s[0], -s[1])))
+            if 'min_rows' in limits or 'min_features' in limits:
+                minimums.add((limits.get('min_rows', 1), limits.get('min_features', 1)))
+            rows.append((model['name'], model['id'], TASK_LABELS.get(task['task'], task['task']), context,
+                         upto(limits, 'max_prediction_rows'), upto(limits, 'max_classes')))
     if not rows:
         raise SystemExit('Models snapshot has no available task profiles.')
-    return rows, snapshot['taken_at'][:10]
+    if len(minimums) > 1:
+        raise SystemExit('Models snapshot causal minimums differ; the table note states one minimum.')
+    minimum = (' Causal discovery needs at least {:,} rows and {:,} variables.'.format(*minimums.pop())) if minimums else ''
+    return rows, snapshot['taken_at'][:10], minimum
 
 
-MODEL_COLUMNS = ('Model', 'Task', 'Training rows', 'Features or variables', 'Query rows', 'Classes')
-MODEL_NOTE = ('Supervised rows count feature columns without the target; causal discovery counts every variable. '
-              'The live catalogue is authoritative: Client().models() reports current limits and readiness.')
+MODEL_COLUMNS = ('Model', 'Task', 'Context (rows × columns)', 'Prediction rows per call', 'Classes')
+MODEL_NOTE = ('Context is the training table the model conditions on, or the whole table for causal discovery. '
+              'It fits when its rows and columns are both within one listed shape, so wider tables take fewer rows. '
+              'Supervised columns count features without the target; causal discovery counts every variable.{minimum} '
+              'Batch prediction handles larger prediction sets. '
+              'The live catalogue is authoritative: {models} reports current limits and readiness.')
 
 
 def models_table():
-    rows, taken = available_models()
+    rows, taken, minimum = available_models()
     body = ''.join('<tr>' + f'<td><strong>{html.escape(name)}</strong> <code>{html.escape(model_id)}</code></td>'
                    + ''.join(f'<td class="num">{html.escape(value)}</td>' if index else f'<td>{html.escape(value)}</td>' for index, value in enumerate(rest))
                    + '</tr>' for name, model_id, *rest in rows)
+    note = html.escape(MODEL_NOTE.format(minimum=minimum, models='MODELS')).replace('MODELS', '<code>Client().models()</code>')
     return ('<div class="table-wrap models-table" tabindex="0" role="region" aria-label="Available models"><table><thead><tr>'
             + ''.join(f'<th scope="col">{label}</th>' for label in MODEL_COLUMNS) + '</tr></thead><tbody>' + body + '</tbody></table></div>'
-            f'<p class="table-note">Public catalogue snapshot from {html.escape(taken)}. Supervised rows count feature columns without the target; '
-            'causal discovery counts every variable. The live catalogue is authoritative: <code>Client().models()</code> reports current limits and readiness.</p>')
+            f'<p class="table-note">Public catalogue snapshot from {html.escape(taken)}. {note}</p>')
 
 
 def models_markdown():
-    rows, taken = available_models()
+    rows, taken, minimum = available_models()
     lines = ['| ' + ' | '.join(MODEL_COLUMNS) + ' |', '|' + ' --- |' * len(MODEL_COLUMNS)]
     lines += [f'| {name} (`{model_id}`) | ' + ' | '.join(rest) + ' |' for name, model_id, *rest in rows]
-    return '\n'.join(lines) + f'\n\nPublic catalogue snapshot from {taken}. {MODEL_NOTE}'
+    return '\n'.join(lines) + f'\n\nPublic catalogue snapshot from {taken}. ' + MODEL_NOTE.format(minimum=minimum, models='`Client().models()`')
 
 
 def guide_groups(version):

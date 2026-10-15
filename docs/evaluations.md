@@ -243,12 +243,13 @@ the settled charge once the evaluation finishes (`None` until then). `max_credit
 refuses an evaluation whose estimate is higher (`InvalidInputError`,
 `code="budget_exceeded"`).
 
-Each training fold must fit the model's [limits](capabilities.md): at most 500
-training rows, 20 features and 10 classes for the current tabular models. With 5
-folds, each training fold holds about four fifths of the rows. A larger table is
-refused, never silently sampled. To evaluate on a subset, opt in with
-`sample_rows=500`: Welt draws a seeded sample (stratified for classification) and the
-report records it.
+Each training fold must fit one of the model's [shapes](capabilities.md#available-models),
+and classification takes up to 10 classes. For example, TabICLv2 takes up to
+8,000 training rows × 20 features (or 4,000 × 40, 2,000 × 80) and TabDPT1.3 up to
+500 × 20. With 5 folds, each training fold holds about four fifths of the rows, so
+TabICLv2 can evaluate about 10,000 rows of 20 features. A larger table is refused,
+never silently sampled. To evaluate on a subset, opt in with `sample_rows=5000`: Welt
+draws a seeded sample (stratified for classification) and the report records it.
 
 <details markdown="1"><summary>Can I evaluate from async code?</summary>
 

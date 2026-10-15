@@ -2,7 +2,8 @@
 
 API-122 / DEC-073. The docs build never calls the live service; this explicit,
 credential-free read of the public /v1/models route writes a reviewed snapshot that
-is committed with the documentation source. Only fields the table renders are kept.
+is committed with the documentation source. Only fields the table renders are kept,
+including each task's admitted (rows, columns) shapes (DEC-077).
 """
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,7 +22,8 @@ def reduce(catalogue, source, taken_at):
     for model in catalogue['items']:
         tasks = [dict(task=profile['task'], status=profile['status'],
                       execution_available=bool(profile.get('execution_available')),
-                      limits={key: profile['limits'][key] for key in LIMITS if key in (profile.get('limits') or {})})
+                      limits={key: profile['limits'][key] for key in LIMITS if key in (profile.get('limits') or {})},
+                      shapes=[dict(rows=shape['rows'], columns=shape['columns']) for shape in profile.get('shapes') or []])
                  for profile in model.get('task_profiles') or []]
         models.append(dict(id=model['id'], name=model['name'], tasks=tasks))
     return dict(source=source, taken_at=taken_at, models=models)

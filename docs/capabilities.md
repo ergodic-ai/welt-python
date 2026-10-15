@@ -29,6 +29,20 @@ This is not a claim to reproduce publisher benchmark recipes.
 
 {{models-table}}
 
+What "context" means depends on the task:
+
+- **Classification and regression:** the training table you pass to `fit`, counted
+  as rows × feature columns without the target. The model conditions on it when it
+  predicts. Prediction rows are separate: up to 100 per direct call, more with batch
+  prediction.
+- **Causal discovery:** the whole table, with every column a variable.
+- **Forecasting:** the history of one series. Forecasting runs by exact model ID and is
+  not in this catalogue; see [forecast a time series](forecasting.md) for its history
+  and horizon limits.
+
+A shape caps both axes at once. TabICLv2 refuses a 6,000 × 30 table: 8,000 × 20 is
+too narrow and 4,000 × 40 too short. Use 4,000 rows or 20 features instead.
+
 ## Behavior boundaries
 
 | Behavior | Current boundary |
