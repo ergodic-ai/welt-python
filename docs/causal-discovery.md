@@ -116,7 +116,7 @@ malformed-result errors apply without repair.
 
 ## Convert to an Ergodic graph
 
-[ergodic](https://ergodic.dev) is Ergodic's open-source causal library. It identifies
+[ergodic](https://docs.ergodic.dev) is Ergodic's open-source causal library. It identifies
 and estimates effects on a graph. Install it with the `ergodic` extra:
 
 ```sh tab="pip"

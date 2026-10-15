@@ -127,7 +127,7 @@ than fitting again; [recovery](https://ergodic-ai.github.io/welt-python/async-an
 authentication, cancellation and retry behavior. Probabilities are not calibrated
 coverage. ArrowFM, CDFM and AVICI discovery preserve native graph and score semantics;
 [causal conversion](https://ergodic-ai.github.io/welt-python/causal-discovery.html) is restricted to declared native DAGs
-and needs the `welt-client[ergodic]` extra; [ergodic](https://ergodic.dev) then identifies
+and needs the `welt-client[ergodic]` extra; [ergodic](https://docs.ergodic.dev) then identifies
 and estimates effects locally. The complete all-model catalogue remains gated.
 
 ## Examples and development

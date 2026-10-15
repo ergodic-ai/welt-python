@@ -90,9 +90,9 @@ See the [agent CLI reference](cli.md).
 
 ## Compatibility with ergodic
 
-[ergodic](https://ergodic.dev) identifies and estimates effects on a Welt graph,
+[ergodic](https://docs.ergodic.dev) identifies and estimates effects on a Welt graph,
 locally. This is the same table as the
-[ergodic compatibility page](https://ergodic.dev/compatibility.html). The link between
+[ergodic compatibility page](https://docs.ergodic.dev/compatibility.html). The link between
 the packages is a versioned graph format, not a package version.
 
 | ergodic | welt-client | Graph format | Python for the Welt link |

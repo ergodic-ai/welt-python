@@ -283,7 +283,7 @@ def test_product_switcher_and_ergodic_cross_links(site):
     for path in [*out.glob('*.html'), base / 'index.html']:
         text = path.read_text()
         switcher = text.split('<details class="product-switcher">', 1)[1].split('</details>', 1)[0]
-        assert '<span>Products</span>' in switcher and 'href="https://ergodic.dev"' in switcher, path.name
+        assert '<span>Products</span>' in switcher and 'href="https://docs.ergodic.dev"' in switcher, path.name
         assert switcher.count('aria-current="true"') == 1 and 'assets/site.css' in text, path.name
     css = (ASSETS / 'site.css').read_text()
     assert not re.findall(r'#[0-9a-fA-F]{3,8}\b|rgba?\(', css)
@@ -293,8 +293,8 @@ def test_product_switcher_and_ergodic_cross_links(site):
     assert '.product-switcher' not in (ASSETS / 'docs.css').read_text()
     guide = (out / 'causal-discovery.html').read_text()
     cards = guide.split('<div class="cards">', 1)[1].split('</div>', 1)[0]
-    assert '<a href="https://ergodic.dev/welt.html">Discover in Welt, estimate in ergodic</a>' in cards
+    assert '<a href="https://docs.ergodic.dev/welt.html">Discover in Welt, estimate in ergodic</a>' in cards
     capabilities = (out / 'capabilities.html').read_text()
     assert 'id="compatibility-with-ergodic"' in capabilities and 'href="capabilities.html#compatibility-with-ergodic"' in guide
-    assert '<code>ergodic.graph/1</code>' in capabilities and 'https://ergodic.dev/compatibility.html' in capabilities
-    assert 'https://ergodic.dev/llms.txt' in (out / 'llms.txt').read_text()
+    assert '<code>ergodic.graph/1</code>' in capabilities and 'https://docs.ergodic.dev/compatibility.html' in capabilities
+    assert 'https://docs.ergodic.dev/llms.txt' in (out / 'llms.txt').read_text()
