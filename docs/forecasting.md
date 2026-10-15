@@ -17,8 +17,9 @@ simulated so the page runs anywhere; use your own history for real forecasts.
 
 !!! tip "Prefer a notebook?"
     The [forecasting notebook](notebook-forecasting-with-covariates.html) builds a
-    realistic retail panel, holds out the last four weeks, and scores Chronos-2
-    against a seasonal-naive baseline with MASE and interval coverage. The same
+    realistic retail panel, holds out the last four weeks, and scores Chronos-2 with
+    and without covariates against a seasonal-naive baseline, with MASE and interval
+    coverage. The same
     tutorial runs as a script: [forecasting_covariates.py](downloads/forecasting_covariates.py).
 
 ## Forecast one series {.step}
@@ -51,9 +52,9 @@ print(result.to_frame().head())
   is the context for each forecast.
 - `forecast(14)` sends one request for the 14 days after the last row and waits for
   the result.
-- Pass `target` as a list. A single string target selects the older
-  [univariate API](#forecast-a-univariate-time-series), which needs timezone-aware
-  times and complete values.
+- Pass `target` as a list. With no `id` and no covariates, a single string target
+  selects the older [univariate API](#forecast-a-univariate-time-series), which needs
+  timezone-aware times and complete values.
 - Columns you don't name, like `store` here, are not sent.
 
 ## Forecast a panel {.step}
@@ -72,11 +73,9 @@ print(frame.groupby("id")["median"].mean())
 - Series can differ in length and start date, but they share one frequency. Each
   series' forecast starts one step after its own last row.
 - IDs are strings or integers. Results return them as strings.
-- Already uploaded the history as a CSV? Pass its dataset ID instead of a DataFrame,
-  for example `fit("ds_…", time="date", id="store", target=["sales"])`, and give
-  `forecast(future=...)` a dataset ID too. Those rows travel by reference, so only the
-  server checks them, and fitted sizes such as `n_series_` are `None`. Use `forecast`
-  for a dataset history; `predict` needs a local table.
+- Already uploaded the history? Pass its dataset ID instead of a DataFrame:
+  `fit("ds_…", time="date", id="store", target=["sales"])`. See
+  [dataset histories](#dataset-histories) for how to upload it.
 
 ## Forecast several targets {.step}
 
@@ -183,7 +182,7 @@ for series in result.series:
     Chronos-2 can return quantiles out of order at a step, for example a 0.1 value
     above the 0.5 value. Welt then sorts that step's 21 native values (monotone
     rearrangement) and takes your levels and the median from the sorted values.
-    `result.rearranged_steps` counts the (series, step) pairs it sorted. When it is 0,
+    `result.rearranged_steps` counts the (series, target, step) triples it sorted. When it is 0,
     every value is exactly what the model returned. A non-finite native value fails
     the job instead.
 
@@ -242,23 +241,28 @@ has the final word.
 
 ## What a forecast costs {#pricing}
 
+<!-- release: API-164 makes rate card 2026-10-v3 the default; until then forecasts are unpriced (credits: null). Delete this comment at release. -->
+
 A forecast is priced in tokens, at the same rate as tabular prediction: 50 credits per
-million tokens, with a 5-credit minimum per request.
+million tokens, rounded up, with a 5-credit minimum per request.
 
 `tokens = Σ over series (history rows + horizon) × (targets + covariates)`
 
 ```python file="forecast_sales.py"
+import math
+
 horizon, variates = 14, 2 + 1 + 2  # targets + past covariates + future covariates
 tokens = sum((len(rows) + horizon) * variates for _, rows in panel.groupby("store"))
 print(tokens, "tokens")  # 3 × (365 + 14) × 5 = 5,685
-print(max(5, tokens * 50 / 1_000_000), "credits")  # under the minimum, so 5
+print(max(5, math.ceil(tokens * 50 / 1_000_000)), "credits")  # under the minimum, so 5
 ```
 
 - Columns you don't name are not sent and not counted.
 - Each `forecast` call is its own request. Step 6 costs a second one.
 - Credits are reserved when the request is queued and settled when it finishes. Usage
   events have kind `forecast`; see [usage and credits](usage.md#usage-and-workspace-credits).
-- Check current prices with `client.pricing()` or in **Workspace → Billing**.
+- Check current prices with `client.pricing()` or in **Workspace → Billing**. A usage
+  event with `credits: null` was not priced.
 
 ## Prepare your data {#prepare-your-data}
 
@@ -269,9 +273,10 @@ Welt forecasts the table you send. It doesn't fill, resample or truncate anythin
 - **Time:** a datetime column or ISO-8601 strings. Naive times, like the output of
   `pd.date_range` or `read_csv`, are read as UTC. Times with an offset are converted
   to UTC. Results are always UTC.
-- **Local clocks:** daily dates work as naive dates. Hourly data recorded on a local
-  clock with daylight saving is irregular in UTC; convert it to UTC and decide how to
-  handle the shifted hours before you fit.
+- **Daylight saving:** keep daily dates naive; with a local offset, days become 23
+  or 25 hours apart in UTC and are refused. Hourly local-clock times without an
+  offset have a missing and a repeated hour at each change; add the offset or convert
+  to UTC first.
 - **No gaps:** every step between a series' first and last row must be present. Add
   missing rows yourself, with a missing target if you have no value.
 - **Missing values:** an empty (NaN or None) target or past-covariate cell is passed
@@ -304,6 +309,23 @@ print(daily.frequency_)  # {'unit': 'day', 'every': 1}
   dictionary such as `{"unit": "hour", "every": 6}`.
 - Months, quarters and years use calendar steps. Every observation must fall on the
   same day of the month (1 to 28), or every observation on a month-end.
+
+### Large tables and dataset histories {#dataset-histories}
+
+The SDK sends DataFrames inline and never uploads them for you. A request body above
+10 MiB (`welt.forecast.MAX_REQUEST_BYTES`) is refused with `InvalidInputError`
+(`workload_limit`) before anything is sent. Upload such a table once, then pass its
+dataset ID to `fit`, and to `forecast(future=...)` if the future table is large too:
+`fit("ds_…", time="date", id="store", target=["sales"])`.
+
+- Write times as ISO-8601 text: a CSV, or string columns in Parquet. Parquet
+  timestamp columns are refused.
+- Declare the id column `string` in the upload schema, for example
+  `client.upload_file("sales.csv", schema={"columns": [...], "types": [...]})` or
+  `welt uploads file sales.csv --schema schema.json`. Without it, a CSV ID such as
+  `001` becomes the number 1 and no longer matches `"001"` in your future table.
+- Only the server checks dataset rows, so fitted sizes such as `n_series_` are `None`.
+  Use `forecast`; `predict` needs a local table.
 
 ## Handle errors {#errors}
 
@@ -356,24 +378,21 @@ with Client() as client:
 print(result.to_frame().shape)
 ```
 
-- A local timeout or `job.close()` never cancels the forecast. Call `job.cancel()` to
-  cancel it.
-- Replaying the same key with the same request reconnects to the same job. The same
-  key with a different request raises `ConflictError`.
-- A reconnected job checks the task and the model and configuration versions. It
-  can't rebuild your original request, so it doesn't check the series against it.
+- A timeout or `job.close()` never cancels the forecast; `job.cancel()` does.
+- The same key with the same request reconnects to the same job. The same key with a
+  different request raises `ConflictError`.
+- A reconnected job checks that the job and its result agree on task, model and
+  configuration versions. It doesn't know your original request.
 - `AsyncClient.forecast_job(id)` works the same way with `await`.
-- The SDK sends DataFrame tables inline in the request and never uploads them for
-  you, so replaying a key sends the same body. A body above the API's 10 MiB limit
-  (`welt.forecast.MAX_REQUEST_BYTES`) is refused with `InvalidInputError`
-  (`workload_limit`) before anything is sent: upload the table, for example with
-  `client.upload_file`, and pass its dataset ID.
-- `Client.submit_forecast(body)` and `welt forecast --input request.json` send a raw
-  `POST /v1/forecasts` body without the SDK's checks.
-- Forecast inputs and results are private to your workspace until you delete them.
-  `client.delete_forecast(job.id)` or `welt forecasts delete ID --yes` removes a
-  finished forecast's input and result. The job, its replay key and its usage record
-  stay, and workspace datasets it read are not deleted.
+
+## Delete a forecast {#delete-a-forecast}
+
+Forecast inputs and results stay private in your workspace until you delete them:
+
+- `client.delete_forecast(job.id)` or `welt forecasts delete ID --yes` removes a
+  finished forecast's input and result.
+- The job, its replay key and its usage record stay. Deleting a dataset doesn't
+  delete forecasts that read it, and deleting a forecast doesn't delete the dataset.
 
 !!! tip "Backtest and reconcile in ergodic"
     Use Chronos-2 inside ergodic's backtest and reconcile:
@@ -382,18 +401,17 @@ print(result.to_frame().shape)
 ## Forecast one series with the univariate API {#forecast-a-univariate-time-series}
 
 The univariate API from SDK 0.11 stays supported: `predict`, `predict_quantiles`,
-`predict_details` and `submit_predict` for one series and one target. It fits an
+`predict_details` and `submit_predict`, for one series and one target. Use it with an
 array, a Series with a `DatetimeIndex`, or a DataFrame with one string `target` and no
 `id` or covariates.
 
-- On a server with the `forecasting` task, these calls use `POST /v1/forecasts`.
-  Limits and quantile levels then come from the published envelopes.
-- On older servers they use the univariate model run described below, with its
-  16–512 observation and 1–64 horizon limits.
-- Either way, `predict_details().to_frame()` keeps the UTC-indexed layout with
-  `median` and `q_<level>` columns.
-- For a panel or several targets they raise `ValueError` and point you to
-  `forecast()`.
+- On a server with the `forecasting` task these calls are forecasts
+  (`POST /v1/forecasts`): the published envelopes and the 21 native levels apply.
+- On older servers they are univariate model runs: 16–512 observations, a horizon of
+  1–64 and levels from `0.1, 0.2, …, 0.9`.
+- Either way, `to_frame()` keeps the 0.13 layout: UTC-indexed rows with `median` and
+  `q_<level>` columns.
+- Panels and several targets raise `ValueError`; use `forecast()`.
 
 !!! tip "Run it from a terminal"
     Download the [local CSV example](downloads/forecasting.py) and run
@@ -402,9 +420,8 @@ array, a Series with a `DatetimeIndex`, or a DataFrame with one string `target` 
 
 ### Prepare your history {#prepare-an-explicit-chronological-history}
 
-This example reads a local CSV containing `timestamp` and `value`. On servers with only
-the univariate run, supply 16–512 observations. Keep future observations separate for
-evaluation.
+This example reads a local CSV with `timestamp` and `value` columns. Keep later
+observations aside for evaluation.
 
 ```python
 import pandas as pd
@@ -419,15 +436,6 @@ print(result.to_frame())  # future UTC rows: median, q_0.1, q_0.5, q_0.9
 print(result.job_id, result.model_version, result.configuration)
 ```
 
-`fit` copies only the selected values and time index, validates them locally, then
-reads workspace and model metadata. It uploads no observations and creates no remote
-predictor or training job: Chronos uses zero-shot history context.
-
-- Changing the original table afterwards does not change that context.
-- Constructor changes invalidate the context. Fit again explicitly to use another
-  workspace, connection, model, configuration or timeout.
-- Cloning an estimator returns an unfitted copy.
-
 You can also fit an indexed series, or an array with a start time and spacing:
 
 ```python
@@ -436,31 +444,19 @@ forecast.fit(history["value"].to_numpy(),
              start="2026-01-01T00:00:00Z", frequency_seconds=3600)
 ```
 
-The history must follow these rules:
-
-- For arrays, both `start` and integer `frequency_seconds` are required.
-- Indexed history must be strictly increasing, unique and evenly spaced in whole
-  elapsed seconds (1–31,536,000).
-- Explicit aware offsets convert to UTC while preserving instants.
-- Extra DataFrame columns are ignored and never uploaded.
-
-`fit` rejects naive times; missing, nonfinite, nonnumeric or boolean values; FP32
-overflow; subsecond spacing; and irregularity. To read naive times as UTC and allow
-missing values, pass the target as a list, as in [step 1](#forecast-one-series).
-
-!!! caution "Welt doesn't repair your series"
-    No sorting, filling, resampling or truncation happens. Calendar months and
-    daylight-saving irregularities require explicit preparation.
+- Times must be timezone-aware; offsets convert to UTC. To read naive times as UTC
+  and allow missing values, pass the target as a list, as in
+  [step 1](#forecast-one-series).
+- Values must be complete, finite numbers, strictly increasing in time and evenly
+  spaced in whole seconds (1 second to 1 year). Arrays need `start` and
+  `frequency_seconds`.
+- `fit` copies the values and uploads nothing. Changing the table afterwards doesn't
+  change the fitted context; changing a constructor parameter needs a new `fit`.
 
 ### Choose one output for each run
 
-Each prediction method submits one durable run with the copied history.
-
-- The future begins one frequency step after the final observation.
-- On servers with only the univariate run, the horizon is an integer from 1–64 and
-  native quantiles are unique, increasing selections from `0.1, 0.2, …, 0.9`. On
-  servers with the `forecasting` task, the published envelopes and the 21 native
-  levels apply instead. The default is `(0.1, 0.5, 0.9)`.
+Each call below is one separate request, starting one step after the last observation.
+The default levels are `(0.1, 0.5, 0.9)`.
 
 ```python
 points = forecast.predict(24)                         # ndarray (24,): native medians
@@ -470,28 +466,15 @@ frame = result.to_frame()                             # owned UTC-indexed DataFr
 wire = result.to_dict()                               # independent native JSON payload
 ```
 
-!!! tip "Get every view from one run"
-    These three prediction calls are three separate runs. Use `predict_details` once
-    and read its `predictions`, `quantiles`, `quantile_levels` and `timestamps` to
-    obtain all views from the same run.
-
-Arrays and dictionaries returned by the result are independent copies. `job_id` is
-separate from the native `to_dict()` payload. Results retain model and configuration
-versions and native median semantics.
-
-!!! caution "Quantiles are not intervals"
-    Quantiles are **not calibrated prediction intervals**. On the univariate model
-    run, crossing, nonfinite or mismatched results raise `InvalidForecastResultError`;
-    they are never repaired, and some native level selections (including all nine
-    levels) can fail on crossings. On the `forecasting` task, crossed quantiles are
-    sorted and counted in `rearranged_steps` instead.
-
-There is no automatic scoring, cross-validation, history update or backtest.
+Call `predict_details` once and read its `predictions`, `quantiles`,
+`quantile_levels` and `timestamps` to get every view from one request. Quantiles are
+not calibrated intervals. On the univariate model run, crossed quantiles raise
+`InvalidForecastResultError` instead of being sorted.
 
 ### Keep the job and reconnect {#retain-durable-work-and-reconnect}
 
-Keep the job ID before you wait. If the wait times out, the accepted work keeps
-running; reconnect later instead of resubmitting.
+Keep the job ID before you wait. A timeout leaves the job running; reconnect instead
+of submitting again.
 
 ```python
 from welt import Client, JobTimeoutError
@@ -513,61 +496,22 @@ if saved_job_id is not None:
             print(result.to_frame())
 ```
 
-The reconnect block applies when the first wait timed out.
-
-- Estimator submissions own their new HTTP client: use a context manager or
-  `job.close()`.
-- Reconnected handles borrow the enclosing `Client`; closing the handle leaves that
-  client open.
-- `job.cancel()` explicitly checks the forecast task and identity before asking the
-  server to cancel.
-
-!!! caution "Timeouts don't cancel"
-    Local timeout and close never cancel or delete remote work.
-
-Typed reconnects validate the durable task, model, configuration and result
-structure. Without the original submitted context they cannot reconstruct the
-original history, future start, horizon or requested levels. Estimator-created
-handles also validate those exact request expectations.
-
-<details markdown="1"><summary>Can I use forecasts from async code?</summary>
-
-`AsyncClient.forecast_job(id)` is a regular factory returning `AsyncForecastJob`.
-Await `inspect()`, `result()` and `cancel()`, and use `async with` for the handle. It
-likewise borrows its `AsyncClient`. There is no asynchronous estimator in this first
-version. Existing low-level sync and async `submit_model_run` and generic jobs retain
-their dictionary contracts.
-
-</details>
+- A job from the estimator owns its HTTP client: use `with` or `job.close()`. A
+  reconnected job borrows the `Client` you pass.
+- `AsyncClient.forecast_job(id)` returns an `AsyncForecastJob` to `await`.
+- A reconnected job cannot reconstruct your original request, so it doesn't check the
+  result against it.
 
 ### Version guards and privacy
 
-`fit` freezes the model and configuration versions, and the effective workspace,
-origin and credential. Prediction rechecks the connection and workspace before
-sending observations, and submits paired model and configuration expectation headers.
-`forecast` and `submit_forecast` send the same guards.
+`fit` pins the model and configuration versions, your workspace and credential. Every
+request sends them as guard headers, so a changed model raises a `ConflictError`
+before any work starts; fit again to accept it. `Client.submit_model_run` and
+`Client.submit_forecast` accept the same pair as `expected_model_version` and
+`expected_configuration_version`.
 
-- Version drift returns a typed conflict before new work is created. Refit explicitly
-  to accept the new version.
-- An exact replay key, payload and guard reconnects to the original job, even after a
-  later model change.
-- Changed input or guards conflict; a new key deliberately starts another run.
-- Older servers fail closed at fit.
-
-<details markdown="1"><summary>Can I use version guards with low-level runs?</summary>
-
-Advanced `Client.submit_model_run` and `AsyncClient.submit_model_run` accept paired
-`expected_model_version` and `expected_configuration_version`. Omitting both
-preserves the older unguarded submission behavior. These are HTTP headers, not
-scientific input fields; they do not change the frozen worker payload or digest.
-`Client.submit_forecast` accepts the same pair.
-
-</details>
-
-History and results are private to the authenticated workspace. The server retains
-them until explicit terminal-run deletion: `client.delete_model_run(id)` for a
-univariate model run, `client.delete_forecast(id)` for a forecast. Protect local history and avoid
-logging it or credentials.
+Delete with `client.delete_forecast(id)`. Only runs created on servers without the
+`forecasting` task are model runs, deleted with `client.delete_model_run(id)`.
 
 ## Next steps
 

@@ -199,8 +199,10 @@ Chronos-2. Fit with `time`, an optional `id` column, one or more `target` column
 `forecast(horizon, future=known_future_table)`. One request covers every series and
 target, and `to_frame()` returns one row per series, target and step with the median
 and `q_<level>` quantiles. Limits come from the model's published envelopes
-(`client.model("chronos-2")["forecast_envelopes"]`), and a forecast is priced at the
-prediction rate per token: Σ (history rows + horizon) × (targets + covariates).
+(`client.model("chronos-2")["forecast_envelopes"]`), and from the forecasting release a
+forecast is priced at the prediction rate per token: Σ (history rows + horizon) ×
+(targets + covariates), rounded up.
+<!-- release: API-164 makes chronos-2 public and switches the default rate card; until then forecasts are unpriced. -->
 Quantiles are not calibrated intervals; crossed native quantiles are sorted and
 counted in `rearranged_steps`. Panels and covariates need SDK 0.14 and a server with
 the `forecasting` task. History and future can also be workspace dataset IDs; tables are

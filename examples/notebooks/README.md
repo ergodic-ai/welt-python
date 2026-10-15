@@ -15,7 +15,8 @@ needed. Do not save keys or outputs into Git.
 - Research datasets: search, select a fixed reviewed Iris asset, then the complete modelling workflow.
 - Forecasting with covariates: a seeded simulated five-store daily panel (no research table
   carries known-future drivers), promotions and holidays as known-future covariates, temperature
-  as past-only, a chronological 28-day holdout, a seasonal-naive baseline, MASE, 80% interval
+  as past-only, a chronological 28-day holdout, a seasonal-naive baseline, a covariate-free
+  Chronos-2 ablation (a second priced request), MASE, 80% interval
   coverage and a plot (matplotlib). Intervals are not calibrated.
 - Causal discovery: real Iris measurements, all150 rows/four continuous variables;
   native Arrow output inspection, no ground-truth causal accuracy or effect claim.

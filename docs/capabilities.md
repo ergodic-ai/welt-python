@@ -12,13 +12,14 @@ The bounded upstream TabICLv2, Kumo Tabular Medium, TabDPT 1.3 and Mitra-v2 prev
 each have separately qualified classification and regression tasks. Arrow / ArrowFM,
 CDFM and AVICI each qualify observational discovery. Chronos-2 forecasts time series
 within its measured envelopes.
+<!-- release: API-164. Until API-160 qualifies the corners and API-164 releases, chronos-2 is hidden and forecasts are unpriced; this sentence and the Forecasting row below describe the release. -->
 
 | Task | Qualified models | Notes |
 | --- | --- | --- |
 | Classification | TabICLv2, Kumo Tabular Medium, TabDPT 1.3, Mitra-v2 | Predictions and class probabilities. |
 | Regression | TabICLv2, Kumo Tabular Medium, TabDPT 1.3, Mitra-v2 | Returns mean points with its explicit constant-target policy. |
 | Observational causal discovery | Arrow / ArrowFM, CDFM, AVICI | Finite continuous variables, no supervised target. |
-| Forecasting | Chronos-2 | One series or a panel, several targets, past and known-future covariates (numeric or categorical). Median and native quantiles, not calibrated intervals. See the [forecasting guide](forecasting.md). |
+| Forecasting | Chronos-2 (from the forecasting release) | One series or a panel, several targets, past and known-future covariates (numeric or categorical). Median and native quantiles, not calibrated intervals. See the [forecasting guide](forecasting.md). |
 
 Each model's context shapes, prediction rows per call and classes are in
 [Available models](#available-models).

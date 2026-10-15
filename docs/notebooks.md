@@ -60,7 +60,8 @@ classification.
 ## [Forecasting with covariates](notebook-forecasting-with-covariates.html)
 
 Simulate a five-store retail panel with promotions, holidays and temperature, hold out
-the last four weeks, and score Chronos-2 against a seasonal-naive baseline with MASE,
+the last four weeks, and score Chronos-2 with and without covariates against a
+seasonal-naive baseline with MASE,
 80% interval coverage and a plot. Prefer a script? Download
 [forecasting_covariates.py](downloads/forecasting_covariates.py).
 

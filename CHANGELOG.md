@@ -163,7 +163,8 @@ Documentation (API-162):
   its examples unchanged. Its anchors still resolve.
 - New notebook `forecasting-with-covariates` and script `forecasting_covariates.py`: a
   simulated five-store retail panel, a chronological 28-day holdout, a seasonal-naive
-  baseline, MASE, 80% interval coverage and a plot. It is the only notebook on
+  baseline, a covariate-free Chronos-2 ablation (notebook), MASE, 80% interval coverage
+  and a plot. It is the only notebook on
   simulated data, because it needs drivers known ahead of time.
 - The Models page lists forecasting; the hidden model-runs page points to the guide
   and notes the priced `chronos-2` univariate run. The CLI page documents

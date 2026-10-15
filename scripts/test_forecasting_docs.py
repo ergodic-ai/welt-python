@@ -107,8 +107,9 @@ def test_forecasting_notebook_cells_run_in_order(service, capsys):
             continue
         exec(compile(cell, 'forecasting notebook', 'exec'), namespace)
     capsys.readouterr()
-    (request,) = service.posts
+    request, plain = service.posts  # with covariates, then the covariate-free ablation
     assert request['horizon'] == 28 and len(request['future']['table']['rows']) == 5 * 28
+    assert plain['horizon'] == 28 and 'future' not in plain and plain['past_covariates'] == []
     # The holdout is chronological: every held-out day is after every history day.
     assert namespace['history']['date'].max() < namespace['test']['date'].min()
-    assert set(namespace['scores'].index) >= {'seasonal naive', 'Chronos-2'}
+    assert set(namespace['scores'].index) >= {'seasonal naive', 'Chronos-2', 'Chronos-2, no covariates'}

@@ -38,6 +38,7 @@ submission.
 | `lcm-2.5m` | temporal_causal_discovery | allowlisted internal testing |
 | `chronos-2` | univariate_forecasting (legacy run; panels and covariates use [`Forecast`](forecasting.md)) | authenticated |
 
+<!-- release: API-164 makes chronos-2 public; until then it is hidden. -->
 With the forecasting release (SDK 0.14), Chronos-2 is also a public catalogue model for
 the `forecasting` task, so it appears in `Client.models()`. Its univariate run is still
 submitted here by exact ID.
@@ -128,8 +129,8 @@ allows up to 100 retained runs per workspace, with the shared queued-job limit.
 
 !!! note "Most runs are unpriced"
     Runs are currently unpriced (`usage.credits` is null), with no monetary guarantee
-    for future versions. The exception is the `chronos-2` univariate run on the rate
-    card that prices forecasts: it costs the same as a one-series, one-target forecast,
+    for future versions. The exception, from the forecasting release, is the `chronos-2`
+    univariate run on the rate card that prices forecasts: it costs the same as a one-series, one-target forecast,
     (observations + horizon) tokens at 50 credits per million with a 5-credit minimum,
     so it is not a free route around [forecast pricing](forecasting.md#pricing).
     `client.pricing()` shows the card in force.
