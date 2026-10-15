@@ -52,6 +52,8 @@ def _parser():
     fc = command('forecast', 'Submit one forecast request (POST /v1/forecasts): history/future dataset IDs or inline tables')
     fc.add_argument('--input', required=True, help='Forecast request JSON file or - for stdin')
     fc.add_argument('--idempotency-key')
+    forecasts = group('forecasts', 'Forecast job lifecycle', dict(delete='Delete terminal forecast input/result; retain metadata and usage'))
+    forecasts['delete'].add_argument('id'); forecasts['delete'].add_argument('--yes', required=True, action='store_true')
     runs = group('model-runs', 'Testing model run lifecycle', dict(delete='Delete terminal input/result; retain metadata and usage'))
     runs['delete'].add_argument('id'); runs['delete'].add_argument('--yes', required=True, action='store_true')
     datasets = group('datasets', 'Private dataset lifecycle', dict(list='List datasets', get='Inspect dataset', upload='Upload table JSON (columns, rows, target, name)', delete='Delete one dataset without dependents'))
@@ -155,6 +157,8 @@ def _run(args, client):
         return {'items': client.models()} if action == 'list' else client.model(args.id)
     if command == 'model-runs':
         return client.delete_model_run(args.id)
+    if command == 'forecasts':
+        return client.delete_forecast(args.id)
     if command in ('run', 'forecast'):
         key = args.idempotency_key or uuid4().hex
         args.idempotency_key = key

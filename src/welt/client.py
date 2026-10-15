@@ -354,6 +354,10 @@ class Client(_HTTP):
             headers=_model_run_headers(idempotency_key, expected_model_version, expected_configuration_version))
         return Job(self, result["id"])
 
+    def delete_forecast(self, job_id):
+        """Explicitly remove one terminal forecast's stored input and result; keep job metadata and usage."""
+        return self.request("DELETE", f"/v1/forecasts/{_id(job_id)}")
+
     def delete_model_run(self, job_id):
         """Explicitly remove one terminal run's input/result; retain usage and job metadata."""
         return self.request("DELETE", f"/v1/model-runs/{_id(job_id)}")
@@ -782,6 +786,10 @@ class AsyncClient(_HTTP):
         result = await self.request("POST", "/v1/forecasts", json=request,
             headers=_model_run_headers(idempotency_key, expected_model_version, expected_configuration_version))
         return AsyncJob(self, result["id"])
+
+    async def delete_forecast(self, job_id):
+        """Async Client.delete_forecast with the same contract."""
+        return await self.request("DELETE", f"/v1/forecasts/{_id(job_id)}")
 
     async def delete_model_run(self, job_id):
         """Explicitly remove one terminal run's input/result; retain usage and job metadata."""
