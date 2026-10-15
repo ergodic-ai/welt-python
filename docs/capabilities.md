@@ -14,8 +14,8 @@ qualify observational discovery.
 
 | Task | Qualified models | Limits |
 | --- | --- | --- |
-| Classification | TabICLv2, Kumo Medium, TabDPT1.3, Mitra-v2 | At most 500 training rows, 20 features and 100 query rows. Up to 10 classes. |
-| Regression | TabICLv2, Kumo Medium, TabDPT1.3, Mitra-v2 | At most 500 training rows, 20 features and 100 query rows. Returns mean points with its explicit constant-target policy. |
+| Classification | TabICLv2, Kumo Medium, TabDPT1.3, Mitra-v2 | Per-model measured shapes: TabICLv2 and Kumo Medium take up to 8,000 training rows × 20 features (or 4,000 × 40, 2,000 × 80); Mitra-v2 up to 4,000 × 20 (2,000 × 40, 500 × 80); TabDPT1.3 up to 500 × 20. Up to 100 query rows per direct prediction and 10 classes. See [Available models](#available-models). |
+| Regression | TabICLv2, Kumo Medium, TabDPT1.3, Mitra-v2 | The same per-model shapes as classification and up to 100 query rows per direct prediction. Returns mean points with its explicit constant-target policy. |
 | Observational causal discovery | ArrowFM, CDFM, AVICI | Arrow and CDFM: up to 8,000 rows × 20 variables (measured 4,000 × 40 and 2,000 × 80). AVICI: up to 1,000 × 20 (or 500 × 40). At least 2 rows and 2 finite continuous variables. |
 
 The catalogue also reports matching-worker readiness for each task. Other selected

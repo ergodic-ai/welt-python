@@ -90,7 +90,10 @@ with Client() as client:
 
 - **Forecasting:** 16–512 observations and horizon 1–64. Quantile levels must be
   unique and increasing members of `[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]`.
-- **Tabular runs:** 2–500 support rows, 1–100 query rows and 1–20 numeric features.
+- **Tabular runs:** support rows and numeric features follow each model's measured
+  shapes in its metadata (`limits` and `shapes`): most hidden tabular models take up to
+  8,000 × 20, 4,000 × 40 or 2,000 × 80; TabSTAR and LimiX differ. At least 2 support
+  rows and 1–100 query rows.
   Classifiers accept 2–10 classes with labels exactly representable in FP32.
 - **Causal runs:** consult metadata for each causal input bound.
 

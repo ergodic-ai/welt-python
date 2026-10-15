@@ -12,6 +12,11 @@
   ergodic from PyPI once ergodic 0.2.0 is published.
 - Documentation: the causal discovery and Models pages drop the private-repository and
   gated co-release wording and link the ergodic documentation at https://ergodic.dev.
+  Model limits in the guides, README and Models table now follow the measured
+  envelopes live since API-137 (DEC-077): for example TabICLv2 and Kumo Medium up to
+  8,000 × 20, Mitra-v2 4,000 × 20, TabDPT1.3 500 × 20, Arrow and CDFM 8,000 × 20,
+  AVICI 1,000 × 20; 100 rows per direct prediction. The Models table snapshot is
+  refreshed from the public catalogue.
   The version picker keeps the 0.12.0 documentation, rebuilt from its exact release
   commit with its published wheel. Model semantics, metrics and runtime dependencies
   are unchanged.
