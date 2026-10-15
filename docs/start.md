@@ -178,8 +178,9 @@ print("Keep this predictor ID:", model.predictor_id_)
   use the recorded target's units.
 - **R²** compares with a constant test-set-mean baseline and can be negative.
 
-No calibrated interval or minimum quality is promised. The task's qualified limits
-are 500 training rows, 20 features and 100 prediction rows.
+No calibrated interval or minimum quality is promised. Limits depend on the model:
+TabICLv2 takes up to 8,000 training rows × 20 features (wider tables with fewer rows),
+and a direct prediction takes up to 100 rows. See [Models and limits](capabilities.md).
 
 !!! caution "About this split"
     The example uses all observations and an explicitly declared random 80/20 teaching

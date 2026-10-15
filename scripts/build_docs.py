@@ -20,6 +20,7 @@ from urllib.parse import quote
 
 import markdown
 import welt
+from welt.causal import ERGODIC_DOCS_URL
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = "https://ergodic-ai.github.io/welt-python"
@@ -57,7 +58,17 @@ ICONS = {
     'edit': '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
     'source': '<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>',
     'close': '<path d="M18 6 6 18M6 6l12 12"/>',
+    'external': '<path d="M7 17 17 7M8 7h9v9"/>',
+    'switch': '<path d="m7 15 5 5 5-5M7 9l5-5 5 5"/>',
 }
+# API-145 / DEC-078: the product switcher shared with the ergodic docs (same markup and
+# docs/assets/site.css rules as ergodic's scripts/docsite build). Name, description, URL;
+# the current product has no URL and links to this version's home.
+PRODUCTS = (
+    ('Welt', 'Python SDK documentation', None),
+    ('Welt console', 'Hosted tabular and causal models', 'https://welt.ergodic.dev'),
+    ('ergodic', 'Open-source causal AI library', 'https://ergodic.dev'),
+)
 
 
 def icon(name):
@@ -141,7 +152,7 @@ METHODS = {
  'causal_result': ('Reopen an owned discovery job result and validate identity/provenance.', 'Immutable CausalResult with job_id.', 'NotFoundError, ResultDeletedError, authentication or InvalidCausalResultError; no graph repair.'),
  'causal_scores': ('Fetch separate native scores while preserving original axes and score semantics.', 'Score dictionary with values, variables, source_row_target_column axes and score_reference.', 'Authorization, deleted/missing result or InvalidCausalResultError; no thresholding or graph rewriting.'),
  'to_dict': ('Make an independent ordinary copy of the original native wire payload.', 'Fresh dictionary retaining graph type, endpoint marks and provenance.', 'No remote request and no hidden client or credentials.'),
- 'to_ergodic': ('Convert only a declared native DAG locally, preserving isolates and direction; never project directed graphs.', 'Approved Ergodic MixedGraph. Use to_adjacency(order=list(result.variables)) for original axes.', 'OptionalDependencyError for missing/unrelated co-release dependency; UnsupportedGraphConversionError for every non-declared-DAG graph.'),
+ 'to_ergodic': ('Convert only a declared native DAG locally, preserving isolates and direction; never project directed graphs.', 'ergodic.MixedGraph (install welt-client[ergodic]). Use to_adjacency(order=list(result.variables)) for original axes.', 'OptionalDependencyError when ergodic is missing or reads no supported graph format (ergodic.GRAPH_FORMAT); UnsupportedGraphConversionError for every non-declared-DAG graph.'),
  'get_params': ('Inspect sklearn constructor parameters; credentials remain redacted.', 'Parameter dictionary; includes nested parameters when deep=True.', 'No remote request. Do not save runtime credentials; pickle drops explicit keys.'),
  'set_params': ('Set sklearn constructor parameters; a changed model/configuration requires a new fit.', 'The same estimator (self).', 'ValueError for an invalid parameter. Does not mutate existing pinned server artifacts.'),
  'score': ('Use the inherited sklearn scoring convention on explicit held-out rows.', 'Classifier: accuracy. Regressor: R². This is not an automatic hosted benchmark.', 'Prediction/schema/task errors; caller owns the split and evaluation protocol.'),
@@ -262,7 +273,7 @@ def reference():
             purpose, returns, errors = (html.escape(text, quote=False) for text in (overrides[key] if key in overrides else METHODS[key]))
             parts += [f'### {name}.{key}', purpose, f'```python\n{format_signature(name + "." + key, public_signature(method))}\n```', f'**Returns:** {returns}\n{{: .contract }}', f'**Errors and limits:** {errors}\n{{: .contract }}']
     parts += ['## Error types', 'All remote errors inherit `WeltError`. Table/schema validation may raise ordinary `ValueError` before upload. Do not catch every error and silently fit again.', '| Type | Next action |', '| --- | --- |']
-    types = {'AuthenticationError': 'Configure a missing key locally; replace an invalid, expired or revoked key in Account.', 'PermissionDeniedError': 'Use a key with the required workspace write/fit/predict permission.', 'InvalidInputError': 'Check the named schema, explicit target and task limits.', 'ModelUnavailableError': 'Inspect current task_profiles and worker readiness; no automatic model fallback.', 'CapacityError / RateLimitError': 'Respect retry_after and workspace admission limits; inspect existing work.', 'JobTimeoutError / PredictionPendingError': 'Retain job_id and reconnect; local timeout does not cancel.', 'ExecutionError / JobCancelledError': 'Inspect the durable job and safe request/job IDs; intentional retry needs a new decision.', 'NotFoundError / ConflictError': 'Check workspace ownership and resource dependencies.', 'TransportError': 'Inspect existing job state before replaying a mutation; GET retries are bounded.', 'ResultExpiredError / ResultDeletedError': 'Temporary access expiry and explicit primary deletion are distinct.', 'InvalidCausalResultError': 'Reject malformed native payload without repair.', 'UnsupportedGraphConversionError / OptionalDependencyError': 'Preserve native graph; convert declared DAGs only with approved local co-release dependency. For load_research_dataset, install welt-client[research].'}
+    types = {'AuthenticationError': 'Configure a missing key locally; replace an invalid, expired or revoked key in Account.', 'PermissionDeniedError': 'Use a key with the required workspace write/fit/predict permission.', 'InvalidInputError': 'Check the named schema, explicit target and task limits.', 'ModelUnavailableError': 'Inspect current task_profiles and worker readiness; no automatic model fallback.', 'CapacityError / RateLimitError': 'Respect retry_after and workspace admission limits; inspect existing work.', 'JobTimeoutError / PredictionPendingError': 'Retain job_id and reconnect; local timeout does not cancel.', 'ExecutionError / JobCancelledError': 'Inspect the durable job and safe request/job IDs; intentional retry needs a new decision.', 'NotFoundError / ConflictError': 'Check workspace ownership and resource dependencies.', 'TransportError': 'Inspect existing job state before replaying a mutation; GET retries are bounded.', 'ResultExpiredError / ResultDeletedError': 'Temporary access expiry and explicit primary deletion are distinct.', 'InvalidCausalResultError': 'Reject malformed native payload without repair.', 'UnsupportedGraphConversionError / OptionalDependencyError': 'Preserve native graph; convert declared DAGs only, with welt-client[ergodic] (ergodic>=0.2,<0.3). For load_research_dataset, install welt-client[research].'}
     types['InvalidForecastResultError'] = 'Reject malformed, crossed or mismatched native forecast payload without repair.'
     types['WeltError (HTTP 402)'] = 'Inspect status_code and code: insufficient_credits, spend_cap_reached or plan_past_due. Open Workspace Billing to review available credits and pending reservations, the spend cap or unpaid plan. Resolve the cause before intentionally retrying; this is not an automatic backoff or SDK payment operation.'
     parts += [f'| `{name}` | {meaning} |' for name, meaning in types.items()]
@@ -493,7 +504,7 @@ def current_redirect(page):
 
 
 # Published historical documentation folders (v<version>/), oldest first.
-HISTORICAL_VERSIONS = ('0.6.0', '0.7.0', '0.7.1', '0.8.0', '0.9.1', '0.10.0', '0.10.1', '0.11.0', '0.11.1')
+HISTORICAL_VERSIONS = ('0.6.0', '0.7.0', '0.7.1', '0.8.0', '0.9.1', '0.10.0', '0.10.1', '0.11.0', '0.11.1', '0.12.0')
 
 
 def release_tuple(version):
@@ -652,6 +663,16 @@ def reference_index(link):
     return '<div class="nav-group"><a class="nav-item" href="' + link('start') + '">' + icon('left') + 'All guides</a></div>' + ''.join(parts)
 
 
+def switcher(home_href):
+    """The Products disclosure next to the brand: Welt (current), its console and ergodic."""
+    items = ''.join(
+        f'<a href="{html.escape(url or home_href, quote=True)}"' + ('' if url else ' aria-current="true"')
+        + f'><strong>{html.escape(product)}{icon("external") if url else ""}</strong><small>{html.escape(description)}</small></a>'
+        for product, description, url in PRODUCTS)
+    return ('<details class="product-switcher"><summary><span>Products</span><span class="sr-only">: switch from Welt '
+            f'to another product</span>{icon("switch")}</summary><nav class="product-menu" aria-label="Ergodic products">{items}</nav></details>')
+
+
 def shell(body, name, title, version, prefix='', outline='', home=False, markdown_source=None):
     def link(page): return prefix + ('index.html' if page == 'index' else page + '.html')
     section = SECTION.get(name, 'Get started' if name.startswith('notebook-') else 'Guides')
@@ -680,7 +701,7 @@ def shell(body, name, title, version, prefix='', outline='', home=False, markdow
             f'<main id="main" tabindex="-1" class="article">{crumbs}{body}{pager(name, version, link)}{inline_actions}</main>'
             f'<aside class="outline" aria-label="On this page">{rail}</aside></div>')
     theme_boot = "try{const t=localStorage.getItem('welt-docs-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}"
-    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Welt Python SDK {version}: DataFrame prediction, reusable predictors, research datasets, forecasting and native causal discovery."><meta name="color-scheme" content="light dark"><title>{html.escape(title)} · Welt Python SDK {version}</title><link rel="canonical" href="{canonical}"><link rel="icon" type="image/svg+xml" href="{prefix}assets/ergodic-mark-dark.svg"><link rel="preload" href="{prefix}assets/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="{prefix}assets/tokens.css"><link rel="stylesheet" href="{prefix}assets/docs.css"><script>{theme_boot}</script><script defer src="{prefix}assets/docs.js"></script></head><body data-search="{prefix}search-index.json"><a class="skip" href="#main">Skip to content</a><header class="topbar"><button id="menu" class="icon-button menu-button" type="button" aria-haspopup="dialog" aria-label="Open navigation">{icon("menu")}</button><a class="brand" href="{link('index')}"><img src="{prefix}assets/ergodic-mark-dark.svg" alt="" width="28" height="28"><strong>Welt</strong><span class="brand-sep" aria-hidden="true"></span><span class="brand-sub">Python SDK</span></a><nav class="topnav" aria-label="Main navigation">{nav}</nav><span class="spacer"></span><button id="search" class="search-trigger" type="button" aria-haspopup="dialog">{icon("search")}<span class="search-label">Search docs</span><kbd class="shortcut" aria-hidden="true">⌘K</kbd><span class="sr-only">Search documentation</span></button><select id="version" class="version" data-version aria-label="Documentation version">{versions}</select><button id="theme" class="icon-button" type="button" aria-label="Switch theme">{icon("theme")}</button><a class="btn btn-primary btn-sm open-console" href="https://welt.ergodic.dev">Open console</a></header>{main}<footer class="footer"><span>Welt by Ergodic · Python SDK {version}</span><span class="footer-links"><a href="https://welt.ergodic.dev">Console</a><a href="{REPOSITORY}/tree/v{version}">Release source</a><a href="https://pypi.org/project/welt-client/{version}/">PyPI</a><a href="{prefix}llms.txt">llms.txt</a></span></footer><dialog id="navigation" class="nav-dialog" aria-labelledby="navigation-title"><header><strong id="navigation-title">Documentation</strong><button type="button" class="icon-button" data-close aria-label="Close navigation">{icon("close")}</button></header><div class="nav-dialog-tools"><select class="version" data-version aria-label="Documentation version">{versions}</select><a class="btn btn-primary btn-sm" href="https://welt.ergodic.dev">Open console</a></div><nav class="nav-dialog-sections" aria-label="Sections">{nav}</nav><nav aria-label="Mobile guide navigation">{side if name == 'reference' else sidebar}</nav></dialog><dialog id="search-dialog" class="palette" aria-labelledby="search-title"><h2 id="search-title" class="sr-only">Search SDK {version}</h2><div class="palette-input">{icon("search")}<label for="search-input" class="sr-only">Task, method or error</label><input id="search-input" type="search" autocomplete="off" placeholder="Search guides, methods and errors" role="combobox" aria-expanded="false" aria-controls="search-results" aria-autocomplete="list"><button type="button" data-close class="palette-close" aria-label="Close search"><kbd>Esc</kbd></button></div><ul id="search-results" role="listbox" aria-label="Search results"></ul><p id="search-empty">Search this SDK version by task, method or error.</p><div class="palette-footer" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> to move</span><span><kbd>↵</kbd> to open</span><span>Searching v{version}</span></div></dialog><div id="announcement" class="sr-only" role="status" aria-live="polite"></div></body></html>'''
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Welt Python SDK {version}: DataFrame prediction, reusable predictors, research datasets, forecasting and native causal discovery."><meta name="color-scheme" content="light dark"><title>{html.escape(title)} · Welt Python SDK {version}</title><link rel="canonical" href="{canonical}"><link rel="icon" type="image/svg+xml" href="{prefix}assets/ergodic-mark-dark.svg"><link rel="preload" href="{prefix}assets/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="{prefix}assets/tokens.css"><link rel="stylesheet" href="{prefix}assets/docs.css"><link rel="stylesheet" href="{prefix}assets/site.css"><script>{theme_boot}</script><script defer src="{prefix}assets/docs.js"></script></head><body data-search="{prefix}search-index.json"><a class="skip" href="#main">Skip to content</a><header class="topbar"><button id="menu" class="icon-button menu-button" type="button" aria-haspopup="dialog" aria-label="Open navigation">{icon("menu")}</button><a class="brand" href="{link('index')}"><img src="{prefix}assets/ergodic-mark-dark.svg" alt="" width="28" height="28"><strong>Welt</strong><span class="brand-sep" aria-hidden="true"></span><span class="brand-sub">Python SDK</span></a>{switcher(link('index'))}<nav class="topnav" aria-label="Main navigation">{nav}</nav><span class="spacer"></span><button id="search" class="search-trigger" type="button" aria-haspopup="dialog">{icon("search")}<span class="search-label">Search docs</span><kbd class="shortcut" aria-hidden="true">⌘K</kbd><span class="sr-only">Search documentation</span></button><select id="version" class="version" data-version aria-label="Documentation version">{versions}</select><button id="theme" class="icon-button" type="button" aria-label="Switch theme">{icon("theme")}</button><a class="btn btn-primary btn-sm open-console" href="https://welt.ergodic.dev">Open console</a></header>{main}<footer class="footer"><span>Welt by Ergodic · Python SDK {version}</span><span class="footer-links"><a href="https://welt.ergodic.dev">Console</a><a href="{REPOSITORY}/tree/v{version}">Release source</a><a href="https://pypi.org/project/welt-client/{version}/">PyPI</a><a href="https://ergodic.dev">ergodic</a><a href="{prefix}llms.txt">llms.txt</a></span></footer><dialog id="navigation" class="nav-dialog" aria-labelledby="navigation-title"><header><strong id="navigation-title">Documentation</strong><button type="button" class="icon-button" data-close aria-label="Close navigation">{icon("close")}</button></header><div class="nav-dialog-tools"><select class="version" data-version aria-label="Documentation version">{versions}</select><a class="btn btn-primary btn-sm" href="https://welt.ergodic.dev">Open console</a></div><nav class="nav-dialog-sections" aria-label="Sections">{nav}</nav><nav aria-label="Mobile guide navigation">{side if name == 'reference' else sidebar}</nav></dialog><dialog id="search-dialog" class="palette" aria-labelledby="search-title"><h2 id="search-title" class="sr-only">Search SDK {version}</h2><div class="palette-input">{icon("search")}<label for="search-input" class="sr-only">Task, method or error</label><input id="search-input" type="search" autocomplete="off" placeholder="Search guides, methods and errors" role="combobox" aria-expanded="false" aria-controls="search-results" aria-autocomplete="list"><button type="button" data-close class="palette-close" aria-label="Close search"><kbd>Esc</kbd></button></div><ul id="search-results" role="listbox" aria-label="Search results"></ul><p id="search-empty">Search this SDK version by task, method or error.</p><div class="palette-footer" aria-hidden="true"><span><kbd>↑</kbd><kbd>↓</kbd> to move</span><span><kbd>↵</kbd> to open</span><span>Searching v{version}</span></div></dialog><div id="announcement" class="sr-only" role="status" aria-live="polite"></div></body></html>'''
 
 
 def notebook_home(prefix='', sdk_version='0.8.0'):
@@ -790,7 +811,9 @@ def llms_index(version, titles):
     lines = [f'# Welt Python SDK {version}', '',
              '> Python SDK for Welt: fit qualified tabular models on DataFrames, reuse predictors, forecast, '
              'load research datasets and run native causal discovery. Each link is this release\'s Markdown source.', '',
-             'For the hosted MCP server, the CLI and product-level agent docs, see https://welt.ergodic.dev/llms.txt', '']
+             'For the hosted MCP server, the CLI and product-level agent docs, see https://welt.ergodic.dev/llms.txt', '',
+             'For local identification and effect estimation on a Welt graph, see ergodic (`pip install "ergodic[welt]"`): '
+             'https://ergodic.dev/llms.txt', '']
     for label, pages in GUIDES:
         lines += [f'## {label}', '']
         lines += [f'- [{titles[page]}]({PUBLIC}/v{version}/{page}.md)' for _, page in pages if page in titles]
@@ -805,7 +828,8 @@ def main():
         raise SystemExit('Installed SDK version must match the documentation source version.')
     if any(not hasattr(welt,name) for name in REQUIRED):
         raise SystemExit('Installed SDK is missing a required documented public symbol.')
-    pages={p.stem:p.read_text() for p in sorted((ROOT/'docs').glob('*.md'))}
+    # The ergodic continuation link lives in one constant (welt.causal.ERGODIC_DOCS_URL).
+    pages={p.stem:p.read_text().replace('{{ergodic-docs}}', ERGODIC_DOCS_URL) for p in sorted((ROOT/'docs').glob('*.md'))}
     pages['reference']=reference()
     if any(re.search(r'github(?:usercontent)?\.com/ergodic-ai/welt-python/(?:blob/|tree/)?(?:main|feat/)', text) for text in pages.values()):
         raise SystemExit('Versioned documentation cannot link to mutable SDK source.')

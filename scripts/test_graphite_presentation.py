@@ -275,3 +275,26 @@ def test_card_descriptions_drop_the_markdown_separator_and_deep_fences_stay_vali
     assert '<a href="reuse.html">Reuse a predictor</a> predict later.' in body and 'Text: kept.' in body
     body, _ = build_docs.render_markdown('Intro.\n\n        ```sh\n        welt login\n        ```\n')
     assert body.count('class="code-wrap') == 1 and '<pre><code><div' not in body and '<pre><code>    <div' not in body
+
+
+def test_product_switcher_and_ergodic_cross_links(site):
+    """API-145 / DEC-078: the Products switcher, the ergodic continuation card and compatibility table."""
+    base, out, version = site
+    for path in [*out.glob('*.html'), base / 'index.html']:
+        text = path.read_text()
+        switcher = text.split('<details class="product-switcher">', 1)[1].split('</details>', 1)[0]
+        assert '<span>Products</span>' in switcher and 'href="https://ergodic.dev"' in switcher, path.name
+        assert switcher.count('aria-current="true"') == 1 and 'assets/site.css' in text, path.name
+    css = (ASSETS / 'site.css').read_text()
+    assert not re.findall(r'#[0-9a-fA-F]{3,8}\b|rgba?\(', css)
+    tokens = (ASSETS / 'tokens.css').read_text()
+    assert all(name in tokens for name in set(re.findall(r'var\((--[\w-]+)\)', css)))
+    # docs.css stays byte-identical to the copy the ergodic docs vendor; the switcher lives in site.css.
+    assert '.product-switcher' not in (ASSETS / 'docs.css').read_text()
+    guide = (out / 'causal-discovery.html').read_text()
+    cards = guide.split('<div class="cards">', 1)[1].split('</div>', 1)[0]
+    assert '<a href="https://ergodic.dev/welt.html">Discover in Welt, estimate in ergodic</a>' in cards
+    capabilities = (out / 'capabilities.html').read_text()
+    assert 'id="compatibility-with-ergodic"' in capabilities and 'href="capabilities.html#compatibility-with-ergodic"' in guide
+    assert '<code>ergodic.graph/1</code>' in capabilities and 'https://ergodic.dev/compatibility.html' in capabilities
+    assert 'https://ergodic.dev/llms.txt' in (out / 'llms.txt').read_text()

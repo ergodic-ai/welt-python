@@ -10,9 +10,11 @@ inspect its native edges and scores.
 
 ## Choose a model
 
-SDK 0.7 retains the independently accepted ArrowFM observational preview. CDFM and
-AVICI also qualify the same input envelope: 2–500 rows and 2–20 finite continuous
-variables. The service catalogue reports the exact task, version and readiness.
+ArrowFM, CDFM and AVICI are observational previews. Arrow and CDFM take up to
+8,000 rows × 20 variables, with measured wider shapes of 4,000 × 40 and 2,000 × 80.
+AVICI takes up to 1,000 × 20 (or 500 × 40). Every model needs at least 2 rows and 2
+finite continuous variables. The service catalogue (`client.models()`) reports the
+current limits, shapes, version and readiness.
 
 | Model | Select with | Input and decoding | Native output |
 | --- | --- | --- | --- |
@@ -29,8 +31,8 @@ You select every model through the same client interfaces.
 !!! caution "Scores are not causal confidence"
     Native scores are not calibrated causal confidence or effects.
 
-Other causal engines and a usable public Ergodic co-release remain gated. These
-interfaces perform no automatic Ergodic or model download.
+Other causal engines remain gated. These interfaces perform no automatic ergodic or
+model download.
 
 ## Prepare observational data
 
@@ -114,27 +116,49 @@ malformed-result errors apply without repair.
 
 ## Convert to an Ergodic graph
 
-`result.to_ergodic()` converts a declared native DAG locally. It keeps every isolate
-and the native tail and arrow directions. It refuses every graph not explicitly
-declared a native DAG, including acyclic directed graphs and cycles, without
-projection.
+[ergodic](https://ergodic.dev) is Ergodic's open-source causal library. It identifies
+and estimates effects on a graph. Install it with the `ergodic` extra:
 
-!!! caution "Install only the approved Ergodic artifact"
-    The Ergodic repository is private and the public package-index name currently refers to
-    another project; there is no public causal extra yet. Install only the approved
-    co-release artifact when available.
+```sh tab="pip"
+pip install "welt-client[ergodic]"
+```
 
-<details markdown="1"><summary>How is the Ergodic dependency checked?</summary>
+```sh tab="uv"
+uv add "welt-client[ergodic]"
+```
 
-The actual compatible Ergodic 0.1.1 co-release wheel has been checked privately. A
-missing or unrelated dependency raises a typed `OptionalDependencyError` before an
-unrelated package is imported. Welt never downloads a causal dependency during
-conversion.
+`result.to_ergodic()` converts a declared native DAG locally into an
+`ergodic.MixedGraph`. It keeps every isolate and the native tail and arrow
+directions. It refuses every graph not explicitly declared a native DAG, including
+acyclic directed graphs and cycles, without projection.
 
-</details>
+```python
+graph = result.to_ergodic()
+print(graph.is_dag())
+```
 
 `MixedGraph` stores node sets. To keep the original axis order, inspect adjacency with
 `graph.to_adjacency(order=list(result.variables))`.
+
+<details markdown="1"><summary>How is the ergodic dependency checked?</summary>
+
+The extra installs `ergodic>=0.2,<0.3`. Conversion checks the graph format the
+installed package reads (`ergodic.GRAPH_FORMAT`, currently `ergodic.graph/1`), not its
+version. A missing package, or one without a supported format such as ergodic 0.1,
+raises a typed `OptionalDependencyError` that names the extra. Welt never downloads a
+dependency during conversion. CI tests conversion against the oldest and latest
+supported ergodic releases.
+
+</details>
+
+CDFM and AVICI results stay native here. ergodic can decode their edge scores into a
+DAG locally, but only when you pass an explicit `decoder=` to `ergodic.welt.discover`;
+the graph is then labelled decoded, not native. Check which versions work together in
+[Compatibility with ergodic](capabilities.md#compatibility-with-ergodic).
+
+!!! tip "Continue in ergodic"
+    The [ergodic guide to Welt]({{ergodic-docs}}) takes a converted graph through
+    identification and effect estimation, and runs Welt models from inside ergodic.
 
 !!! caution "Discovered edges are not causal truth"
     Conversion and local identification or effect estimation are separate scientific
@@ -175,6 +199,7 @@ qualification results and does not delete hosted state.
 
 <div class="cards" markdown="1">
 
+- [Discover in Welt, estimate in ergodic]({{ergodic-docs}}): identify and estimate effects on a discovered graph.
 - [Notebook examples](notebooks.md): the causal notebook inspects the real data first.
 - [Models and limits](capabilities.md): every qualified causal model and its limits.
 - [Wait and recover](async-and-errors.md): reconnect to jobs and handle typed errors.

@@ -32,3 +32,52 @@ jobs:
       - run: uv pip install --python .venv/bin/python --reinstall --no-deps dist/*.whl
       - run: .venv/bin/python scripts/check_notebooks.py --check-source
       - run: .venv/bin/python scripts/build_docs.py
+  # DEC-078 / API-142: to_ergodic against the oldest and latest supported ergodic
+  # (welt-client[ergodic] declares ergodic>=0.2,<0.3). ergodic 0.2.0 is not on PyPI
+  # until the joint release; until then this job reports a notice and skips, and it
+  # activates by itself once PyPI serves a matching version.
+  ergodic:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.12', '3.13']
+        ergodic: ['oldest', 'latest']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Choose the supported ergodic release from PyPI
+        id: pick
+        env:
+          WHICH: ${{ matrix.ergodic }}
+        run: |
+          python - <<'PYCODE'
+          import json, os, urllib.request
+          with urllib.request.urlopen('https://pypi.org/pypi/ergodic/json', timeout=30) as response:
+              releases = json.load(response)['releases']
+          def key(v):
+              return tuple(int(p) for p in v.split('.'))
+          supported = sorted(
+              (v for v, files in releases.items()
+               if files and v.replace('.', '').isdigit() and (0, 2) <= key(v)[:2] < (0, 3)),
+              key=key)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              if not supported:
+                  print('::notice::No ergodic>=0.2,<0.3 on PyPI yet; the compatibility job activates at the ergodic 0.2.0 release.')
+                  out.write('version=\n')
+              else:
+                  out.write('version=' + (supported[0] if os.environ['WHICH'] == 'oldest' else supported[-1]) + '\n')
+          PYCODE
+      - if: steps.pick.outputs.version != ''
+        run: python -m pip install uv==0.5.16
+      - if: steps.pick.outputs.version != ''
+        run: uv sync --frozen
+      - if: steps.pick.outputs.version != ''
+        run: uv pip install --python .venv/bin/python 'ergodic==${{ steps.pick.outputs.version }}'
+      - if: steps.pick.outputs.version != ''
+        name: Require the real-package tests to run, not skip
+        run: |
+          .venv/bin/python -c "import ergodic; from welt.causal import SUPPORTED_ERGODIC_GRAPH_FORMATS as s; assert getattr(ergodic, 'GRAPH_FORMAT', None) in s"
+          .venv/bin/python -m pytest -q -rs tests/test_ergodic_integration.py tests/test_causal.py

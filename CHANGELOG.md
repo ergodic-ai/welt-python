@@ -1,3 +1,32 @@
+# 0.13.0 (unreleased) — ergodic 0.2 bridge
+
+- `CausalResult.to_ergodic()` now checks the graph format the installed ergodic reads
+  (`ergodic.GRAPH_FORMAT`, supported: `ergodic.graph/1`) instead of requiring
+  ergodic 0.1.1, so it works with the public ergodic 0.2 release (DEC-078). The
+  payload passed to `MixedGraph.from_dict` carries `"format"`. Conversion stays
+  DAG-only, preserves every node and native direction, never projects, and keeps the
+  typed errors: a missing ergodic, or one without a supported format, raises
+  `OptionalDependencyError` naming the extra.
+- Add the `ergodic` extra: `pip install "welt-client[ergodic]"` installs
+  `ergodic>=0.2,<0.3`. CI tests conversion against the oldest and latest supported
+  ergodic from PyPI once ergodic 0.2.0 is published.
+- Documentation: the causal discovery and Models pages drop the private-repository and
+  gated co-release wording and link the ergodic documentation at https://ergodic.dev.
+  Model limits in the guides, README and Models table now follow the measured
+  envelopes live since API-137 (DEC-077): for example TabICLv2 and Kumo Medium up to
+  8,000 × 20, Mitra-v2 4,000 × 20, TabDPT1.3 500 × 20, Arrow and CDFM 8,000 × 20,
+  AVICI 1,000 × 20; 100 rows per direct prediction. The Models table snapshot is
+  refreshed from the public catalogue.
+  The version picker keeps the 0.12.0 documentation, rebuilt from its exact release
+  commit with its published wheel. Model semantics, metrics and runtime dependencies
+  are unchanged.
+- Documentation cross-links with ergodic (API-145): a Products switcher in the top bar
+  (Welt, Welt console, ergodic; styles in `docs/assets/site.css`, `docs.css`
+  unchanged), the causal discovery guide's first Next-steps card goes to "Discover in
+  Welt, estimate in ergodic", the Models page gains a "Compatibility with ergodic"
+  section with the same version and conversion tables as the ergodic docs, and the
+  SDK `llms.txt` links ergodic's.
+
 # 0.12.0 (2026-10-14) — Cross-validated evaluations
 
 - Add `Client.submit_evaluation`, `evaluate`, `evaluation(id)` and `evaluations()`
