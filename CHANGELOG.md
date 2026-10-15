@@ -19,7 +19,7 @@
   `ergodic>=0.2,<0.3`. CI tests conversion against the oldest and latest supported
   ergodic from PyPI once ergodic 0.2.0 is published.
 - Documentation: the causal discovery and Models pages drop the private-repository and
-  gated co-release wording and link the ergodic documentation at https://ergodic.dev (moved in 0.13.1).
+  gated co-release wording and link the ergodic documentation at `ergodic.dev` (moved to docs.ergodic.dev in 0.13.1).
   Model limits in the guides, README and Models table now follow the measured
   envelopes live since API-137 (DEC-077): for example TabICLv2 and Kumo Medium up to
   8,000 × 20, Mitra-v2 4,000 × 20, TabDPT1.3 500 × 20, Arrow and CDFM 8,000 × 20,

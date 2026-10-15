@@ -274,7 +274,7 @@ jobs:
           test -f site/v$SDK_VERSION/causal-discovery.html
           grep -q 'welt-client\[ergodic\]' site/v$SDK_VERSION/causal-discovery.html
           grep -q 'https://docs.ergodic.dev/' site/v$SDK_VERSION/causal-discovery.html
-          ! grep -rqE 'https://(www\.)?ergodic\.dev' site/v$SDK_VERSION site/index.html site/llms.txt
+          if grep -rqE 'https?://(www\.)?ergodic\.dev' site/v$SDK_VERSION site/index.html site/llms.txt; then echo '::error::apex ergodic.dev link in the published docs'; exit 1; fi
           grep -q 'value="../v0.12.0/"' site/v$SDK_VERSION/index.html
           grep -q 'value="v0.12.0/"' site/index.html
           grep -q '/v0.12.0/' site/sitemap.xml
