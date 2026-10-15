@@ -8,15 +8,18 @@ what is still planned.
     limits. A Python class or a named catalogue entry alone does not qualify hosted
     execution.
 
-The bounded upstream TabICLv2, Kumo Medium, TabDPT1.3 and Mitra-v2 previews each have
-separately qualified classification and regression tasks. ArrowFM, CDFM and AVICI each
-qualify observational discovery.
+The bounded upstream TabICLv2, Kumo Tabular Medium, TabDPT 1.3 and Mitra-v2 previews
+each have separately qualified classification and regression tasks. Arrow / ArrowFM,
+CDFM and AVICI each qualify observational discovery.
 
-| Task | Qualified models | Limits |
+| Task | Qualified models | Notes |
 | --- | --- | --- |
-| Classification | TabICLv2, Kumo Medium, TabDPT1.3, Mitra-v2 | Per-model measured shapes: TabICLv2 and Kumo Medium take up to 8,000 training rows × 20 features (or 4,000 × 40, 2,000 × 80); Mitra-v2 up to 4,000 × 20 (2,000 × 40, 500 × 80); TabDPT1.3 up to 500 × 20. Up to 100 query rows per direct prediction and 10 classes. See [Available models](#available-models). |
-| Regression | TabICLv2, Kumo Medium, TabDPT1.3, Mitra-v2 | The same per-model shapes as classification and up to 100 query rows per direct prediction. Returns mean points with its explicit constant-target policy. |
-| Observational causal discovery | ArrowFM, CDFM, AVICI | Arrow and CDFM: up to 8,000 rows × 20 variables (measured 4,000 × 40 and 2,000 × 80). AVICI: up to 1,000 × 20 (or 500 × 40). At least 2 rows and 2 finite continuous variables. |
+| Classification | TabICLv2, Kumo Tabular Medium, TabDPT 1.3, Mitra-v2 | Predictions and class probabilities. |
+| Regression | TabICLv2, Kumo Tabular Medium, TabDPT 1.3, Mitra-v2 | Returns mean points with its explicit constant-target policy. |
+| Observational causal discovery | Arrow / ArrowFM, CDFM, AVICI | Finite continuous variables, no supervised target. |
+
+Each model's context shapes, prediction rows per call and classes are in
+[Available models](#available-models).
 
 The catalogue also reports matching-worker readiness for each task. Other selected
 families require their own gates; no classical or older-generation fallback is
@@ -29,16 +32,31 @@ This is not a claim to reproduce publisher benchmark recipes.
 
 {{models-table}}
 
+What "context" means depends on the task:
+
+- **Classification and regression:** the training table you pass to `fit`, counted
+  as rows × feature columns without the target. The model conditions on it when it
+  predicts. Prediction rows are separate: up to 100 per direct call, more with batch
+  prediction.
+- **Causal discovery:** the whole table, with every column a variable.
+- **Forecasting:** the history of one series. Forecasting uses the hidden `chronos-2`
+  model, which your workspace must be granted access to; see
+  [forecast a time series](forecasting.md) for its history and horizon limits.
+
+A shape caps both axes at once. TabICLv2 refuses 6,000 rows × 30 features (plus the
+target): 8,000 × 20 is too narrow and 4,000 × 40 too short. Use 4,000 rows or 20
+features instead.
+
 ## Behavior boundaries
 
 | Behavior | Current boundary |
 | --- | --- |
 | Classification: preparation, prediction, probabilities and reopening | Available with the qualified classifier. Metadata pins the model, configuration and seed. |
-| Regression: preparation, prediction and reopening | Qualified TabICLv2, Kumo Medium, TabDPT1.3 and Mitra-v2 tasks return finite points in target units; classes and probabilities are absent. See the task-specific [regression guide](regression.md). |
+| Regression: preparation, prediction and reopening | Qualified TabICLv2, Kumo Tabular Medium, TabDPT 1.3 and Mitra-v2 tasks return finite points in target units; classes and probabilities are absent. See the task-specific [regression guide](regression.md). |
 | DataFrame, array, CSV and Parquet input | Scalar cells. A named schema aligns columns safely. Files are currently loaded into memory; Parquet needs the optional reader. |
 | Durable jobs | Explicit submission, polling, reconnection and cancellation. A local wait timeout leaves durable work running. |
 | Usage | Logical operation IDs, lifecycle and attempt workload metadata, and nullable `credits` and `rate_card_version`. Event count is not fit count. See [usage accounting](usage.md#usage-and-workspace-credits). |
-| Model swapping | Available between the qualified TabICLv2, Kumo Medium, TabDPT1.3 and Mitra-v2 tasks. A new model needs a new fit. See [model selection](model-selection.md). |
+| Model swapping | Available between the qualified TabICLv2, Kumo Tabular Medium, TabDPT 1.3 and Mitra-v2 tasks. A new model needs a new fit. See [model selection](model-selection.md). |
 | Cross-validated evaluations | Up to 8 classification or regression models (or every eligible one) on the same seeded folds, 2–10 folds, with a leaderboard, fold metrics, seven-day out-of-fold predictions, an HTML report and signed report links. Each training fold must fit the model limits above; larger tables are refused unless you opt into `sample_rows`. No time-ordered splits yet. See [evaluations](evaluations.md). |
 | Resumable files and true large batch jobs | Released sync and async upload-session, chunk and file resume, and batch methods. The server sets the enabled formats, parser envelopes and batch limits. Estimator file convenience reads still load into memory. |
 | Metadata export, recipes and deletion plans | `export_metadata()` returns pinned server provenance. Recipes and deletion plans require released routes. There is no executable, context or credential export. |

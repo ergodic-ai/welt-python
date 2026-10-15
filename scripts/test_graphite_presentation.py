@@ -198,10 +198,33 @@ def test_snapshot_keeps_only_rendered_catalogue_fields():
     from scripts import snapshot_models
     catalogue = {'items': [{'id': 'm', 'name': 'M', 'family': 'tabular', 'version': 'private-build', 'reason': None,
                             'task_profiles': [{'task': 'classification', 'status': 'available', 'execution_available': True,
-                                               'version': 'v', 'limits': {'max_rows': 500, 'internal': 1}}]}]}
+                                               'version': 'v', 'limits': {'max_rows': 500, 'internal': 1},
+                                               'shapes': [{'rows': 500, 'columns': 20, 'internal': 1}]}]}]}
     reduced = snapshot_models.reduce(catalogue, 'https://example.invalid/v1/models', '2026-10-13T00:00:00Z')
     assert reduced['models'] == [{'id': 'm', 'name': 'M', 'tasks': [
-        {'task': 'classification', 'status': 'available', 'execution_available': True, 'limits': {'max_rows': 500}}]}]
+        {'task': 'classification', 'status': 'available', 'execution_available': True, 'limits': {'max_rows': 500},
+         'shapes': [{'rows': 500, 'columns': 20}]}]}]
+
+
+def test_models_table_lists_every_admitted_shape_as_context(tmp_path):
+    # DEC-077: a table fits within any one admitted shape, so the context column lists them all.
+    snapshot = {'source': build_docs.PUBLIC_CATALOGUE, 'taken_at': '2026-10-15T00:00:00Z', 'models': [
+        {'id': 'wide', 'name': 'Wide', 'tasks': [{'task': 'classification', 'status': 'available', 'execution_available': True,
+         'limits': {'max_rows': 8000, 'max_columns': 20, 'max_prediction_rows': 100, 'max_classes': 10},
+         'shapes': [{'rows': 2000, 'columns': 80}, {'rows': 8000, 'columns': 20}, {'rows': 4000, 'columns': 40}]}]},
+        {'id': 'graph', 'name': 'Graph', 'tasks': [{'task': 'causal_discovery', 'status': 'available', 'execution_available': True,
+         'limits': {'min_rows': 2, 'max_rows': 1000, 'min_features': 2, 'max_features': 20}}]}]}
+    path = tmp_path / 'snapshot.json'
+    path.write_text(json.dumps(snapshot))
+    with patch.object(build_docs, 'MODELS_SNAPSHOT', path):
+        table, text = build_docs.models_table(), build_docs.models_markdown()
+    assert '<td class="num">8,000 × 20, 4,000 × 40, 2,000 × 80</td>' in table
+    assert '| Graph (`graph`) | Causal discovery | 1,000 × 20 | — | — |' in text
+    assert 'at least 2 rows and 2 variables' in text and 'at least 2 rows and 2 variables' in table
+    snapshot['models'][1]['tasks'][0]['limits'] = {'min_rows': 2}
+    path.write_text(json.dumps(snapshot))
+    with patch.object(build_docs, 'MODELS_SNAPSHOT', path), pytest.raises(SystemExit, match='neither shapes'):
+        build_docs.models_table()
 
 
 def test_navigation_covers_every_guide_once(site):
