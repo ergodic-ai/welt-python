@@ -145,20 +145,13 @@ def test_series_and_array_inputs_preserve_instants_and_explicit_spacing(service)
     lambda f: f.assign(sales=True),
     lambda f: f.assign(sales=float('inf')),
     lambda f: f.assign(sales=1e39),
+    lambda f: f.iloc[:15],
     lambda f: pd.concat([f] * 33, ignore_index=True),
 ])
 def test_invalid_history_never_reaches_transport(service, change):
     with pytest.raises(ValueError):
         Forecast().fit(change(history()), time='timestamp', target='sales')
     assert not service.requests
-
-
-def test_context_bounds_come_from_metadata_and_never_submit(service):
-    # 0.14 (DEC-085 §3): the 16-observation minimum is the server's published min_context,
-    # read at fit, not a client constant; only metadata reads precede the refusal.
-    with pytest.raises(ValueError, match='16 to 512'):
-        Forecast().fit(history().iloc[:15], time='timestamp', target='sales')
-    assert not service.payloads and all(r.method == 'GET' for r in service.requests)
 
 
 @pytest.mark.parametrize('kwargs',[

@@ -9,8 +9,10 @@ import pandas as pd
 import pytest
 
 import welt.forecast as forecast_module
-from welt import (AsyncClient, AsyncForecastJob, Client, ConflictError, Forecast, ForecastResult,
-                  ForecastSeries, InvalidForecastResultError, InvalidInputError, TransportError, WeltError)
+import pickle
+
+from welt import (AsyncClient, AsyncForecastJob, AuthenticationError, Client, ConflictError, Forecast,
+                  ForecastResult, ForecastSeries, InvalidForecastResultError, InvalidInputError, WeltError)
 from welt.cli import _parser, _run
 
 LEVELS = [v / 100 for v in (1, *range(5, 100, 5), 99)]
@@ -123,6 +125,12 @@ class Service:
                        status=self.status, predictor_id=None)
             self.jobs[name] = (job, body, request.headers['Idempotency-Key'])
             return httpx.Response(202, json=job)
+        if path.startswith('/v1/forecasts/') and request.method == 'DELETE':
+            name = path.split('/')[3]
+            if name not in self.jobs:
+                return httpx.Response(404, json={'error': {'code': 'not_found', 'message': 'Resource not found.'}})
+            self.jobs[name][0]['purged'] = True
+            return httpx.Response(200, json={'id': name, 'deleted': True})
         if path.startswith('/v1/jobs/'):
             name = path.split('/')[3]
             job, body, _ = self.jobs[name]
@@ -348,8 +356,17 @@ def test_forecasting_server_unlocks_longer_univariate_context_and_finer_levels(s
     assert body['frequency'] == {'unit': 'hour', 'every': 1} and body['targets'] == ['y']
     assert 'id_column' not in body and body['history']['table']['columns'] == ['t', 'y']
     details = model.predict_details(2)
-    assert details.task == 'forecasting' and details.series[0].id is None
-    assert list(details.to_frame()) == ['id', 'target', 'timestamp', 'median', 'q_0.1', 'q_0.5', 'q_0.9']
+    # F4: a univariate fit keeps the 0.13 result shape whichever route served it.
+    assert details.task == 'univariate_forecasting' and details.series[0].id is None
+    frame = details.to_frame()
+    assert list(frame) == ['median', 'q_0.1', 'q_0.5', 'q_0.9'] and frame.index.name == 'timestamp'
+    assert frame.index[0] == pd.Timestamp('2026-03-04T12:00Z')
+    assert set(details.to_dict()) == {'task', 'model_id', 'model_version', 'configuration', 'context_length',
+                                      'horizon', 'frequency_seconds', 'timestamps', 'predictions',
+                                      'point_semantics', 'quantile_levels', 'quantiles', 'calibrated_intervals'}
+    assert details.to_dict()['context_length'] == 1500 and details.to_dict()['frequency_seconds'] == 3600
+    assert details.configuration == 'chronos-2-forecast-v1' and details.rearranged_steps == 0
+    assert model.forecast(2).task == 'univariate_forecasting'
     array = Forecast().fit(np.arange(20.), start='2026-01-01T00:00:00Z', frequency_seconds=86400)
     array.predict(1)
     assert service.posts[-1][0]['history']['table']['columns'] == ['timestamp', 'value']
@@ -357,36 +374,75 @@ def test_forecasting_server_unlocks_longer_univariate_context_and_finer_levels(s
     assert not any(r.url.path == '/v1/model-runs' for r in service.requests)
 
 
-def test_large_tables_are_uploaded_as_datasets_and_small_ones_inline(service, monkeypatch):
+def test_requests_above_the_body_limit_are_refused_before_any_request(service, monkeypatch):
     model = fitted_panel()
-    small = forecast_module._encoded(dict(columns=['date', 'store', 'promo', 'holiday'],
-                                          rows=json.loads(json.dumps(
-                                              [[t.isoformat(), s, p, h] for t, s, p, h in
-                                               future(panel(), 2).itertuples(index=False)]))))
-    monkeypatch.setattr(forecast_module, 'INLINE_TABLE_BYTES', small)
+    before = len(service.requests)
+    monkeypatch.setattr(forecast_module, 'MAX_REQUEST_BYTES', 2000)
+    with pytest.raises(InvalidInputError, match='body limit of 2,000 bytes') as error:
+        model.forecast(2, future=future(panel(), 2))
+    assert error.value.code == 'workload_limit' and isinstance(error.value, ValueError)
+    assert len(service.requests) == before and not service.posts and not service.datasets
+    assert forecast_module.MAX_REQUEST_BYTES == 2000 and not hasattr(forecast_module, 'INLINE_TABLE_BYTES')
+    monkeypatch.setattr(forecast_module, 'MAX_REQUEST_BYTES', 10 * 1024 * 1024)
     with model.submit_forecast(2, future=future(panel(), 2)) as job:
-        body = service.posts[0][0]
-        assert body['history'] == {'dataset_id': 'ds_1'} and 'table' in body['future']
-        assert job.datasets == {'history': 'ds_1'}
-        assert service.datasets['ds_1']['columns'][:3] == ['date', 'store', 'sales']
-        assert len(job.result().series) == 4
-    monkeypatch.setattr(forecast_module, 'INLINE_TABLE_BYTES', 10)
-    with model.submit_forecast(2, future=future(panel(), 2)) as job:
-        assert service.posts[1][0]['history'] == {'dataset_id': 'ds_2'}
-        assert service.posts[1][0]['future'] == {'dataset_id': 'ds_3'}
-        assert job.datasets == {'history': 'ds_2', 'future': 'ds_3'}
-        assert len(job.result().series) == 4
-    assert forecast_module.INLINE_TABLE_BYTES == 10
+        assert 'table' in service.posts[0][0]['history'] and 'table' in service.posts[0][0]['future']
+        assert not hasattr(job, 'datasets') and len(job.result().series) == 4
+    assert not service.datasets and not any(r.url.path == '/v1/datasets' for r in service.requests)
 
 
-def test_dropped_submission_after_upload_names_datasets_for_replay(service, monkeypatch):
-    model = fitted_panel()
-    monkeypatch.setattr(forecast_module, 'INLINE_TABLE_BYTES', 10)
-    service.fail_post = True
-    with pytest.raises(TransportError) as error:
-        model.submit_forecast(2, future=future(panel(), 2), idempotency_key='replay-me')
-    assert "'history': 'ds_1'" in str(error.value) and error.value.retryable
-    assert service.clients[-1].http.is_closed
+def _stored(service):
+    """Store the canonical history/future tables of one inline request as workspace datasets."""
+    fitted_panel().forecast(2, future=future(panel(), 2))
+    body = service.posts.pop()[0]
+    service.datasets.update(ds_hist=body['history']['table'], ds_fut=body['future']['table'])
+    return body
+
+
+def test_dataset_ids_are_sent_by_reference_and_validated_by_the_server(service):
+    inline = _stored(service)
+    before = len(service.requests)
+    model = Forecast().fit('ds_hist', time='date', id='store', target=['sales', 'visits'],
+                           past_covariates=['temperature'], future_covariates=['promo', 'holiday'],
+                           categorical=['holiday'])
+    assert model.n_series_ is None and model.context_length_ is None and model.cutoff_ is None
+    assert model.frequency_ is None and all(r.method == 'GET' for r in service.requests[before:])
+    result = model.forecast(2, future='ds_fut', idempotency_key='by-reference')
+    body = service.posts[-1][0]
+    assert body['history'] == {'dataset_id': 'ds_hist'} and body['future'] == {'dataset_id': 'ds_fut'}
+    assert {k: v for k, v in body.items() if k not in ('history', 'future')} == {
+        k: v for k, v in inline.items() if k not in ('history', 'future')}
+    assert [(s.id, s.target) for s in result.series] == [('b', 'sales'), ('b', 'visits'),
+                                                         ('a', 'sales'), ('a', 'visits')]
+    again = model.forecast(2, future='ds_fut', idempotency_key='by-reference')   # same body: same job
+    assert again.job_id == result.job_id and len(service.jobs) == 2
+    mixed = model.forecast(2, future=future(panel(), 2))          # a DataFrame future travels inline
+    assert 'table' in service.posts[-1][0]['future'] and len(mixed.series) == 4
+    with pytest.raises(ValueError, match='forecast'):
+        Forecast().fit({'id': 'ds_hist'}, time='date', target='sales').predict(2)
+    assert service.posts[-1][0]['history'] == {'dataset_id': 'ds_hist'}
+    daily = Forecast().fit('ds_hist', time='date', id='store', target='sales', frequency='D')
+    daily.forecast(1)
+    assert service.posts[-1][0]['frequency'] == {'unit': 'day', 'every': 1}
+
+
+@pytest.mark.parametrize('history,kwargs', [
+    ('history.csv', dict(time='date', target='sales')),
+    ('not a dataset id', dict(time='date', target='sales')),
+    ('ds_hist', dict(target='sales')),
+    ('ds_hist', dict(time='date', target='sales', start='2026-01-01T00:00Z')),
+    ('ds_hist', dict(time='date', target='sales', categorical=['sales'])),
+])
+def test_invalid_dataset_references_are_refused_before_network(service, history, kwargs):
+    with pytest.raises(ValueError):
+        Forecast().fit(history, **kwargs)
+    assert not service.requests
+
+
+def test_dataset_history_needs_the_forecasting_task(service):
+    service.tasks, service.operations = ['univariate_forecasting'], ['model_run']
+    with pytest.raises(InvalidInputError) as error:
+        Forecast().fit('ds_hist', time='date', target='sales')
+    assert error.value.code == 'unsupported_capability'
 
 
 def test_version_guard_conflict_and_idempotent_replay(service):
@@ -426,7 +482,6 @@ def _shift_times(r):
     lambda r: r['series'][0].update(context_length=19),
     _shift_times,
     lambda r: r['series'][0].update(timestamps=[t.replace('Z', '+01:00') for t in r['series'][0]['timestamps']]),
-    lambda r: r['series'][0].update(extra=1),
     lambda r: r.update(horizon=3),
     lambda r: r.update(quantile_levels=[.1, .5, .95]),
     lambda r: r.update(cross_learning=True),
@@ -443,7 +498,6 @@ def _shift_times(r):
     lambda r: r['columns'].update(past_covariates=[]),
     lambda r: r['columns'].update(targets=['visits', 'sales']),
     lambda r: r.pop('rearranged_steps'),
-    lambda r: r.update(unadvertised=True),
 ])
 def test_wrong_forecasting_results_fail_without_repair(service, change):
     model = fitted_panel()
@@ -709,60 +763,114 @@ def test_injected_client_must_be_an_open_sync_client():
         Forecast(client=closed).fit(panel(), time='date', id='store', target='sales')
 
 
-def test_replacing_the_injected_client_requires_a_new_fit(service):
+def test_replacing_the_injected_client_is_checked_against_the_fitted_connection(service):
     svc = Service()
-    with Client(api_key='fixture', base_url='https://fixture.example',
-                transport=httpx.MockTransport(svc.handle)) as first, \
-         Client(api_key='fixture', base_url='https://fixture.example',
-                transport=httpx.MockTransport(svc.handle)) as second:
+    def client(key):
+        return Client(api_key=key, base_url='https://fixture.example', transport=httpx.MockTransport(svc.handle))
+    with client('fixture') as first, client('fixture') as second, client('another-key') as third:
         model = Forecast(client=first).fit(panel(), time='date', id='store', target='sales')
-        model.client = second
+        model.client = second                     # same origin, credential and workspace
+        assert len(model.forecast(2).series) == 2
+        model.client = third
+        with pytest.raises(AuthenticationError):
+            model.forecast(2)
+        model = Forecast(client=first).fit(panel(), time='date', id='store', target='sales')
+        model.client = None
         with pytest.raises(ValueError, match='parameters changed'):
             model.forecast(2)
-    assert not svc.posts
+    assert len(svc.posts) == 1
 
 
-def _naive(frame):
-    return frame.assign(date=frame['date'].dt.tz_localize(None))
-
-
-def test_long_format_reads_naive_timestamps_as_utc(service, tmp_path):
-    aware = fitted_panel()
-    aware.forecast(2, future=future(panel(), 2))
-    model = Forecast().fit(_naive(panel()), time='date', id='store', target=['sales', 'visits'],
-                           past_covariates=['temperature'], future_covariates=['promo', 'holiday'],
+def test_missing_past_categorical_cells_are_sent_as_null(service):
+    frame = panel().astype({'holiday': object})
+    frame.loc[[0, 5], 'holiday'] = [None, np.nan]
+    model = Forecast().fit(frame, time='date', id='store', target='sales', past_covariates=['holiday'],
                            categorical=['holiday'])
-    assert model.cutoff_ == aware.cutoff_ and str(model.cutoff_.tzinfo) == 'UTC'
-    result = model.forecast(2, future=_naive(future(panel(), 2)))
-    assert service.posts[1][0] == service.posts[0][0]        # same request bytes as the aware frame
-    assert result.to_frame()['timestamp'].iloc[0] == pd.Timestamp('2026-01-21T00:00Z')
-    # read_csv leaves strings without offsets; date_range without tz gives naive datetime64.
-    path = tmp_path / 'history.csv'
-    _naive(panel()).to_csv(path, index=False)
-    csv = Forecast().fit(pd.read_csv(path), time='date', id='store', target='sales')
-    plain = pd.DataFrame({'date': pd.date_range('2026-01-01', periods=20, freq='D'), 'sales': np.arange(20.)})
-    single = Forecast().fit(plain, time='date', target=['sales'])
-    assert csv.cutoff_ == aware.cutoff_ and single.cutoff_ == pd.Timestamp('2026-01-20T00:00Z')
-    assert single.forecast(1).timestamps[0] == pd.Timestamp('2026-01-21T00:00Z')
-    assert service.posts[-1][0]['history']['table']['rows'][0][0] == '2026-01-01T00:00:00+00:00'
+    model.forecast(1)
+    rows = service.posts[0][0]['history']['table']['rows']
+    assert rows[0][3] is None and rows[5][3] is None and rows[1][3] == 'no'
+    with pytest.raises(ValueError, match='complete'):            # future categories stay complete
+        Forecast().fit(frame, time='date', id='store', target='sales', future_covariates=['holiday'],
+                       categorical=['holiday'])
 
 
-def test_long_format_converts_offsets_and_mixes_naive_cells_as_utc(service):
-    frame = panel(ids=('a',)).drop(columns=['store'])
-    cells = [t.tz_convert('Europe/Paris') if i % 2 else t.tz_localize(None) for i, t in enumerate(frame['date'])]
-    model = Forecast().fit(frame.assign(date=pd.Series(cells, dtype=object)), time='date', target=['sales'])
-    assert model.cutoff_ == frame['date'].iloc[-1]
+def test_new_capability_and_limit_refusals_are_value_errors(service):
+    service.tasks, service.operations = ['univariate_forecasting'], ['model_run']
+    monthly = pd.DataFrame({'date': pd.date_range('2024-01-01', periods=20, freq='MS', tz='UTC'),
+                            'sales': np.arange(20.)})
+    for history, kwargs in ((monthly, dict(time='date', target='sales')),
+                            (panel(), dict(time='date', id='store', target='sales'))):
+        with pytest.raises(ValueError) as error:
+            Forecast().fit(history, **kwargs)
+        assert isinstance(error.value, InvalidInputError) and error.value.code == 'unsupported_capability'
+    model = Forecast().fit(panel().query("store == 'a'"), time='date', target='sales')
+    with pytest.raises(ValueError) as error:
+        model.forecast(2)
+    assert error.value.code == 'unsupported_capability'
+    with pytest.raises(ValueError) as error:                      # 513 > the published 512
+        Forecast().fit(np.arange(513.), start='2026-01-01T00:00Z', frequency_seconds=60)
+    assert error.value.code == 'workload_limit'
+    before = len(service.requests)
+    with pytest.raises(ValueError, match='16'):                   # the 0.13 floor stays offline
+        Forecast().fit(np.arange(15.), start='2026-01-01T00:00Z', frequency_seconds=60)
+    assert len(service.requests) == before and not service.posts
 
 
-@pytest.mark.parametrize('history', [
-    lambda f: _naive(f)[['date', 'sales']],                                      # one string target
-    lambda f: _naive(f).set_index('date')['sales'],                              # naive DatetimeIndex
-])
-def test_univariate_form_keeps_refusing_naive_timestamps(service, history):
-    frame = panel(ids=('a',))
-    kwargs = dict(time='date', target='sales') if isinstance(history(frame), pd.DataFrame) else {}
-    with pytest.raises(ValueError, match='timezone'):
-        Forecast().fit(history(frame), **kwargs)
-    with pytest.raises(ValueError, match='timezone'):
-        Forecast().fit(np.arange(20.), start='2026-01-01', frequency_seconds=86400)
-    assert not service.requests
+def test_unknown_result_fields_are_ignored_and_known_ones_required(service):
+    def extend(r):
+        r.update(warnings=['note'], native_grid={'levels': 21})
+        r['columns']['extra_role'] = []
+        for s in r['series']:
+            s['native_context_length'] = s['context_length']
+    service.result_change = extend
+    result = fitted_panel().forecast(2, future=future(panel(), 2))
+    assert 'warnings' not in result.to_dict() and 'extra_role' not in result.columns
+    assert 'native_context_length' not in result.to_dict()['series'][0] and len(result.series) == 4
+    for missing in ('rearranged_steps', 'columns'):
+        payload = result.to_dict()
+        payload.pop(missing)
+        with pytest.raises(InvalidForecastResultError):
+            ForecastResult(payload, job_id=result.job_id)
+    payload = result.to_dict()
+    payload['series'][0].pop('context_length')
+    with pytest.raises(InvalidForecastResultError):
+        ForecastResult(payload, job_id=result.job_id)
+
+
+def test_fitted_forecast_pickles_without_client_or_credential_and_needs_reinjection(service):
+    svc = Service()
+    with Client(api_key='secret-injected-key', base_url='https://fixture.example',
+                transport=httpx.MockTransport(svc.handle)) as client:
+        model = Forecast(client=client).fit(panel(), time='date', id='store', target='sales')
+        data = pickle.dumps(model)
+        assert b'secret-injected-key' not in data and model.client is client
+        restored = pickle.loads(data)
+        assert restored.client is None and restored.n_series_ == 2
+        with pytest.raises(ValueError, match='set estimator.client'):
+            restored.forecast(2)
+        restored.client = client
+        assert len(restored.forecast(2).series) == 2
+    plain = pickle.loads(pickle.dumps(fitted_panel()))       # owned clients: credential re-read at call time
+    assert len(plain.forecast(2, future=future(panel(), 2)).series) == 4
+
+
+def test_delete_forecast_sync_async_and_cli(capsys):
+    svc = Service()
+    request = dict(model_id='chronos-2', time_column='t', targets=['y'], past_covariates=[], future_covariates=[],
+                   categorical_covariates=[], horizon=1, quantile_levels=[.5], cross_learning=False,
+                   history={'table': {'columns': ['t', 'y'], 'rows': [['2026-01-01T00:00:00Z', 1.0]]}})
+    svc.version = svc.configuration = None
+    with Client(api_key='fixture', transport=httpx.MockTransport(svc.handle)) as client:
+        job = client.submit_forecast(request, idempotency_key='to-delete')
+        assert client.delete_forecast(job.id) == {'id': job.id, 'deleted': True}
+        assert _run(_parser().parse_args(['forecasts', 'delete', job.id, '--yes']), client)['deleted']
+        with pytest.raises(SystemExit):
+            _parser().parse_args(['forecasts', 'delete', job.id])     # --yes is required
+    capsys.readouterr()
+
+    async def run():
+        async with AsyncClient(api_key='fixture', transport=httpx.MockTransport(svc.handle)) as client:
+            return await client.delete_forecast(job.id)
+    assert asyncio.run(run())['deleted'] and svc.jobs[job.id][0]['purged']
+    deletes = [r for r in svc.requests if r.method == 'DELETE']
+    assert len(deletes) == 3 and all(r.url.path == f'/v1/forecasts/{job.id}' for r in deletes)

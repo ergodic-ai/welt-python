@@ -26,12 +26,14 @@ from sklearn.utils.validation import check_is_fitted
 from .client import Client, _deadline, _id, _wait
 from .credentials import credential, secret
 from .errors import (AuthenticationError, InvalidForecastResultError, InvalidInputError,
-                     TransportError, WeltError, safe_id)
+                     WeltError, safe_id)
 
-#: Tables whose compact JSON encoding is at most this many bytes are sent inline in the
-#: forecast request; a larger history or future table is uploaded first as a workspace
-#: dataset (``Client.upload``) and referenced by dataset ID.
-INLINE_TABLE_BYTES = 1024 * 1024
+#: Largest forecast request body the SDK sends: the Welt API's HTTP body limit (10 MiB by
+#: default, ``WELT_HTTP_BODY_BYTES`` on the server). DataFrame history and future tables
+#: always travel inline in the compact JSON body; a larger request is refused locally with
+#: ``InvalidInputError`` (``workload_limit``) before any request. Upload such a table as a
+#: workspace dataset (for example ``Client.upload_file``) and pass its ID instead.
+MAX_REQUEST_BYTES = 10 * 1024 * 1024
 
 #: Native Chronos-2 quantile levels (DEC-085 §1), used when model metadata publishes none.
 NATIVE_QUANTILE_LEVELS = tuple(v / 100 for v in (1, *range(5, 100, 5), 99))
@@ -260,13 +262,18 @@ def _numeric(column, label, *, missing):
     return result
 
 
-def _category(column, label):
+def _category(column, label, *, missing=False):
+    """String or integer cells; None for missing cells when allowed (past covariates)."""
     result = []
     for v in column.to_numpy(dtype=object):
         if isinstance(v, np.generic):
             v = v.item()
+        if missing and _missing(v):
+            result.append(None)
+            continue
         if type(v) not in (str, int):
-            raise ValueError(f"Categorical column {label!r} must contain complete string or integer cells.")
+            raise ValueError(f"Categorical column {label!r} must contain "
+                             + ("" if missing else "complete ") + "string or integer cells.")
         result.append(v)
     return result
 
@@ -344,8 +351,9 @@ def _univariate(history, time, target, start, canon):
             raise ValueError("time and target apply only to a DataFrame.")
         values = np.asarray(history, dtype=object)
         names = ("timestamp", "value")
-    if values.ndim != 1 or len(values) < 2:
-        raise ValueError("Forecast history must be one-dimensional with at least two observations.")
+    if values.ndim != 1 or len(values) < 16:
+        # The 0.11–0.13 minimum, checked before any request; upper limits come from metadata.
+        raise ValueError("Forecast history must be one-dimensional with at least 16 observations.")
     values = _numbers(values, observations=True)
     if times is not None:
         if any(b <= a for a, b in zip(times, times[1:])):
@@ -374,10 +382,25 @@ def _univariate(history, time, target, start, canon):
                 frequency=None, legacy=legacy)
 
 
-def _long(history, time, target, id, past, future, categorical, canon):
-    """DEC-085 long format: one row per (id, time); rows may be in any order; naive times are UTC."""
-    if not isinstance(history, pd.DataFrame):
-        raise ValueError("Panels, multiple targets and covariates need a long-format pandas DataFrame.")
+_FILES = (".csv", ".tsv", ".parquet", ".pq", ".json", ".xlsx")
+
+
+def _dataset_reference(value, label="history"):
+    """An existing workspace dataset ID (a string or a dataset dictionary with id), else None."""
+    if isinstance(value, dict) and "id" in value:
+        value = value["id"]
+    if not isinstance(value, str):
+        return None
+    if value.lower().endswith(_FILES):
+        raise ValueError(f"{label} must be a DataFrame or a workspace dataset ID, not a file path. Read the file "
+                         "with pandas, or upload it (Client.upload_file) and pass the dataset ID.")
+    if safe_id(value) is None:
+        raise ValueError(f"{label} as a string must be a workspace dataset ID such as 'ds_...'.")
+    return value
+
+
+def _roles(time, target, id, past, future, categorical):
+    """Validated column roles: (targets, past, future, categorical, every named column)."""
     if not isinstance(time, str) or not time.strip():
         raise ValueError("Name the time column with time='column'.")
     targets = _names(target, "target")
@@ -390,11 +413,28 @@ def _long(history, time, target, id, past, future, categorical, canon):
     roles = [time, *([id] if id is not None else []), *targets, *past, *future]
     if len(set(roles)) != len(roles):
         raise ValueError("time, id, target and covariate columns must all be distinct.")
+    if not set(categorical) <= set(past) | set(future):
+        raise ValueError("categorical must name past or future covariate columns.")
+    return targets, past, future, categorical, roles
+
+
+def _reference(dataset, time, target, id, past, future, categorical, canon):
+    """A history stored as a workspace dataset: roles only; the server validates its rows."""
+    targets, past, future, categorical, _ = _roles(time, target, id, past, future, categorical)
+    return dict(form="dataset", dataset=dataset, time=time, id=id, targets=targets, past=past, future=future,
+                categorical=categorical, columns=None, rows=None, series=None, canon=canon,
+                frequency=None if canon is None else _wire_frequency(canon), legacy=None)
+
+
+def _long(history, time, target, id, past, future, categorical, canon):
+    """DEC-085 long format: one row per (id, time); rows may be in any order; naive times are UTC."""
+    if not isinstance(history, pd.DataFrame):
+        raise ValueError("Panels, multiple targets and covariates need a long-format pandas DataFrame "
+                         "or a workspace dataset ID.")
+    targets, past, future, categorical, roles = _roles(time, target, id, past, future, categorical)
     if history.columns.has_duplicates or any(name not in history for name in roles):
         missing = [name for name in roles if name not in history]
         raise ValueError(f"History columns must be unique and include every named column; missing: {missing[:10]}.")
-    if not set(categorical) <= set(past) | set(future):
-        raise ValueError("categorical must name past or future covariate columns.")
     if not len(history):
         raise ValueError("Forecast history must contain rows.")
     times = _times(history[time], naive_utc=True)
@@ -407,7 +447,7 @@ def _long(history, time, target, id, past, future, categorical, canon):
     for name in targets:
         columns[name] = _numeric(history[name], name, missing=True)
     for name in past:
-        columns[name] = (_category(history[name], name) if name in categorical
+        columns[name] = (_category(history[name], name, missing=True) if name in categorical
                          else _numeric(history[name], name, missing=True))
     for name in future:
         columns[name] = (_category(history[name], name) if name in categorical
@@ -453,6 +493,12 @@ def _long(history, time, target, id, past, future, categorical, canon):
 
 def _history(history, time, target, id, past, future, categorical, frequency, start, frequency_seconds):
     canon = _resolve_frequency(frequency, frequency_seconds)
+    dataset = _dataset_reference(history)
+    if dataset is not None:
+        if start is not None or frequency_seconds is not None:
+            raise ValueError("start and frequency_seconds apply only to arrays and Series; a dataset needs "
+                             "time= and target= (and frequency= to fix the spacing).")
+        return _reference(dataset, time, target, id, past, future, categorical, canon)
     long = (id is not None or not isinstance(target, (str, type(None))) or any(
         _names(v, n) for v, n in ((past, "past_covariates"), (future, "future_covariates"),
                                    (categorical, "categorical"))))
@@ -468,14 +514,22 @@ def _history(history, time, target, id, past, future, categorical, frequency, st
     return plan
 
 
-def _future_table(plan, future, horizon):
-    """Validate the known-future table: exactly horizon rows per series at its future times."""
+def _future_source(plan, future, horizon):
+    """The request's future source: an inline table validated locally, or a dataset reference.
+
+    A DataFrame needs exactly horizon rows per series at its future times (checked locally
+    when the history is a DataFrame; with a dataset history only its columns and cells).
+    """
     if not plan["future"]:
         if future is not None:
             raise ValueError("future applies only when the fit named future_covariates.")
         return None
+    dataset = _dataset_reference(future, "future")
+    if dataset is not None:
+        return dict(dataset_id=dataset)
     if not isinstance(future, pd.DataFrame):
-        raise ValueError("Pass future=DataFrame with the time column, id column and every future covariate.")
+        raise ValueError("Pass future= as a DataFrame with the time column, id column and every future covariate, "
+                         "or as a workspace dataset ID.")
     names = [plan["time"], *([plan["id"]] if plan["id"] is not None else []), *plan["future"]]
     if future.columns.has_duplicates or set(future.columns) != set(names):
         extra = sorted(str(c) for c in set(future.columns) - set(names))
@@ -486,6 +540,11 @@ def _future_table(plan, future, horizon):
     ids = _ids(future[plan["id"]], plan["id"]) if plan["id"] is not None else [None] * len(times)
     columns = {name: (_category(future[name], name) if name in plan["categorical"]
                       else _numeric(future[name], name, missing=False)) for name in plan["future"]}
+    data = [[t.isoformat() for t in times], *([ids] if plan["id"] is not None else []),
+            *[columns[name] for name in plan["future"]]]
+    table = dict(columns=names, rows=[list(r) for r in zip(*data)])
+    if plan["series"] is None:
+        return dict(table=table)
     known = {s["id"]: s for s in plan["series"]}
     seen = {}
     for raw, t in zip(ids, times):
@@ -499,9 +558,7 @@ def _future_table(plan, future, horizon):
             label = "the series" if key is None else f"series {key[:80]!r}"
             raise ValueError(f"future needs exactly {horizon} rows for {label}, at the {horizon} steps after "
                              "its last observation.")
-    data = [[t.isoformat() for t in times], *([ids] if plan["id"] is not None else []),
-            *[columns[name] for name in plan["future"]]]
-    return dict(columns=names, rows=[list(r) for r in zip(*data)])
+    return dict(table=table)
 
 
 # --- Model metadata -------------------------------------------------------------------
@@ -614,11 +671,22 @@ def _quantile_rows(rows, levels, points, horizon):
     return rows
 
 
-def _forecasting_payload(p):
-    if set(p) != {"task", "model_id", "model_version", "configuration", "horizon", "frequency",
-                  "quantile_levels", "point_semantics", "calibrated_intervals", "cross_learning",
-                  "rearranged_steps", "columns", "series"}:
+_RESULT_KEYS = ("task", "model_id", "model_version", "configuration", "horizon", "frequency",
+                "quantile_levels", "point_semantics", "calibrated_intervals", "cross_learning",
+                "rearranged_steps", "columns", "series")
+_COLUMN_KEYS = ("time", "id", "targets", "past_covariates", "future_covariates", "categorical_covariates")
+_SERIES_KEYS = ("id", "target", "context_length", "timestamps", "predictions", "quantiles")
+
+
+def _known(value, keys):
+    """The known fields of a result object; every one is required, additional fields are ignored."""
+    if not isinstance(value, dict) or any(k not in value for k in keys):
         raise ValueError()
+    return {k: value[k] for k in keys}
+
+
+def _forecasting_payload(p):
+    p = _known(p, _RESULT_KEYS)
     if any(safe_id(p[k]) is None for k in ("model_id", "model_version", "configuration")):
         raise ValueError()
     h = _integer(p["horizon"], 1, None, "Horizon")
@@ -631,10 +699,7 @@ def _forecasting_payload(p):
     levels = _numbers(p["quantile_levels"])
     if not levels or levels != sorted(set(levels)) or any(not 0 < v < 1 for v in levels):
         raise ValueError()
-    c = p["columns"]
-    if not isinstance(c, dict) or set(c) != {"time", "id", "targets", "past_covariates",
-                                             "future_covariates", "categorical_covariates"}:
-        raise ValueError()
+    c = _known(p["columns"], _COLUMN_KEYS)
     if not isinstance(c["time"], str) or not (c["id"] is None or isinstance(c["id"], str)):
         raise ValueError()
     for key in ("targets", "past_covariates", "future_covariates", "categorical_covariates"):
@@ -644,9 +709,7 @@ def _forecasting_payload(p):
         raise ValueError()
     series, pairs = [], []
     for s in p["series"]:
-        if not isinstance(s, dict) or set(s) != {"id", "target", "context_length", "timestamps",
-                                                 "predictions", "quantiles"}:
-            raise ValueError()
+        s = _known(s, _SERIES_KEYS)
         if (c["id"] is None) != (s["id"] is None) or not (s["id"] is None or isinstance(s["id"], str)):
             raise ValueError()
         if s["target"] not in c["targets"]:
@@ -679,19 +742,26 @@ def _forecasting_payload(p):
     return p
 
 
-def _legacy_payload(p):
+def _legacy_payload(p, mapped=False):
+    """Validate a univariate_forecasting payload exactly (0.11–0.13 bounds).
+
+    mapped: the legacy-shaped view of a validated /v1/forecasts result, whose context,
+    horizon and levels follow the published envelopes; frequency_seconds is None for a
+    calendar frequency.
+    """
     if set(p) != {"task", "model_id", "model_version", "configuration", "context_length",
                   "horizon", "frequency_seconds", "timestamps", "predictions", "point_semantics",
                   "quantile_levels", "quantiles", "calibrated_intervals"}:
         raise ValueError()
     if any(safe_id(p[k]) is None for k in ("model_id", "model_version", "configuration")):
         raise ValueError()
-    n = _integer(p["context_length"], 16, 512, "Context length")
-    h = _integer(p["horizon"], 1, 64, "Horizon")
-    freq = _integer(p["frequency_seconds"], 1, 31_536_000, "Frequency")
+    n = _integer(p["context_length"], *((1, None) if mapped else (16, 512)), "Context length")
+    h = _integer(p["horizon"], *((1, None) if mapped else (1, 64)), "Horizon")
+    freq = (None if mapped and p["frequency_seconds"] is None
+            else _integer(p["frequency_seconds"], 1, None if mapped else 31_536_000, "Frequency"))
     if p["point_semantics"] != "median" or p["calibrated_intervals"] is not False:
         raise ValueError()
-    levels = _levels(p["quantile_levels"])
+    levels = _levels(p["quantile_levels"], p["quantile_levels"] if mapped else None)
     points = _numbers(p["predictions"])
     if any(not isinstance(t, str) for t in p["timestamps"]):
         raise ValueError()
@@ -699,7 +769,7 @@ def _legacy_payload(p):
     if len(points) != h or len(times) != h or len(p["quantiles"]) != h:
         raise ValueError()
     rows = _quantile_rows(p["quantiles"], levels, points, h)
-    if any((b - a) != timedelta(seconds=freq) for a, b in zip(times, times[1:])):
+    if freq is not None and any((b - a) != timedelta(seconds=freq) for a, b in zip(times, times[1:])):
         raise ValueError()
     # Store primitive owned values, never caller-owned arrays or dictionaries.
     p.update(context_length=n, horizon=h, frequency_seconds=freq,
@@ -750,28 +820,45 @@ class ForecastSeries:
 class ForecastResult:
     """An immutable native result; conversions return independent ordinary copies.
 
-    task is "forecasting" for POST /v1/forecasts results (one series entry per series ID
-    and target; to_frame() is long format) or "univariate_forecasting" for legacy
-    model-run results (to_frame() keeps the 0.11–0.13 UTC-indexed layout).
+    task is "forecasting" for long-format fits and POST /v1/forecasts reconnects (one series
+    entry per series ID and target; to_frame() is long format). It is
+    "univariate_forecasting" for legacy model-run results and for univariate fits
+    (an array, a Series, or one string target without id or covariates) on either route:
+    to_frame() keeps the 0.11–0.13 UTC-indexed layout and to_dict() the 0.13 schema. On the
+    forecasting route that view reports frequency_seconds=None for calendar frequencies and
+    keeps the server's rearranged_steps on the property. Unknown additional fields in a
+    forecasting result are ignored; every documented field is required.
     """
     _payload: object = field(repr=False)
     job_id: str
 
-    def __init__(self, payload, *, job_id):
+    def __init__(self, payload, *, job_id, _mapped=False, _rearranged=0):
         try:
             p = deepcopy(payload)
             if not isinstance(p, dict) or safe_id(job_id) is None:
                 raise ValueError()
-            if p.get("task") == "forecasting":
+            if p.get("task") == "forecasting" and not _mapped:
                 p = _forecasting_payload(p)
             elif p.get("task") == "univariate_forecasting":
-                p = _legacy_payload(p)
+                p = _legacy_payload(p, mapped=_mapped)
             else:
                 raise ValueError()
         except (KeyError, TypeError, ValueError, OverflowError, AttributeError):
             raise _invalid() from None
         object.__setattr__(self, "_payload", _freeze(p))
         object.__setattr__(self, "job_id", job_id)
+        object.__setattr__(self, "_rearranged", _rearranged)
+
+    def _univariate(self):
+        """The legacy-shaped view of a single-series, single-target forecasting result."""
+        s, canon = self._single(), _frequency(self.frequency)
+        payload = dict(task="univariate_forecasting", model_id=self.model_id, model_version=self.model_version,
+                       configuration=self.configuration, context_length=s.context_length, horizon=self.horizon,
+                       frequency_seconds=canon[1] if canon[0] == "s" else None,
+                       timestamps=list(s._timestamps), predictions=list(s._predictions),
+                       point_semantics="median", quantile_levels=list(self.quantile_levels),
+                       quantiles=[list(r) for r in s._quantiles], calibrated_intervals=False)
+        return ForecastResult(payload, job_id=self.job_id, _mapped=True, _rearranged=self.rearranged_steps)
 
     def to_dict(self):
         """Return an independent JSON-compatible native payload; job_id is a separate attribute."""
@@ -825,9 +912,9 @@ class ForecastResult:
 
     @property
     def rearranged_steps(self):
-        """Steps whose crossing native quantiles the server sorted; 0 for legacy results, which
-        reject crossings instead."""
-        return self._payload.get("rearranged_steps", 0)
+        """Steps whose crossing native quantiles the server sorted. Model-run results reject
+        crossings instead (0); a univariate view of a forecasting result keeps the server count."""
+        return self._payload.get("rearranged_steps", self._rearranged)
 
     @property
     def frequency(self):
@@ -883,16 +970,15 @@ _KINDS = {"univariate_forecasting": "model_run", "forecasting": "forecast"}
 
 
 class ForecastJob:
-    """Typed durable run; estimator submissions own clients, reconnections borrow them."""
-    def __init__(self, job, *, expected=None, owns_client=False, datasets=None):
+    """Typed durable run; estimator submissions own new clients (or borrow Forecast(client=...)),
+    reconnections borrow theirs."""
+    def __init__(self, job, *, expected=None, owns_client=False):
         value = secret(job.client.api_key)
         if safe_id(job.id) is None or (value and value in job.id):
             raise WeltError("Invalid forecast job identity.", code="invalid_response")
         self._job, self._expected = job, deepcopy(expected)
         self._owns_client = owns_client
         self.id, self.client = job.id, job.client
-        # Workspace datasets this submission uploaded ({"history": id, "future": id}); empty when inline.
-        self.datasets = dict(datasets or {})
 
     def __repr__(self):
         return f"ForecastJob(id={self.id!r})"
@@ -951,6 +1037,8 @@ class ForecastJob:
                 self._check_legacy(raw, job, result)
             elif self._expected:
                 self._check_forecasting(result)
+                if self._expected.get("univariate"):
+                    return result._univariate()
         except (KeyError, TypeError, ValueError):
             raise _invalid(self.id, "Forecast result differs from its submitted request.") from None
         return result
@@ -972,11 +1060,16 @@ class ForecastJob:
         want = e["columns"]
         if (result.horizon != e["horizon"] or list(result.quantile_levels) != e["quantile_levels"]
                 or result.cross_learning != e["cross_learning"]
-                or _frequency(result.frequency) != tuple(e["canon"])
+                or (e["canon"] is not None and _frequency(result.frequency) != tuple(e["canon"]))
                 or any(got[k] != want[k] for k in ("time", "id", "targets", "past_covariates", "future_covariates"))
                 or sorted(got["categorical_covariates"]) != sorted(want["categorical_covariates"])):
             raise ValueError()
         series = result.series
+        if e["series"] is None:
+            # A dataset history: rows are validated by the server; only the target blocks are known.
+            if len(series) % len(want["targets"]):
+                raise ValueError()
+            return
         if len(series) != len(e["series"]):
             raise ValueError()
         for s, (sid, target, length, times) in zip(series, e["series"]):
@@ -1037,7 +1130,9 @@ class Forecast(BaseEstimator):
 
     client is an existing welt.Client to borrow instead of opening one per call (mutually
     exclusive with base_url, api_key and workspace). It is never closed by the estimator
-    or its jobs, and clones share it.
+    or its jobs, and clones share it. Pickling drops it (credentials are never pickled
+    either): set estimator.client again after unpickling a fitted estimator; the next
+    call checks that it reaches the same origin, credential and workspace.
     """
     def __init__(self, model="chronos-2", configuration="default", base_url=None,
                  api_key=None, workspace=None, timeout=600, client=None):
@@ -1064,6 +1159,19 @@ class Forecast(BaseEstimator):
         """An unfitted copy with the same parameters; an injected client is shared, not copied."""
         return type(self)(**self.get_params(deep=False))
 
+    def __getstate__(self):
+        state = dict(super().__getstate__())
+        if state.get("client") is not None:
+            state["client"] = None
+            if "_plan_" in state:
+                state["_reinject_"] = True
+        return {k: ("__welt_frozen__", _thaw(v)) if isinstance(v, MappingProxyType) else v
+                for k, v in state.items()}
+
+    def __setstate__(self, state):
+        super().__setstate__({k: _freeze(v[1]) if isinstance(v, tuple) and len(v) == 2
+                              and v[0] == "__welt_frozen__" else v for k, v in state.items()})
+
     def _clear_fitted(self):
         for name in list(vars(self)):
             if name.endswith("_") and not name.startswith("__"):
@@ -1078,7 +1186,7 @@ class Forecast(BaseEstimator):
 
     def _signature(self):
         return (self.model, self.configuration, self.base_url, self.workspace, self.timeout,
-                self._digest(self.api_key), None if self.client is None else id(self.client))
+                self._digest(self.api_key), self.client is not None)
 
     @staticmethod
     def _digest(key):
@@ -1088,11 +1196,20 @@ class Forecast(BaseEstimator):
             categorical=(), frequency=None, start=None, frequency_seconds=None):
         """Copy and validate history, then resolve the route, versions and limits. Uploads nothing.
 
-        history is a long-format DataFrame (one row per series ID and time), a Series with a
-        DatetimeIndex, or an array with start and frequency_seconds. target is a column name
-        or a list; id names the series column (absent: one series). frequency is a
-        {unit, every} dictionary or an alias (FREQUENCY_ALIASES); without it the spacing is
-        checked locally and the server infers it.
+        history is one of:
+
+        - a long-format DataFrame, one row per series ID and time, in any order;
+        - an existing workspace dataset ID (or a dataset dictionary with "id"), for example
+          from Client.upload_file; its rows are validated by the server only;
+        - a Series with a DatetimeIndex, or an array with start and frequency_seconds.
+
+        target is a column name or a list (forecast jointly). id names the series column
+        (absent: one series). past_covariates are observed in the history only;
+        future_covariates are also supplied for the horizon through forecast(future=...).
+        categorical names covariates holding string or integer categories (missing cells
+        are allowed in past covariates only). frequency is a {unit, every} dictionary or an
+        alias (FREQUENCY_ALIASES); without it the spacing is checked locally and the server
+        infers it. Numeric targets and past covariates may have missing cells (sent as null).
 
         Timestamps: in long format (an id, a target list or any covariate) timezone-naive
         times, including pd.date_range and read_csv output, are read as UTC and offsets are
@@ -1100,6 +1217,11 @@ class Forecast(BaseEstimator):
         univariate form (an array, a Series, or one string target without id or
         covariates) keeps the 0.13 rule and refuses naive times; pass target=[...] to use
         long format.
+
+        Limits come from the model's published forecast_envelopes and min_context and are
+        checked after reading metadata (InvalidInputError, a ValueError, code
+        workload_limit). The univariate form also keeps its 0.13 minimum of 16
+        observations before any request.
         """
         self._clear_fitted()
         plan = _history(history, time, target, id, past_covariates, future_covariates, categorical,
@@ -1116,18 +1238,19 @@ class Forecast(BaseEstimator):
             if (not isinstance(workspace, dict) or safe_id(workspace.get("id")) is None
                     or (value and value in workspace["id"])):
                 raise WeltError("Invalid workspace metadata.", code="invalid_response")
-            lengths = [s["length"] for s in plan["series"]]
+            lengths = None if plan["series"] is None else [s["length"] for s in plan["series"]]
             variates = len(plan["targets"]) + len(plan["past"]) + len(plan["future"])
             if route["task"] == "forecasting":
-                if min(lengths) < route["min_context"]:
+                if lengths is not None and min(lengths) < route["min_context"]:
                     raise InvalidInputError(f"Each series needs at least {route['min_context']} observations "
                                             f"(min_context of {self.model}).", code="workload_limit")
-                _admit(route["envelopes"], self.model, max(lengths), variates, len(lengths), 1)
+                _admit(route["envelopes"], self.model, max(lengths or [1]), variates, len(lengths or [1]), 1)
             else:
                 if plan["legacy"] is None:
-                    raise WeltError("This server forecasts only one regular series with fixed spacing up to one "
-                                    "year (univariate_forecasting); panels, covariates and calendar frequencies "
-                                    "need a server with the forecasting task.", code="unsupported_capability")
+                    raise InvalidInputError(
+                        "This server forecasts only one regular series with fixed spacing up to one year "
+                        "(univariate_forecasting); panels, covariates, dataset histories and calendar frequencies "
+                        "need a server with the forecasting task.", code="unsupported_capability")
                 if not route["min_context"] <= lengths[0] <= route["max_context"]:
                     raise InvalidInputError(f"Forecast context must have {route['min_context']} to "
                                             f"{route['max_context']} observations.", code="workload_limit")
@@ -1143,13 +1266,15 @@ class Forecast(BaseEstimator):
             self._context_ = _freeze(plan["legacy"])
         self.task_ = route["task"]
         self.model_version_, self.configuration_version_ = route["model_version"], route["configuration"]
-        self.context_length_ = max(lengths)
-        self.n_series_ = len(lengths)
-        self.series_ids_ = tuple(s["id"] for s in plan["series"])
+        # A dataset history is known only by reference: its sizes and times stay None.
+        canon = plan["canon"]
+        self.context_length_ = None if lengths is None else max(lengths)
+        self.n_series_ = None if lengths is None else len(lengths)
+        self.series_ids_ = None if lengths is None else tuple(s["id"] for s in plan["series"])
         self.targets_ = tuple(plan["targets"])
-        self.frequency_ = _wire_frequency(plan["canon"])
-        self.frequency_seconds_ = plan["canon"][1] if plan["canon"][0] == "s" else None
-        self.cutoff_ = max(s["last"] for s in plan["series"])
+        self.frequency_ = None if canon is None else _wire_frequency(canon)
+        self.frequency_seconds_ = canon[1] if canon is not None and canon[0] == "s" else None
+        self.cutoff_ = None if lengths is None else max(s["last"] for s in plan["series"])
         self._max_horizon_ = (route["max_horizon"] if route["task"] != "forecasting" else
                               max(c["max_horizon"] for c in route["envelopes"]))
         self._parameters_ = self._signature()
@@ -1159,6 +1284,9 @@ class Forecast(BaseEstimator):
 
     def _ready(self):
         check_is_fitted(self, "_plan_")
+        if getattr(self, "_reinject_", False) and self.client is None:
+            raise ValueError("This unpickled Forecast was fitted with client=; set estimator.client to a welt.Client "
+                             "for the same origin, credential and workspace.")
         if self._signature() != self._parameters_:
             self._clear_fitted()
             raise ValueError("Forecast parameters changed; explicitly fit the context again.")
@@ -1203,56 +1331,48 @@ class Forecast(BaseEstimator):
         if idempotency_key is not None and safe_id(idempotency_key) is None:
             raise ValueError("idempotency_key must be a bounded opaque identifier.")
         variates = len(plan["targets"]) + len(plan["past"]) + len(plan["future"])
-        _admit(route["envelopes"], self.model, self.context_length_, variates, self.n_series_, horizon)
-        future_table = _future_table(plan, future, horizon)
-        canon = tuple(plan["canon"])
-        expected_series = []
-        for s in plan["series"]:
-            times = [_step(s["last"], canon, s["anchor"], k) for k in range(1, horizon + 1)]
-            expected_series += [(s["id"], t, s["length"], times) for t in plan["targets"]]
-        tables = dict(history=dict(columns=plan["columns"], rows=plan["rows"]))
-        if future_table is not None:
-            tables["future"] = future_table
-        body = dict(model_id=self.model, configuration=self.configuration, time_column=plan["time"],
-                    targets=plan["targets"], past_covariates=plan["past"], future_covariates=plan["future"],
-                    categorical_covariates=plan["categorical"], horizon=horizon, quantile_levels=levels,
-                    cross_learning=cross_learning)
+        _admit(route["envelopes"], self.model, self.context_length_ or 1, variates, self.n_series_ or 1, horizon)
+        future_source = _future_source(plan, future, horizon)
+        canon = None if plan["canon"] is None else tuple(plan["canon"])
+        expected_series = None
+        if plan["series"] is not None:
+            expected_series = []
+            for s in plan["series"]:
+                times = [_step(s["last"], canon, s["anchor"], k) for k in range(1, horizon + 1)]
+                expected_series += [(s["id"], t, s["length"], times) for t in plan["targets"]]
+        history = (dict(dataset_id=plan["dataset"]) if plan["form"] == "dataset"
+                   else dict(table=dict(columns=plan["columns"], rows=plan["rows"])))
+        body = dict(model_id=self.model, configuration=self.configuration, history=history,
+                    time_column=plan["time"], targets=plan["targets"], past_covariates=plan["past"],
+                    future_covariates=plan["future"], categorical_covariates=plan["categorical"],
+                    horizon=horizon, quantile_levels=levels, cross_learning=cross_learning)
+        if future_source is not None:
+            body["future"] = future_source
         if plan["id"] is not None:
             body["id_column"] = plan["id"]
         if plan["frequency"] is not None:
             body["frequency"] = plan["frequency"]
+        size = _encoded(body)
+        if size > MAX_REQUEST_BYTES:
+            raise InvalidInputError(
+                f"The forecast request is {size:,} bytes of JSON, above the Welt API body limit of "
+                f"{MAX_REQUEST_BYTES:,} bytes. Upload the history (and future) as workspace datasets, for example "
+                "with Client.upload_file, and pass their IDs to fit(...) and forecast(future=...).",
+                code="workload_limit")
         expected = dict(kind="forecasting", model_id=self.model, model_version=self.model_version_,
-                        configuration=self.configuration_version_, request=dict(
+                        configuration=self.configuration_version_, univariate=plan["form"] == "univariate",
+                        request=dict(
                             horizon=horizon, quantile_levels=levels, cross_learning=cross_learning, canon=canon,
                             columns=dict(time=plan["time"], id=plan["id"], targets=plan["targets"],
                                          past_covariates=plan["past"], future_covariates=plan["future"],
                                          categorical_covariates=plan["categorical"]),
                             series=expected_series))
         client, owned = self._connected()
-        datasets = {}
         try:
-            for name, table in tables.items():
-                if _encoded(table) <= INLINE_TABLE_BYTES:
-                    body[name] = dict(table=table)
-                    continue
-                dataset = client.upload(columns=table["columns"], rows=table["rows"], name=f"Forecast {name}")
-                if not isinstance(dataset, dict) or safe_id(dataset.get("id")) is None:
-                    raise WeltError("Invalid dataset response.", code="invalid_response")
-                datasets[name] = dataset["id"]
-                body[name] = dict(dataset_id=dataset["id"])
-            try:
-                job = client.submit_forecast(body, idempotency_key=idempotency_key,
-                                             expected_model_version=self.model_version_,
-                                             expected_configuration_version=self.configuration_version_)
-            except TransportError:
-                if not datasets:
-                    raise
-                raise TransportError(
-                    "Could not reach Welt API while submitting the forecast; it may have been accepted. Uploaded "
-                    f"datasets {datasets} remain. With an idempotency_key, replay Client.submit_forecast with the "
-                    "same body referencing these dataset IDs and the same key instead of submitting again.",
-                    code="transport_error", retryable=True) from None
-            return ForecastJob(job, owns_client=owned, expected=expected, datasets=datasets)
+            job = client.submit_forecast(body, idempotency_key=idempotency_key,
+                                         expected_model_version=self.model_version_,
+                                         expected_configuration_version=self.configuration_version_)
+            return ForecastJob(job, owns_client=owned, expected=expected)
         except Exception:
             if owned:
                 client.close()
@@ -1262,26 +1382,41 @@ class Forecast(BaseEstimator):
                         cross_learning=False, idempotency_key=None):
         """Submit one guarded POST /v1/forecasts request without waiting; retain job.id.
 
-        future is the known-future DataFrame (time, id and future covariate columns, exactly
-        horizon rows per series), required exactly when the fit named future_covariates.
-        Tables above INLINE_TABLE_BYTES are uploaded as workspace datasets first (job.datasets).
+        future is required exactly when the fit named future_covariates: a DataFrame with
+        exactly the time, id and future covariate columns and exactly horizon rows per series
+        at the steps after its last observation, or a workspace dataset ID. quantile_levels is
+        an increasing subset of the levels the model publishes (by default the 21 native
+        levels 0.01, 0.05, 0.10, …, 0.95, 0.99); the request default is (0.1, 0.5, 0.9).
+        cross_learning=True lets series share information. DataFrame tables travel inline;
+        a request body above MAX_REQUEST_BYTES is refused before any request. The job owns
+        its new client, or borrows Forecast(client=...).
         """
         self._ready()
         if self.task_ != "forecasting":
-            raise WeltError("forecast() needs a server with the forecasting task (POST /v1/forecasts); "
-                            "this server offers only univariate predict().", code="unsupported_capability")
+            raise InvalidInputError("forecast() needs a server with the forecasting task (POST /v1/forecasts); "
+                                    "this server offers only univariate predict().", code="unsupported_capability")
         return self._submit(horizon, future, quantile_levels, cross_learning, idempotency_key)
 
     def forecast(self, horizon, *, future=None, quantile_levels=(0.1, 0.5, 0.9), cross_learning=False,
                  idempotency_key=None):
-        """Submit one forecast, wait within timeout and return an owned ForecastResult."""
+        """Submit one forecast, wait within timeout and return an owned ForecastResult.
+
+        Long-format and dataset fits get the long result (series, to_frame() with id, target,
+        timestamp, median, q_<level>); univariate fits get the 0.13-shaped result.
+        """
         with self.submit_forecast(horizon, future=future, quantile_levels=quantile_levels,
                                   cross_learning=cross_learning, idempotency_key=idempotency_key) as job:
             return job.result(timeout=self.timeout)
 
     def submit_predict(self, horizon, *, future=None, quantile_levels=(0.1, 0.5, 0.9), idempotency_key=None):
-        """Submit one single-series, single-target run without waiting; retain job.id."""
+        """Submit one single-series, single-target run without waiting; retain job.id.
+
+        Univariate fits keep the 0.13 result shape on either route. The job owns its new
+        client, or borrows Forecast(client=...).
+        """
         self._ready()
+        if self.n_series_ is None:
+            raise ValueError("predict() needs a DataFrame, Series or array history; use forecast() for a dataset.")
         if self.n_series_ != 1 or len(self.targets_) != 1:
             raise ValueError("predict() returns one series and one target; this fit has "
                              f"{self.n_series_} series and {len(self.targets_)} target(s). Use forecast().")
