@@ -49,6 +49,9 @@ def _parser():
     run = command('run', 'Submit one hidden-model run (tabular, causal or forecasting)')
     run.add_argument('--input', required=True, help='Task request JSON file or - for stdin')
     run.add_argument('--idempotency-key')
+    fc = command('forecast', 'Submit one forecast request (POST /v1/forecasts): history/future dataset IDs or inline tables')
+    fc.add_argument('--input', required=True, help='Forecast request JSON file or - for stdin')
+    fc.add_argument('--idempotency-key')
     runs = group('model-runs', 'Testing model run lifecycle', dict(delete='Delete terminal input/result; retain metadata and usage'))
     runs['delete'].add_argument('id'); runs['delete'].add_argument('--yes', required=True, action='store_true')
     datasets = group('datasets', 'Private dataset lifecycle', dict(list='List datasets', get='Inspect dataset', upload='Upload table JSON (columns, rows, target, name)', delete='Delete one dataset without dependents'))
@@ -152,11 +155,12 @@ def _run(args, client):
         return {'items': client.models()} if action == 'list' else client.model(args.id)
     if command == 'model-runs':
         return client.delete_model_run(args.id)
-    if command == 'run':
+    if command in ('run', 'forecast'):
         key = args.idempotency_key or uuid4().hex
         args.idempotency_key = key
         print(json.dumps({'submission': {'idempotency_key': key}}), file=sys.stderr)
-        job = client.submit_model_run(_json_input(args.input), idempotency_key=key)
+        submit = client.submit_model_run if command == 'run' else client.submit_forecast
+        job = submit(_json_input(args.input), idempotency_key=key)
         return {'job_id': job.id, 'idempotency_key': key}
     if command == 'datasets':
         if action == 'list': return {'items': client.datasets()}
