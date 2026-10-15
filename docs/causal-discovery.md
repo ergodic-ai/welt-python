@@ -151,6 +151,11 @@ supported ergodic releases.
 
 </details>
 
+CDFM and AVICI results stay native here. ergodic can decode their edge scores into a
+DAG locally, but only when you pass an explicit `decoder=` to `ergodic.welt.discover`;
+the graph is then labelled decoded, not native. Check which versions work together in
+[Compatibility with ergodic](capabilities.md#compatibility-with-ergodic).
+
 !!! tip "Continue in ergodic"
     The [ergodic guide to Welt]({{ergodic-docs}}) takes a converted graph through
     identification and effect estimation, and runs Welt models from inside ergodic.
@@ -194,9 +199,9 @@ qualification results and does not delete hosted state.
 
 <div class="cards" markdown="1">
 
+- [Discover in Welt, estimate in ergodic]({{ergodic-docs}}): identify and estimate effects on a discovered graph.
 - [Notebook examples](notebooks.md): the causal notebook inspects the real data first.
 - [Models and limits](capabilities.md): every qualified causal model and its limits.
 - [Wait and recover](async-and-errors.md): reconnect to jobs and handle typed errors.
-- [ergodic with Welt]({{ergodic-docs}}): identify and estimate effects on a discovered graph.
 
 </div>

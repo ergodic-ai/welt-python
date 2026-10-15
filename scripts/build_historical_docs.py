@@ -47,7 +47,8 @@ def main():
         (out/'index.html').write_text(shell(home_body(start,sdk_version='0.7.1',browser_connect=False),
             'index','From a DataFrame to a prediction','0.7.1',home=True))
         current = Path(__file__).resolve().parents[1]
-        for name in ('docs.css','docs.js'):
+        # site.css carries the product switcher the current shell() links (API-145).
+        for name in ('docs.css','docs.js','site.css'):
             shutil.copy2(current/'docs/assets'/name,out/'assets'/name)
     manifest = args.output.resolve()/tag/'manifest.json'
     value = json.loads(manifest.read_text())
@@ -56,7 +57,7 @@ def main():
         value['homepage_presentation_override'] = dict(source_tag='v0.8.0',
             scope='API-072 title/numbered steps/visible train DataFrame; no0.8 API advertised',
             html_sha256=hashlib.sha256((out/'index.html').read_bytes()).hexdigest(),
-            assets={name:hashlib.sha256((out/'assets'/name).read_bytes()).hexdigest() for name in ('docs.css','docs.js')})
+            assets={name:hashlib.sha256((out/'assets'/name).read_bytes()).hexdigest() for name in ('docs.css','docs.js','site.css')})
     manifest.write_text(json.dumps(value, indent=2)+'\n')
 
 

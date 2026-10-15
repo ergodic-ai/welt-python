@@ -20,6 +20,12 @@
   The version picker keeps the 0.12.0 documentation, rebuilt from its exact release
   commit with its published wheel. Model semantics, metrics and runtime dependencies
   are unchanged.
+- Documentation cross-links with ergodic (API-145): a Products switcher in the top bar
+  (Welt, Welt console, ergodic; styles in `docs/assets/site.css`, `docs.css`
+  unchanged), the causal discovery guide's first Next-steps card goes to "Discover in
+  Welt, estimate in ergodic", the Models page gains a "Compatibility with ergodic"
+  section with the same version and conversion tables as the ergodic docs, and the
+  SDK `llms.txt` links ergodic's.
 
 # 0.12.0 (2026-10-14) — Cross-validated evaluations
 

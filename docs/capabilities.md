@@ -88,6 +88,33 @@ chunk methods let you schedule disk I/O independently.
 
 See the [agent CLI reference](cli.md).
 
+## Compatibility with ergodic
+
+[ergodic](https://ergodic.dev) identifies and estimates effects on a Welt graph,
+locally. This is the same table as the
+[ergodic compatibility page](https://ergodic.dev/compatibility.html). The link between
+the packages is a versioned graph format, not a package version.
+
+| ergodic | welt-client | Graph format | Python for the Welt link |
+| --- | --- | --- | --- |
+| 0.2.x | 0.13 or later | `ergodic.graph/1` | 3.11, 3.12, 3.13 |
+| 0.1.x | none | none | none |
+
+- `pip install "welt-client[ergodic]"` adds `ergodic>=0.2,<0.3`.
+- `pip install "ergodic[welt]"` adds `welt-client>=0.13` on Python 3.11 to 3.13.
+
+Only a graph that Welt declares a native DAG converts:
+
+| Welt model | Native graph | In ergodic 0.2.0 |
+| --- | --- | --- |
+| `arrow` | DAG | Converts. `ergodic.welt.discover` returns it as a `DiscoveryResult`. |
+| `cdfm` | Directed, may hold cycles | Refused before paying by default. With an explicit `decoder=`, its scores are decoded locally into a DAG labelled decoded. |
+| `avici` | Directed, may hold cycles | Refused before paying by default. With an explicit `decoder=`, its scores are decoded locally into a DAG labelled decoded. |
+
+`to_ergodic()` in this SDK never decodes: it refuses `cdfm` and `avici` results. A
+decoded graph is the decoder's choice, not the model's claim. See
+[Discover in Welt, estimate in ergodic]({{ergodic-docs}}).
+
 ## Next steps
 
 <div class="cards" markdown="1">
