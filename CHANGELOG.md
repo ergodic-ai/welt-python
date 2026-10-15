@@ -75,6 +75,10 @@ advertises the `forecasting` task. Against older servers, univariate forecasting
   - A body above `welt.forecast.MAX_REQUEST_BYTES` (10 MiB of compact JSON, the Welt API's
     default HTTP body limit) is refused locally with `InvalidInputError` (`workload_limit`)
     before any request. Upload such a table as a dataset and pass its ID.
+  - The constant follows the server's default limit. The server does not publish its
+    limit, so a deployment that overrides `WELT_HTTP_BODY_BYTES` is not reflected: a lower
+    override answers HTTP 413 (`payload_limit`), and a higher one is still refused locally
+    above 10 MiB.
   - The SDK never uploads datasets on its own, so replaying a call with the same
     `idempotency_key` sends the same body and reconnects to the original job.
   - Requests carry `Idempotency-Key` and the paired `X-Welt-Model-Version` /
