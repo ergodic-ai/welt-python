@@ -431,6 +431,7 @@ def _shift_times(r):
     lambda r: r.update(quantile_levels=[.1, .5, .95]),
     lambda r: r.update(cross_learning=True),
     lambda r: r.update(frequency={'unit': 'hour', 'every': 24 * 7}),
+    lambda r: r.update(frequency='D'),
     lambda r: r.update(rearranged_steps=-1),
     lambda r: r.update(rearranged_steps=9),
     lambda r: r.update(rearranged_steps=True),
@@ -666,3 +667,58 @@ def test_sync_submit_forecast_without_guards_and_cli(tmp_path, capsys):
         assert 'cli-key' in capsys.readouterr().err
     body, headers = svc.posts[0]
     assert body == request and 'x-welt-model-version' not in headers
+
+
+def test_injected_client_is_borrowed_shared_by_clones_and_never_closed():
+    from sklearn.base import clone
+    svc = Service()
+    with Client(base_url='https://fixture.example', api_key='injected-key',
+                transport=httpx.MockTransport(svc.handle)) as client:
+        model = Forecast(client=client).fit(panel(), time='date', id='store', target=['sales', 'visits'],
+                                            past_covariates=['temperature'], future_covariates=['promo', 'holiday'],
+                                            categorical=['holiday'])
+        result = model.forecast(2, future=future(panel(), 2), idempotency_key='injected-one')
+        assert len(result.series) == 4 and not client.http.is_closed
+        with model.submit_forecast(2, future=future(panel(), 2)) as job:
+            assert job.client is client
+        assert not client.http.is_closed
+        twin = clone(model)
+        assert twin.client is client and not hasattr(twin, 'task_')
+        single = Forecast(client=client).fit(panel().query("store == 'a'"), time='date', target='sales')
+        assert single.predict(2).shape == (2,) and not client.http.is_closed
+        assert 'injected-key' not in repr(model)
+        assert svc.posts[0][1]['authorization'] == 'Bearer injected-key'
+    assert client.http.is_closed
+
+
+@pytest.mark.parametrize('kwargs', [dict(api_key='other'), dict(base_url='https://other.example'),
+                                    dict(workspace='ws_other')])
+def test_injected_client_excludes_connection_parameters(kwargs):
+    requests = []
+    with Client(api_key='fixture', transport=httpx.MockTransport(lambda r: requests.append(r))) as client:
+        with pytest.raises(ValueError, match='not both'):
+            Forecast(client=client, **kwargs).fit(panel(), time='date', id='store', target='sales')
+    assert not requests
+
+
+def test_injected_client_must_be_an_open_sync_client():
+    async_client = AsyncClient(api_key='fixture', transport=httpx.MockTransport(lambda r: None))
+    with pytest.raises(ValueError, match='synchronous'):
+        Forecast(client=async_client).fit(panel(), time='date', id='store', target='sales')
+    closed = Client(api_key='fixture', transport=httpx.MockTransport(lambda r: None))
+    closed.close()
+    with pytest.raises(ValueError, match='closed'):
+        Forecast(client=closed).fit(panel(), time='date', id='store', target='sales')
+
+
+def test_replacing_the_injected_client_requires_a_new_fit(service):
+    svc = Service()
+    with Client(api_key='fixture', base_url='https://fixture.example',
+                transport=httpx.MockTransport(svc.handle)) as first, \
+         Client(api_key='fixture', base_url='https://fixture.example',
+                transport=httpx.MockTransport(svc.handle)) as second:
+        model = Forecast(client=first).fit(panel(), time='date', id='store', target='sales')
+        model.client = second
+        with pytest.raises(ValueError, match='parameters changed'):
+            model.forecast(2)
+    assert not svc.posts

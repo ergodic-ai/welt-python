@@ -217,7 +217,7 @@ def _times(column):
     if isinstance(column.dtype, pd.DatetimeTZDtype):
         if column.isna().any() or (column.dt.nanosecond != 0).any():
             raise ValueError("Forecast timestamps need explicit timezone and microsecond precision.")
-        return list(column.dt.tz_convert("UTC").dt.to_pydatetime())
+        return list(pd.DatetimeIndex(column.dt.tz_convert("UTC")).to_pydatetime())
     return [_utc(v) for v in column.tolist()]
 
 
@@ -613,6 +613,8 @@ def _forecasting_payload(p):
     if any(safe_id(p[k]) is None for k in ("model_id", "model_version", "configuration")):
         raise ValueError()
     h = _integer(p["horizon"], 1, None, "Horizon")
+    if not isinstance(p["frequency"], dict):
+        raise ValueError()
     canon = _frequency(p["frequency"])
     if (p["point_semantics"] != "median" or p["calibrated_intervals"] is not False
             or type(p["cross_learning"]) is not bool):
@@ -1023,14 +1025,35 @@ class Forecast(BaseEstimator):
     Servers advertising the forecasting task receive POST /v1/forecasts requests (panels,
     multiple targets, covariates; limits from published envelopes). Older servers keep the
     guarded univariate model-run route for one regular series.
+
+    client is an existing welt.Client to borrow instead of opening one per call (mutually
+    exclusive with base_url, api_key and workspace). It is never closed by the estimator
+    or its jobs, and clones share it.
     """
     def __init__(self, model="chronos-2", configuration="default", base_url=None,
-                 api_key=None, workspace=None, timeout=600):
+                 api_key=None, workspace=None, timeout=600, client=None):
         self.model, self.configuration, self.base_url = model, configuration, base_url
         self.api_key, self.workspace, self.timeout = credential(api_key), workspace, timeout
+        self.client = client
 
     def _client(self):
         return Client(base_url=self.base_url, api_key=self.api_key, workspace=self.workspace)
+
+    def _session(self):
+        """(client, owned): a new owned Client, or the injected one, borrowed."""
+        if self.client is None:
+            return self._client(), True
+        if not isinstance(self.client, Client):
+            raise ValueError("client must be a synchronous welt.Client.")
+        if self.base_url is not None or secret(self.api_key) is not None or self.workspace is not None:
+            raise ValueError("Pass either client= or base_url/api_key/workspace, not both.")
+        if self.client.http.is_closed:
+            raise ValueError("The injected client is closed.")
+        return self.client, False
+
+    def __sklearn_clone__(self):
+        """An unfitted copy with the same parameters; an injected client is shared, not copied."""
+        return type(self)(**self.get_params(deep=False))
 
     def _clear_fitted(self):
         for name in list(vars(self)):
@@ -1046,7 +1069,7 @@ class Forecast(BaseEstimator):
 
     def _signature(self):
         return (self.model, self.configuration, self.base_url, self.workspace, self.timeout,
-                self._digest(self.api_key))
+                self._digest(self.api_key), None if self.client is None else id(self.client))
 
     @staticmethod
     def _digest(key):
@@ -1069,7 +1092,8 @@ class Forecast(BaseEstimator):
             raise ValueError("Forecasting supports configuration='default' only.")
         if type(self.timeout) not in (int, float) or not math.isfinite(self.timeout) or self.timeout <= 0:
             raise ValueError("timeout must be a positive finite number.")
-        with self._client() as client:
+        client, owned = self._session()
+        try:
             workspace = client.workspace()
             value = secret(client.api_key)
             route = _capabilities(_metadata(client, self.model), self.model, value)
@@ -1094,6 +1118,9 @@ class Forecast(BaseEstimator):
                 _future(plan["legacy"], route["max_horizon"])
             self._origin_, self._key_digest_ = str(client.http.base_url), self._digest(client.api_key)
             self.workspace_id_ = workspace["id"]
+        finally:
+            if owned:
+                client.close()
         self._route_ = _freeze(route)
         self._plan_ = _freeze({k: v for k, v in plan.items() if k != "legacy"})
         if route["task"] != "forecasting":
@@ -1121,32 +1148,34 @@ class Forecast(BaseEstimator):
             raise ValueError("Forecast parameters changed; explicitly fit the context again.")
 
     def _connected(self):
-        client = self._client()
+        client, owned = self._session()
         try:
             if str(client.http.base_url) != self._origin_ or self._digest(client.api_key) != self._key_digest_:
                 raise AuthenticationError("Forecast connection changed; explicitly fit again.", code="credential_mismatch")
             if client.workspace()["id"] != self.workspace_id_:
                 raise AuthenticationError("Forecast workspace changed; explicitly fit again.", code="workspace_mismatch")
         except Exception:
-            client.close()
+            if owned:
+                client.close()
             raise
-        return client
+        return client, owned
 
     def _submit_legacy(self, horizon, quantile_levels, idempotency_key):
         horizon = _integer(horizon, 1, self._max_horizon_, "Horizon")
         levels = _levels(quantile_levels)
         payload = dict(model_id=self.model, task="univariate_forecasting",
                        series=_thaw(self._context_), horizon=horizon, quantile_levels=levels)
-        client = self._connected()
+        client, owned = self._connected()
         try:
             job = client.submit_model_run(payload, idempotency_key=idempotency_key,
                          expected_model_version=self.model_version_,
                          expected_configuration_version=self.configuration_version_)
-            return ForecastJob(job, owns_client=True, expected=dict(
+            return ForecastJob(job, owns_client=owned, expected=dict(
                 kind="univariate_forecasting", model_id=self.model, payload=payload,
                 model_version=self.model_version_, configuration=self.configuration_version_))
         except Exception:
-            client.close()
+            if owned:
+                client.close()
             raise
 
     def _submit(self, horizon, future, quantile_levels, cross_learning, idempotency_key):
@@ -1183,7 +1212,7 @@ class Forecast(BaseEstimator):
                                          past_covariates=plan["past"], future_covariates=plan["future"],
                                          categorical_covariates=plan["categorical"]),
                             series=expected_series))
-        client = self._connected()
+        client, owned = self._connected()
         datasets = {}
         try:
             for name, table in tables.items():
@@ -1207,9 +1236,10 @@ class Forecast(BaseEstimator):
                     f"datasets {datasets} remain. With an idempotency_key, replay Client.submit_forecast with the "
                     "same body referencing these dataset IDs and the same key instead of submitting again.",
                     code="transport_error", retryable=True) from None
-            return ForecastJob(job, owns_client=True, expected=expected, datasets=datasets)
+            return ForecastJob(job, owns_client=owned, expected=expected, datasets=datasets)
         except Exception:
-            client.close()
+            if owned:
+                client.close()
             raise
 
     def submit_forecast(self, horizon, *, future=None, quantile_levels=(0.1, 0.5, 0.9),

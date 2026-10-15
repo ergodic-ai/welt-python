@@ -71,6 +71,11 @@ is unchanged.
   result dictionary and `forecast_job(id)` reconnects to either task with typed
   validation. `welt forecast --input request.json [--idempotency-key KEY]` mirrors
   `welt run`.
+- `Forecast(client=...)` borrows an existing synchronous `welt.Client` (for example one
+  with your own transport) instead of opening a client per call. It is mutually
+  exclusive with `base_url`, `api_key` and `workspace`, is never closed by the
+  estimator or its jobs, and is shared by `sklearn.clone` copies; replacing it requires
+  a new fit. Without it the estimator opens and closes its own clients as before.
 - Fitted attributes: `task_`, `n_series_`, `series_ids_`, `targets_`, `frequency_` join
   `context_length_` (the longest series), `frequency_seconds_` (None for calendar
   frequencies) and `cutoff_` (latest observation).
