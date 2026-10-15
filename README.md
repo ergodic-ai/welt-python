@@ -115,9 +115,9 @@ batch jobs, workspace selection and native causal objects. Estimator CSV/Parquet
 convenience reads load files into memory; `Client.upload_file` uses upload sessions
 and supports recovery with a retained upload ID. Available formats, models, tasks
 and limits depend on the connected server. Inspect its catalogue before executing.
-Each TabICLv2, Kumo Medium, TabDPT1.3 and Mitra-v2 classification and regression
-profile has measured shapes: TabICLv2 and Kumo Medium up to 8,000 training rows × 20
-features (or 4,000 × 40, 2,000 × 80), Mitra-v2 up to 4,000 × 20, TabDPT1.3 up to 500 × 20.
+Each TabICLv2, Kumo Tabular Medium, TabDPT 1.3 and Mitra-v2 classification and regression
+profile has measured shapes: TabICLv2 and Kumo Tabular Medium up to 8,000 training rows × 20
+features (or 4,000 × 40, 2,000 × 80), Mitra-v2 up to 4,000 × 20, TabDPT 1.3 up to 500 × 20.
 Direct predictions take up to 100 rows per call, and classification up to 10 classes.
 `Client().models()` reports the current limits. [Capabilities](https://ergodic-ai.github.io/welt-python/capabilities.html) explains scope.
 
