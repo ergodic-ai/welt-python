@@ -448,8 +448,9 @@ forecast.fit(history["value"].to_numpy(),
   and allow missing values, pass the target as a list, as in
   [step 1](#forecast-one-series).
 - Values must be complete, finite numbers, strictly increasing in time and evenly
-  spaced in whole seconds (1 second to 1 year). Arrays need `start` and
-  `frequency_seconds`.
+  spaced in whole seconds (1 second to 1 year). On a server with the `forecasting`
+  task, calendar frequencies (months, quarters, years) and longer spacing are also
+  accepted. Arrays need `start` and `frequency_seconds`.
 - `fit` copies the values and uploads nothing. Changing the table afterwards doesn't
   change the fitted context; changing a constructor parameter needs a new `fit`.
 
