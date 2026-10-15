@@ -12,7 +12,7 @@ model. You get median points and native quantiles for each future step.
 !!! note "Panels and covariates (welt-client 0.14)"
     On a server that advertises the `forecasting` task, `Forecast.fit` also accepts a
     long-format DataFrame with an `id` column, several targets and past, future and
-    categorical covariates, and `forecast(horizon, future=...)` forecasts every series
+    categorical covariates (naive timestamps there are read as UTC), and `forecast(horizon, future=...)` forecasts every series
     and target in one `POST /v1/forecasts` request. There, limits come from the
     model's published envelopes rather than the 16–512 and 1–64 bounds below,
     quantile levels are the published native levels, crossed native quantiles are

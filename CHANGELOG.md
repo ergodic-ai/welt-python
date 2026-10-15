@@ -8,8 +8,10 @@ is unchanged.
   ID; string or integer cells, rendered as strings in results), `target` as a column
   name or a list (targets are forecast jointly), `past_covariates`,
   `future_covariates` and `categorical` (a subset of the covariates; string or integer
-  cells). Rows may come in any order; duplicate (id, time) pairs, gaps, naive
-  timestamps, booleans, text in numeric columns, nonfinite or non-FP32 values,
+  cells). Rows may come in any order. Timezone-naive timestamps (for example from
+  `pd.date_range` without `tz` or `read_csv`) are read as UTC and offsets are converted
+  to UTC (DEC-085 §1), in the history and the future table. Duplicate (id, time) pairs,
+  gaps, booleans, text in numeric columns, nonfinite or non-FP32 values,
   incomplete future covariates or categories, and a target missing for a whole series
   are refused before any request. Missing target and numeric past-covariate cells are
   sent as null (native missing-value handling). The fit uploads nothing.
@@ -63,8 +65,8 @@ is unchanged.
   covariates and calendar frequencies are refused the same way at fit.
 - The univariate form (an array, a Series, or a DataFrame with one string target and no
   id or covariates) keeps the 0.13 validation: ordered, complete, finite FP32 history.
-  Pass the target as a list for long-format semantics, including missing values.
-  Timezone-aware timestamps are still required everywhere. The 16-observation minimum
+  Its timestamps must still be timezone-aware. Pass the target as a list for
+  long-format semantics, including missing values and naive times read as UTC. The 16-observation minimum
   is now the server's published `min_context`, read at fit.
 - `Client.submit_forecast` and `AsyncClient.submit_forecast` submit a raw
   `/v1/forecasts` body with optional paired version guards; `Job.result()` returns its

@@ -83,9 +83,12 @@ def _numbers(values, *, observations=False):
     return result
 
 
-def _utc(value, *, require_utc=False):
+def _utc(value, *, require_utc=False, naive_utc=False):
+    """One UTC datetime; naive values are refused unless naive_utc (long format: read as UTC)."""
     try:
         t = pd.Timestamp(value)
+        if naive_utc and not pd.isna(t) and t.tzinfo is None:
+            t = t.tz_localize("UTC")
         if pd.isna(t) or t.tzinfo is None or t.nanosecond:
             raise ValueError()
         if require_utc and t.utcoffset() != timedelta(0):
@@ -212,13 +215,19 @@ def _infer(times):
 
 # --- Table cells ----------------------------------------------------------------------
 
-def _times(column):
-    """UTC datetimes from an aware datetime column or aware timestamp cells; naive is rejected."""
+def _times(column, *, naive_utc=False):
+    """UTC datetimes from a datetime column or timestamp cells.
+
+    Naive values are rejected (the 0.13 univariate form) unless naive_utc, which reads them
+    as UTC (DEC-085 §1, long format). Aware values with an offset are converted to UTC.
+    """
+    if naive_utc and isinstance(column.dtype, np.dtype) and column.dtype.kind == "M":
+        column = column.dt.tz_localize("UTC")
     if isinstance(column.dtype, pd.DatetimeTZDtype):
         if column.isna().any() or (column.dt.nanosecond != 0).any():
             raise ValueError("Forecast timestamps need explicit timezone and microsecond precision.")
         return list(pd.DatetimeIndex(column.dt.tz_convert("UTC")).to_pydatetime())
-    return [_utc(v) for v in column.tolist()]
+    return [_utc(v, naive_utc=naive_utc) for v in column.tolist()]
 
 
 def _missing(v):
@@ -366,7 +375,7 @@ def _univariate(history, time, target, start, canon):
 
 
 def _long(history, time, target, id, past, future, categorical, canon):
-    """DEC-085 long format: one row per (id, time); rows may be in any order."""
+    """DEC-085 long format: one row per (id, time); rows may be in any order; naive times are UTC."""
     if not isinstance(history, pd.DataFrame):
         raise ValueError("Panels, multiple targets and covariates need a long-format pandas DataFrame.")
     if not isinstance(time, str) or not time.strip():
@@ -388,7 +397,7 @@ def _long(history, time, target, id, past, future, categorical, canon):
         raise ValueError("categorical must name past or future covariate columns.")
     if not len(history):
         raise ValueError("Forecast history must contain rows.")
-    times = _times(history[time])
+    times = _times(history[time], naive_utc=True)
     ids = _ids(history[id], id) if id is not None else [None] * len(times)
     rendered = {}
     for raw in ids:
@@ -473,7 +482,7 @@ def _future_table(plan, future, horizon):
         missing = sorted(set(names) - set(future.columns))
         raise ValueError(f"future must contain exactly the time, id and future covariate columns. "
                          f"Missing: {missing[:10]}. Extra: {extra[:10]}.")
-    times = _times(future[plan["time"]])
+    times = _times(future[plan["time"]], naive_utc=True)
     ids = _ids(future[plan["id"]], plan["id"]) if plan["id"] is not None else [None] * len(times)
     columns = {name: (_category(future[name], name) if name in plan["categorical"]
                       else _numeric(future[name], name, missing=False)) for name in plan["future"]}
@@ -1084,6 +1093,13 @@ class Forecast(BaseEstimator):
         or a list; id names the series column (absent: one series). frequency is a
         {unit, every} dictionary or an alias (FREQUENCY_ALIASES); without it the spacing is
         checked locally and the server infers it.
+
+        Timestamps: in long format (an id, a target list or any covariate) timezone-naive
+        times, including pd.date_range and read_csv output, are read as UTC and offsets are
+        converted to UTC (DEC-085 §1); the future table follows the same rule. The
+        univariate form (an array, a Series, or one string target without id or
+        covariates) keeps the 0.13 rule and refuses naive times; pass target=[...] to use
+        long format.
         """
         self._clear_fitted()
         plan = _history(history, time, target, id, past_covariates, future_covariates, categorical,

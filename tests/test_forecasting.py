@@ -492,7 +492,6 @@ def _set(frame, column, index, value):
 @pytest.mark.parametrize('change,kwargs', [
     (lambda f: pd.concat([f, f.iloc[[0]]], ignore_index=True), {}),                 # duplicate (id, time)
     (lambda f: f.drop(index=5), {}),                                                # gap
-    (lambda f: f.assign(date=f['date'].dt.tz_localize(None)), {}),                  # naive timestamps
     (lambda f: _set(f, 'temperature', 0, True), {}),                                # boolean covariate
     (lambda f: _set(f, 'sales', 0, 'text'), {}),
     (lambda f: _set(f, 'sales', 0, float('inf')), {}),
@@ -529,7 +528,6 @@ def test_invalid_long_history_never_reaches_transport(service, change, kwargs):
     lambda f: f.assign(sales=1.0),                                          # target in future
     lambda f: f.drop(columns=['holiday']),
     lambda f: f.assign(promo=np.where(f.index == 0, np.nan, f['promo'])),   # incomplete
-    lambda f: f.assign(date=f['date'].dt.tz_localize(None)),
     lambda f: None,
 ])
 def test_invalid_future_never_submits(service, change):
@@ -722,3 +720,49 @@ def test_replacing_the_injected_client_requires_a_new_fit(service):
         with pytest.raises(ValueError, match='parameters changed'):
             model.forecast(2)
     assert not svc.posts
+
+
+def _naive(frame):
+    return frame.assign(date=frame['date'].dt.tz_localize(None))
+
+
+def test_long_format_reads_naive_timestamps_as_utc(service, tmp_path):
+    aware = fitted_panel()
+    aware.forecast(2, future=future(panel(), 2))
+    model = Forecast().fit(_naive(panel()), time='date', id='store', target=['sales', 'visits'],
+                           past_covariates=['temperature'], future_covariates=['promo', 'holiday'],
+                           categorical=['holiday'])
+    assert model.cutoff_ == aware.cutoff_ and str(model.cutoff_.tzinfo) == 'UTC'
+    result = model.forecast(2, future=_naive(future(panel(), 2)))
+    assert service.posts[1][0] == service.posts[0][0]        # same request bytes as the aware frame
+    assert result.to_frame()['timestamp'].iloc[0] == pd.Timestamp('2026-01-21T00:00Z')
+    # read_csv leaves strings without offsets; date_range without tz gives naive datetime64.
+    path = tmp_path / 'history.csv'
+    _naive(panel()).to_csv(path, index=False)
+    csv = Forecast().fit(pd.read_csv(path), time='date', id='store', target='sales')
+    plain = pd.DataFrame({'date': pd.date_range('2026-01-01', periods=20, freq='D'), 'sales': np.arange(20.)})
+    single = Forecast().fit(plain, time='date', target=['sales'])
+    assert csv.cutoff_ == aware.cutoff_ and single.cutoff_ == pd.Timestamp('2026-01-20T00:00Z')
+    assert single.forecast(1).timestamps[0] == pd.Timestamp('2026-01-21T00:00Z')
+    assert service.posts[-1][0]['history']['table']['rows'][0][0] == '2026-01-01T00:00:00+00:00'
+
+
+def test_long_format_converts_offsets_and_mixes_naive_cells_as_utc(service):
+    frame = panel(ids=('a',)).drop(columns=['store'])
+    cells = [t.tz_convert('Europe/Paris') if i % 2 else t.tz_localize(None) for i, t in enumerate(frame['date'])]
+    model = Forecast().fit(frame.assign(date=pd.Series(cells, dtype=object)), time='date', target=['sales'])
+    assert model.cutoff_ == frame['date'].iloc[-1]
+
+
+@pytest.mark.parametrize('history', [
+    lambda f: _naive(f)[['date', 'sales']],                                      # one string target
+    lambda f: _naive(f).set_index('date')['sales'],                              # naive DatetimeIndex
+])
+def test_univariate_form_keeps_refusing_naive_timestamps(service, history):
+    frame = panel(ids=('a',))
+    kwargs = dict(time='date', target='sales') if isinstance(history(frame), pd.DataFrame) else {}
+    with pytest.raises(ValueError, match='timezone'):
+        Forecast().fit(history(frame), **kwargs)
+    with pytest.raises(ValueError, match='timezone'):
+        Forecast().fit(np.arange(20.), start='2026-01-01', frequency_seconds=86400)
+    assert not service.requests
