@@ -73,8 +73,10 @@ print(frame.groupby("id")["median"].mean())
   series' forecast starts one step after its own last row.
 - IDs are strings or integers. Results return them as strings.
 - Already uploaded the history as a CSV? Pass its dataset ID instead of a DataFrame,
-  for example `fit("ds_…", time="date", id="store", target=["sales"])`. A future
-  table can be a dataset ID too.
+  for example `fit("ds_…", time="date", id="store", target=["sales"])`, and give
+  `forecast(future=...)` a dataset ID too. Those rows travel by reference, so only the
+  server checks them, and fitted sizes such as `n_series_` are `None`. Use `forecast`
+  for a dataset history; `predict` needs a local table.
 
 ## Forecast several targets {.step}
 
@@ -319,9 +321,9 @@ except InvalidInputError as error:
 | Error | When | What to do |
 | --- | --- | --- |
 | `ValueError` | A local check failed: a gap, a repeated time, a missing future value, wrong future rows. | Fix the table. Nothing was sent. |
-| `InvalidInputError`, code `workload_limit` | No published corner admits the request, or a series is shorter than `min_context`. | Shorten the history, use fewer variates or series, or ask for a shorter horizon. |
+| `InvalidInputError`, code `workload_limit` | No published corner admits the request, a series is shorter than `min_context`, or the request body is above 10 MiB. | Shorten the history, use fewer variates or series, or ask for a shorter horizon. For a large table, upload it and pass its dataset ID. |
 | `InvalidInputError`, code `invalid_input` | The server refused the request. | Read the message. It never repeats your cell values. |
-| `WeltError`, code `unsupported_capability` | The server has no `forecasting` task. | Use the [univariate API](#forecast-a-univariate-time-series), or a current server. |
+| `InvalidInputError`, code `unsupported_capability` | The server has no `forecasting` task, but you asked for a panel, covariates, a dataset history, a calendar frequency or `forecast()`. | Use the [univariate API](#forecast-a-univariate-time-series), or a current server. |
 | `ConflictError`, code `model_version_mismatch` or `configuration_version_mismatch` | The model changed after your `fit`. | Fit again. |
 | `ConflictError`, code `idempotency_conflict` | You reused a replay key with a different request. | Use a new key. |
 | `JobTimeoutError` | Your local wait ended. | [Reconnect](#submit-now-collect-later). The forecast keeps running. |
@@ -361,15 +363,17 @@ print(result.to_frame().shape)
 - A reconnected job checks the task and the model and configuration versions. It
   can't rebuild your original request, so it doesn't check the series against it.
 - `AsyncClient.forecast_job(id)` works the same way with `await`.
-- The SDK sends the history and future tables inline in the request. A request
-  above the API's 10 MiB body limit is refused before anything is sent. Nothing is
-  uploaded for you.
+- The SDK sends DataFrame tables inline in the request and never uploads them for
+  you, so replaying a key sends the same body. A body above the API's 10 MiB limit
+  (`welt.forecast.MAX_REQUEST_BYTES`) is refused with `InvalidInputError`
+  (`workload_limit`) before anything is sent: upload the table, for example with
+  `client.upload_file`, and pass its dataset ID.
 - `Client.submit_forecast(body)` and `welt forecast --input request.json` send a raw
   `POST /v1/forecasts` body without the SDK's checks.
 - Forecast inputs and results are private to your workspace until you delete them.
   `client.delete_forecast(job.id)` or `welt forecasts delete ID --yes` removes a
   finished forecast's input and result. The job, its replay key and its usage record
-  stay.
+  stay, and workspace datasets it read are not deleted.
 
 !!! tip "Backtest and reconcile in ergodic"
     Use Chronos-2 inside ergodic's backtest and reconcile:

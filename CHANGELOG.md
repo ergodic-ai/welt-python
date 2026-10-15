@@ -162,7 +162,8 @@ Documentation (API-162):
   baseline, MASE, 80% interval coverage and a plot. It is the only notebook on
   simulated data, because it needs drivers known ahead of time.
 - The Models page lists forecasting; the hidden model-runs page points to the guide
-  and notes the priced `chronos-2` univariate run. Links to ergodic's
+  and notes the priced `chronos-2` univariate run. The CLI page documents
+  `welt forecasts delete ID --yes`. Links to ergodic's
   [Forecast with Welt's Chronos-2](https://docs.ergodic.dev/forecast-with-welt.html).
 - The notebook fixture gains a `POST /v1/forecasts` wire fixture (seasonal-naive
   numbers, not model output) so the guide, script and notebook run in tests.

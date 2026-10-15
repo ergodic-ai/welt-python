@@ -203,7 +203,10 @@ and `q_<level>` quantiles. Limits come from the model's published envelopes
 prediction rate per token: Σ (history rows + horizon) × (targets + covariates).
 Quantiles are not calibrated intervals; crossed native quantiles are sorted and
 counted in `rearranged_steps`. Panels and covariates need SDK 0.14 and a server with
-the `forecasting` task. The univariate `predict` API from SDK 0.11 stays supported.
+the `forecasting` task. History and future can also be workspace dataset IDs; tables are
+sent inline, never uploaded automatically, and bodies above 10 MiB are refused before
+sending. `client.delete_forecast(id)` removes a finished forecast's input and result.
+The univariate `predict` API from SDK 0.11 stays supported.
 [Forecast guide](https://ergodic-ai.github.io/welt-python/forecasting.html) ·
 [tutorial notebook](https://ergodic-ai.github.io/welt-python/notebook-forecasting-with-covariates.html) ·
 Use Chronos-2 inside ergodic's backtest and reconcile:
