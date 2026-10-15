@@ -84,6 +84,23 @@ is unchanged.
 - The legacy `univariate_forecasting` model-run request, result schema, limits and
   levels are unchanged (DEC-085 §8). Runtime dependencies are unchanged.
 
+Documentation (API-162):
+
+- The forecasting guide is rewritten as numbered steps: one series, a panel, several
+  targets, past and known-future (numeric and categorical) covariates, quantiles and
+  `to_frame()`, `cross_learning`, then limits read from model metadata, pricing,
+  data preparation, errors and the job form. The univariate API section stays, with
+  its examples unchanged. Its anchors still resolve.
+- New notebook `forecasting-with-covariates` and script `forecasting_covariates.py`: a
+  simulated five-store retail panel, a chronological 28-day holdout, a seasonal-naive
+  baseline, MASE, 80% interval coverage and a plot. It is the only notebook on
+  simulated data, because it needs drivers known ahead of time.
+- The Models page lists forecasting; the hidden model-runs page points to the guide
+  and notes the priced `chronos-2` univariate run. Links to ergodic's
+  [Forecast with Welt's Chronos-2](https://docs.ergodic.dev/forecast-with-welt.html).
+- The notebook fixture gains a `POST /v1/forecasts` wire fixture (seasonal-naive
+  numbers, not model output) so the guide, script and notebook run in tests.
+
 # 0.13.1 (2026-10-15) — ergodic documentation address
 
 - The ergodic documentation moved to https://docs.ergodic.dev before it went live.

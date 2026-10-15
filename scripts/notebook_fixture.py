@@ -199,6 +199,126 @@ class CausalSyntheticService(SyntheticService):
         return super().__call__(request)
 
 
+FORECAST_LEVELS = [v / 100 for v in (1, *range(5, 100, 5), 99)]
+_SECONDS = {'week': 604800, 'day': 86400, 'hour': 3600, 'minute': 60, 'second': 1}
+
+
+class ForecastSyntheticService:
+    """DEC-085 forecasting wire fixture (POST /v1/forecasts), not Chronos-2 or model evidence.
+
+    Points repeat each series' last seven observed values (a seasonal-naive rule) and the
+    quantiles spread around them by the series' spread, so tutorials can compute metrics
+    and plots offline. These numbers say nothing about Chronos-2 forecast quality.
+    """
+    version, configuration = 'synthetic-chronos-2-v1', 'synthetic-chronos-2-forecast-v1'
+    envelopes = [dict(max_context=2000, max_variates=10, max_series=20, max_horizon=64)]
+
+    def __init__(self):
+        self.jobs, self.posts = {}, []
+
+    def handles(self, path):
+        return (path in ('/v1/models/chronos-2', '/v1/forecasts')
+                or path.startswith('/v1/jobs/forecast-'))
+
+    def metadata(self):
+        return dict(id='chronos-2', family='forecasting', status='available', tasks=['forecasting'],
+                    operations=['forecast'], version=self.version,
+                    configuration={'version': self.configuration}, supports_version_expectations=True,
+                    forecast_envelopes=self.envelopes, min_context=16, quantile_levels=FORECAST_LEVELS,
+                    default_quantile_levels=[0.1, 0.5, 0.9],
+                    limits=dict(min_context=16, **self.envelopes[0]))
+
+    @staticmethod
+    def _frequency(request, stamps):
+        if 'frequency' in request:
+            return request['frequency']
+        seconds = int((stamps[1] - stamps[0]).total_seconds())
+        unit = next(u for u, size in _SECONDS.items() if seconds % size == 0)
+        return {'unit': unit, 'every': seconds // _SECONDS[unit]}
+
+    def result(self, request):
+        from statistics import NormalDist
+        import pandas as pd
+        table = request['history']['table']
+        columns, rows = table['columns'], table['rows']
+        t = columns.index(request['time_column'])
+        i = columns.index(request['id_column']) if 'id_column' in request else None
+        groups = {}
+        for row in rows:
+            groups.setdefault(None if i is None else str(row[i]), []).append(row)
+        frequency, series = None, []
+        for key, members in groups.items():
+            members.sort(key=lambda row: pd.Timestamp(row[t]))
+            stamps = [pd.Timestamp(row[t]).tz_convert('UTC') if pd.Timestamp(row[t]).tzinfo
+                      else pd.Timestamp(row[t]).tz_localize('UTC') for row in members]
+            frequency = frequency or self._frequency(request, stamps)
+            unit, every = frequency['unit'], frequency['every']
+            if unit in _SECONDS:
+                future = [stamps[-1] + pd.Timedelta(seconds=_SECONDS[unit] * every * k)
+                          for k in range(1, request['horizon'] + 1)]
+            else:
+                months = every * dict(month=1, quarter=3, year=12)[unit]
+                future = [stamps[-1] + pd.DateOffset(months=months * k) for k in range(1, request['horizon'] + 1)]
+            for target in request['targets']:
+                values = [row[columns.index(target)] for row in members]
+                known = [float(v) for v in values if v is not None]
+                level = sum(known) / len(known)
+                recent = [level if v is None else float(v) for v in values[-7:]]
+                spread = (sum((v - level) ** 2 for v in known) / len(known)) ** 0.5 or 1.0
+                points = [recent[k % len(recent)] for k in range(request['horizon'])]
+                quantiles = [[p + 0.5 * spread * NormalDist().inv_cdf(q) for q in request['quantile_levels']]
+                             for p in points]
+                series.append(dict(id=key, target=target, context_length=len(members),
+                                   timestamps=[s.isoformat().replace('+00:00', 'Z') for s in future],
+                                   predictions=points, quantiles=quantiles))
+        return dict(task='forecasting', model_id=request['model_id'], model_version=self.version,
+                    configuration=self.configuration, horizon=request['horizon'], frequency=frequency,
+                    quantile_levels=request['quantile_levels'], point_semantics='median',
+                    calibrated_intervals=False, cross_learning=request['cross_learning'], rearranged_steps=0,
+                    columns=dict(time=request['time_column'], id=request.get('id_column'),
+                                 targets=request['targets'], past_covariates=request['past_covariates'],
+                                 future_covariates=request['future_covariates'],
+                                 categorical_covariates=request['categorical_covariates']),
+                    series=series)
+
+    def __call__(self, request):
+        assert request.url.host == 'notebook.invalid', 'Fixture must not make live requests.'
+        path, method = request.url.path, request.method
+        if path == '/v1/workspace':
+            return httpx.Response(200, json={'id': 'workspace-fixture'})
+        if path == '/v1/models':
+            return httpx.Response(200, json={'items': [self.metadata()]})
+        if path == '/v1/models/chronos-2':
+            return httpx.Response(200, json=self.metadata())
+        if path == '/v1/forecasts' and method == 'POST':
+            body = json.loads(request.content)
+            headers = request.headers
+            assert 'dataset_id' not in body['history'], 'Fixture tables are sent inline.'
+            if (headers.get('X-Welt-Model-Version') != self.version
+                    or headers.get('X-Welt-Configuration-Version') != self.configuration):
+                return httpx.Response(409, json={'error': {'code': 'model_version_mismatch',
+                                                           'message': 'Fit again.'}})
+            self.posts.append(body)
+            for job, previous, key in self.jobs.values():
+                if key == headers['Idempotency-Key']:
+                    if previous != body:
+                        return httpx.Response(409, json={'error': {'code': 'idempotency_conflict',
+                                                                   'message': 'Key reused.'}})
+                    return httpx.Response(202, json=job)
+            name = f'forecast-{len(self.jobs) + 1}'
+            job = dict(id=name, operation='forecast', task='forecasting', model_id=body['model_id'],
+                       model_version=self.version, resolved_configuration={'version': self.configuration},
+                       status='succeeded', predictor_id=None)
+            self.jobs[name] = (job, body, headers['Idempotency-Key'])
+            return httpx.Response(202, json=job)
+        if path.startswith('/v1/jobs/forecast-'):
+            job, body, _ = self.jobs[path.split('/')[3]]
+            if path.endswith('/result'):
+                return httpx.Response(200, json=self.result(body))
+            if path.endswith('/cancel'):
+                return httpx.Response(200, json=dict(job, status='cancelled'))
+            return httpx.Response(200, json=job)
+        raise AssertionError(f'Unsupported forecasting fixture operation: {method} {path}')
 
 
 class ResearchFixture(CausalSyntheticService):
@@ -221,9 +341,12 @@ class ResearchFixture(CausalSyntheticService):
             assert detail["content"]["version"] == detail["content"]["sha256"] == digest
             assert detail["content"]["size_bytes"] == len(body)
             self.research[detail["id"]] = (detail, body)
+        self.forecasting = ForecastSyntheticService()
 
     def __call__(self, request):
         path = request.url.path
+        if self.forecasting.handles(path):
+            return self.forecasting(request)
         if path == "/v1/workspace":
             return httpx.Response(200, json={"id": "workspace-fixture"})
         if path == "/v1/research-datasets":

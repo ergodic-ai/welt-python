@@ -16,9 +16,12 @@ submission.
 !!! note "No accuracy guarantee"
     A listed checkpoint is not an accuracy guarantee.
 
-!!! tip "Forecasting from pandas?"
-    For the high-level `Forecast` estimator, native arrays and typed durable results,
-    see [forecast a time series](forecasting.md).
+!!! tip "Forecasting? Start with the forecasting guide"
+    Panels, several targets, past and known-future covariates and quantiles go through
+    the `Forecast` estimator and `POST /v1/forecasts`, not a model run. See
+    [forecast time series with Chronos-2](forecasting.md). The `chronos-2`
+    `univariate_forecasting` run below stays supported for code written against SDK
+    0.11–0.13.
 
 ## Exact model IDs
 
@@ -33,7 +36,11 @@ submission.
 | `limix-1-2m` | classification, regression | allowlisted internal testing |
 | `foundcause-1.0` | causal_discovery | allowlisted internal testing |
 | `lcm-2.5m` | temporal_causal_discovery | allowlisted internal testing |
-| `chronos-2` | univariate_forecasting | authenticated |
+| `chronos-2` | univariate_forecasting (legacy run; panels and covariates use [`Forecast`](forecasting.md)) | authenticated |
+
+With the forecasting release (SDK 0.14), Chronos-2 is also a public catalogue model for
+the `forecasting` task, so it appears in `Client.models()`. Its univariate run is still
+submitted here by exact ID.
 
 ## Submit, wait and reconnect
 
@@ -88,8 +95,11 @@ with Client() as client:
 
 ### Limits
 
-- **Forecasting:** 16–512 observations and horizon 1–64. Quantile levels must be
-  unique and increasing members of `[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]`.
+- **Forecasting (univariate run):** 16–512 observations and horizon 1–64. Quantile
+  levels must be unique and increasing members of
+  `[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]`. These limits, the request and the
+  result schema are unchanged by the `forecasting` task, whose larger published
+  envelopes apply only to [`Forecast`](forecasting.md#limits) requests.
 - **Tabular runs:** support rows and numeric features follow each model's measured
   shapes in its metadata (`limits` and `shapes`): most hidden tabular models take up to
   8,000 × 20, 4,000 × 40 or 2,000 × 80; TabSTAR and LimiX differ. At least 2 support
@@ -116,9 +126,13 @@ reusable native fit. Query labels must be absent.
 Inputs and results remain private to the credential's workspace. The bounded preview
 allows up to 100 retained runs per workspace, with the shared queued-job limit.
 
-!!! note "Runs are currently unpriced"
+!!! note "Most runs are unpriced"
     Runs are currently unpriced (`usage.credits` is null), with no monetary guarantee
-    for future versions.
+    for future versions. The exception is the `chronos-2` univariate run on the rate
+    card that prices forecasts: it costs the same as a one-series, one-target forecast,
+    (observations + horizon) tokens at 50 credits per million with a 5-credit minimum,
+    so it is not a free route around [forecast pricing](forecasting.md#pricing).
+    `client.pricing()` shows the card in force.
 
 Purge deliberately using `client.delete_model_run(job.id)`; only terminal runs may be
 purged. This removes the input and result but retains job, idempotency and usage
@@ -132,7 +146,7 @@ metadata.
 
 <div class="cards" markdown="1">
 
-- [Forecast a time series](forecasting.md): the high-level `Forecast` estimator.
+- [Forecast time series](forecasting.md): panels, covariates and quantiles with `Forecast`.
 - [Models and limits](capabilities.md): catalogue models and their qualified limits.
 - [Wait and recover](async-and-errors.md): reconnect to jobs and handle typed errors.
 

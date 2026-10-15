@@ -13,6 +13,10 @@ needed. Do not save keys or outputs into Git.
 - Compare models: the Iris split, then cross-validation of the available models on the 120 training
   rows, the leaderboard, fold metrics, report and a link, then a fit of the chosen model checked on the 30 test rows.
 - Research datasets: search, select a fixed reviewed Iris asset, then the complete modelling workflow.
+- Forecasting with covariates: a seeded simulated five-store daily panel (no research table
+  carries known-future drivers), promotions and holidays as known-future covariates, temperature
+  as past-only, a chronological 28-day holdout, a seasonal-naive baseline, MASE, 80% interval
+  coverage and a plot (matplotlib). Intervals are not calibrated.
 - Causal discovery: real Iris measurements, all150 rows/four continuous variables;
   native Arrow output inspection, no ground-truth causal accuracy or effect claim.
 

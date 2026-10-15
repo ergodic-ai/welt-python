@@ -4,7 +4,8 @@ Work through Welt's workflows as notebooks on real research data. Start with
 classification.
 
 Each notebook downloads real research data, prints the table and explains what happens
-next. You don't need a helper file or a testing context. The first cell installs the
+next. The forecasting notebook is the exception: it simulates its store panel, because
+it needs drivers known ahead of time. You don't need a helper file or a testing context. The first cell installs the
 reader; the next cell connects your workspace.
 
 For each notebook, choose **Open in Colab** to run it, download the `.ipynb` file for
@@ -55,6 +56,15 @@ Search the catalogue, inspect a fixed eligible asset and complete your first
 classification.
 
 {{actions:research-datasets}}
+
+## [Forecasting with covariates](notebook-forecasting-with-covariates.html)
+
+Simulate a five-store retail panel with promotions, holidays and temperature, hold out
+the last four weeks, and score Chronos-2 against a seasonal-naive baseline with MASE,
+80% interval coverage and a plot. Prefer a script? Download
+[forecasting_covariates.py](downloads/forecasting_covariates.py).
+
+{{actions:forecasting-with-covariates}}
 
 ## [Causal discovery](notebook-causal-discovery.html)
 

@@ -50,13 +50,30 @@ class TeachingSources(unittest.TestCase):
             self.assertNotIn('__target__#0', code)
             self.assertNotIn('version=', code)
             self.assertNotIn('license_notices', code)
+            for forbidden in ('estimator_transport','from support','MockTransport'):
+                self.assertNotIn(forbidden,code)
+            for cell in notebook['cells']:
+                if cell['cell_type']=='code':
+                    self.assertEqual(cell['outputs'],[]);self.assertIsNone(cell['execution_count'])
+            if path.stem=='forecasting-with-covariates':
+                # API-162: a seeded simulated retail panel (no research table has known-future
+                # drivers); the holdout is chronological and scored against a baseline.
+                self.assertIn('np.random.default_rng(7)',code)
+                self.assertIn('data.head()',code)
+                self.assertIn('history = data[data["date"] <= cutoff]',code)
+                self.assertLess(code.index('<= cutoff'),code.index('model.forecast('))
+                self.assertIn('future = test[["date", "store", "promo", "holiday"]]',code)
+                for name in ('seasonal naive','mase(','80% coverage','client.model("chronos-2")','plt.show()'):
+                    self.assertIn(name,code)
+                self.assertNotIn('train_test_split(',code)
+                continue
             self.assertIn('research_dataset',code)
             self.assertIn('download_research_dataset',code)
             self.assertIn('pd.read_parquet',code)
             expected_target = 'Residuary.resistance' if path.stem == 'regression' else 'target'
             self.assertIn('target = "' + expected_target + '"', code)
             self.assertIn('data.head()',code)
-            for forbidden in ('estimator_transport','from support','MockTransport','make_classification','np.random'):
+            for forbidden in ('make_classification','np.random'):
                 self.assertNotIn(forbidden,code)
             if path.stem!='causal-discovery':
                 fit = next(call for call in ('model.fit(', 'model.submit_fit(', 'evaluation.fit(') if call in code)
@@ -65,9 +82,6 @@ class TeachingSources(unittest.TestCase):
                     self.assertIn('client.evaluate(train, target',code)
                 self.assertIn('test.drop(columns=target)',code)
                 self.assertTrue('accuracy_score' in code or 'mean_absolute_error' in code)
-            for cell in notebook['cells']:
-                if cell['cell_type']=='code':
-                    self.assertEqual(cell['outputs'],[]);self.assertIsNone(cell['execution_count'])
 
     def test_fixture_refuses_unverified_canonical_bytes(self):
         from scripts.notebook_fixture import ResearchFixture
