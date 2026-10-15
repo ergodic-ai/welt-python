@@ -1,4 +1,4 @@
-"""Zero-shot forecasting contexts and owned native forecast results.
+"""Zero-shot forecasting contexts and owned forecast results.
 
 Two server contracts are served (DEC-085 §7/§8):
 
@@ -28,8 +28,10 @@ from .credentials import credential, secret
 from .errors import (AuthenticationError, InvalidForecastResultError, InvalidInputError,
                      WeltError, safe_id)
 
-#: Largest forecast request body the SDK sends: the Welt API's HTTP body limit (10 MiB by
-#: default, ``WELT_HTTP_BODY_BYTES`` on the server). DataFrame history and future tables
+#: Largest forecast request body the SDK sends: the Welt API's default HTTP body limit,
+#: 10 MiB. The server does not publish its limit, so a deployment that overrides it
+#: (``WELT_HTTP_BODY_BYTES``) is not reflected here: a lower override answers HTTP 413
+#: (``payload_limit``), and a higher one still sees this local refusal. DataFrame history and future tables
 #: always travel inline in the compact JSON body; a larger request is refused locally with
 #: ``InvalidInputError`` (``workload_limit``) before any request. Upload such a table as a
 #: workspace dataset (for example ``Client.upload_file``) and pass its ID instead.
@@ -818,7 +820,7 @@ class ForecastSeries:
 
 @dataclass(frozen=True, init=False)
 class ForecastResult:
-    """An immutable native result; conversions return independent ordinary copies.
+    """An immutable forecast result; conversions return independent ordinary copies.
 
     task is "forecasting" for long-format fits and POST /v1/forecasts reconnects (one series
     entry per series ID and target; to_frame() is long format). It is
@@ -861,7 +863,12 @@ class ForecastResult:
         return ForecastResult(payload, job_id=self.job_id, _mapped=True, _rearranged=self.rearranged_steps)
 
     def to_dict(self):
-        """Return an independent JSON-compatible native payload; job_id is a separate attribute."""
+        """Return an independent JSON-compatible payload; job_id is a separate attribute.
+
+        Forecasting results return the server's documented fields. Results of univariate fits
+        return the 0.13-shaped univariate_forecasting view on either route, which on the
+        forecasting route is derived from the server result rather than its native payload.
+        """
         return _thaw(self._payload)
 
     @property
@@ -1388,7 +1395,8 @@ class Forecast(BaseEstimator):
         an increasing subset of the levels the model publishes (by default the 21 native
         levels 0.01, 0.05, 0.10, …, 0.95, 0.99); the request default is (0.1, 0.5, 0.9).
         cross_learning=True lets series share information. DataFrame tables travel inline;
-        a request body above MAX_REQUEST_BYTES is refused before any request. The job owns
+        a request body above MAX_REQUEST_BYTES (the API's default 10 MiB body limit; a
+        server override is not reflected) is refused before any request. The job owns
         its new client, or borrows Forecast(client=...).
         """
         self._ready()
