@@ -595,7 +595,12 @@ def available_models():
                 continue
             limits = task['limits']
             width = 'max_features' if 'max_features' in limits else 'max_columns'
-            shapes = [(s['rows'], s['columns']) for s in task.get('shapes') or []] or [(limits['max_rows'], limits[width])]
+            shapes = [(s['rows'], s['columns']) for s in task.get('shapes') or []]
+            if not shapes:
+                if 'max_rows' not in limits or width not in limits:
+                    raise SystemExit(f"Models snapshot: available {model['id']} {task['task']} has neither shapes "
+                                     'nor max_rows with max_columns/max_features.')
+                shapes = [(limits['max_rows'], limits[width])]
             context = ', '.join(f'{r:,} × {c:,}' for r, c in sorted(shapes, key=lambda s: (-s[0], -s[1])))
             if 'min_rows' in limits or 'min_features' in limits:
                 minimums.add((limits.get('min_rows', 1), limits.get('min_features', 1)))

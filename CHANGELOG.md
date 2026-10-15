@@ -5,6 +5,10 @@
   `to_ergodic()` error message now link there; 0.13.0 linked the unassigned
   `ergodic.dev`. No API change. The 0.13.0 documentation was never published; this
   release's documentation replaces it.
+- The Models table lists every accepted (rows × columns) shape as each model's
+  context, not only the largest-row one, and the Models page defines context per task.
+  The evaluation guide's fold limits are corrected from the old 500 × 20 to each
+  model's shapes. Documentation only.
 
 # 0.13.0 (2026-10-15) — ergodic 0.2 bridge
 

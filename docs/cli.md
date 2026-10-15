@@ -155,8 +155,8 @@ welt jobs result job_graph
 welt jobs scores job_graph
 ```
 
-Arrow accepts 2–8,000 rows and 2–20 finite continuous variables (wider shapes are in
-`welt models get arrow`), without a supervised target. Its current path does not support nonempty required or forbidden edges, or
+Arrow accepts at least 2 rows and 2 finite continuous variables, up to 8,000 × 20
+(or 4,000 × 40, 2,000 × 80; see `welt models get arrow`), without a supervised target. Its current path does not support nonempty required or forbidden edges, or
 temporal constraints, so this recipe omits `--constraints`.
 
 !!! caution "There is no ground truth here"
