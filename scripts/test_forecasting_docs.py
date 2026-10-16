@@ -73,7 +73,7 @@ def test_guide_steps_run_in_order_as_one_script(service, capsys):
 
 def test_guide_documents_release_placeholders_and_honest_intervals():
     text = GUIDE.read_text()
-    assert 'TBD-API-160' in text and '<!-- release:' in text
+    assert 'TBD-API-160' not in text and '<!-- release:' in text
     assert 'not calibrated' in text and 'rearranged_steps' in text and 'monotone' in text
     assert '50 credits per\nmillion tokens' in text or '50 credits per million tokens' in text
     assert 'https://docs.ergodic.dev/forecast-with-welt.html' in text
@@ -113,3 +113,28 @@ def test_forecasting_notebook_cells_run_in_order(service, capsys):
     # The holdout is chronological: every held-out day is after every history day.
     assert namespace['history']['date'].max() < namespace['test']['date'].min()
     assert set(namespace['scores'].index) >= {'seasonal naive', 'Chronos-2', 'Chronos-2, no covariates'}
+
+
+# API-160 measured and accepted corners (context, variates, series, horizon); API-162 F5 gate.
+MEASURED = [(8000, 50, 1, 1024), (8000, 5, 8, 1024), (4000, 10, 8, 1024), (2000, 20, 8, 1024),
+            (2000, 5, 32, 256), (1000, 50, 8, 256), (512, 20, 32, 256)]
+
+
+def admitting(context, variates, series, horizon):
+    return [c for c in MEASURED if context <= c[0] and variates <= c[1] and series <= c[2] and horizon <= c[3]]
+
+
+def test_fixture_and_guide_publish_exactly_the_measured_corners():
+    fixture = [tuple(c[k] for k in ('max_context', 'max_variates', 'max_series', 'max_horizon'))
+               for c in ForecastSyntheticService.envelopes]
+    assert fixture == MEASURED and ForecastSyntheticService().metadata()['min_context'] == 16
+    rows = re.findall(r'^\| ([\d,]+) \| (\d+) \| (\d+) \| ([\d,]+) \|$', GUIDE.read_text(), re.M)
+    assert [tuple(int(v.replace(',', '')) for v in row) for row in rows] == MEASURED
+
+
+def test_published_examples_fit_a_measured_corner():
+    # Guide step 4 (and every smaller step) and the notebook, which also sends a covariate-free run.
+    assert (2000, 5, 32, 256) in admitting(365, 5, 3, 14)
+    assert (1000, 50, 8, 256) in admitting(392, 4, 5, 28)
+    assert admitting(392, 1, 5, 28)
+    assert not admitting(365, 5, 3, 100_000)  # the guide's error example stays refused

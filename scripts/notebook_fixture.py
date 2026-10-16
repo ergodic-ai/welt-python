@@ -211,7 +211,10 @@ class ForecastSyntheticService:
     and plots offline. These numbers say nothing about Chronos-2 forecast quality.
     """
     version, configuration = 'synthetic-chronos-2-v1', 'synthetic-chronos-2-forecast-v1'
-    envelopes = [dict(max_context=2000, max_variates=10, max_series=20, max_horizon=64)]
+    # The seven corners API-160 measured and accepted (context x variates x series x horizon).
+    envelopes = [dict(max_context=c, max_variates=v, max_series=n, max_horizon=h) for c, v, n, h in (
+        (8000, 50, 1, 1024), (8000, 5, 8, 1024), (4000, 10, 8, 1024), (2000, 20, 8, 1024),
+        (2000, 5, 32, 256), (1000, 50, 8, 256), (512, 20, 32, 256))]
 
     def __init__(self):
         self.jobs, self.posts = {}, []

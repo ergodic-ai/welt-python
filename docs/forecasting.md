@@ -227,17 +227,30 @@ four axes at once:
 - **Series:** the number of IDs.
 - **Horizon:** the steps you ask for.
 
-Welt doesn't interpolate between corners. Every series also needs at least
-`min_context` rows, and at most 8,192, Chronos-2's native context. Histories are
-never truncated. `fit` checks the history against the corners, and `forecast` checks
-the horizon. Both raise `InvalidInputError` with code `workload_limit`, naming the
-published corners, before anything is sent. A very large request can still be
-refused by the server if its encoded input or output exceeds the transport bounds.
+At release, Chronos-2 publishes these seven measured corners, and every series needs
+at least 16 rows (`min_context`):
 
-<!-- release: replace TBD-API-160 with the corners API-160 measured and API-164 published, then delete this comment. -->
+| Context (rows) | Variates | Series | Horizon |
+| --- | --- | --- | --- |
+| 8,000 | 50 | 1 | 1,024 |
+| 8,000 | 5 | 8 | 1,024 |
+| 4,000 | 10 | 8 | 1,024 |
+| 2,000 | 20 | 8 | 1,024 |
+| 2,000 | 5 | 32 | 256 |
+| 1,000 | 50 | 8 | 256 |
+| 512 | 20 | 32 | 256 |
 
-At release, the measured limits are: **TBD-API-160**. The published metadata always
-has the final word.
+Step 4's panel (365 rows × 5 variates × 3 series × 14 steps) fits the 2,000 × 5 × 32
+× 256 corner, for example.
+
+- Welt doesn't interpolate between corners: one corner must cover all four numbers.
+- Larger panels are bounded by request size, not by the GPU: the 10 MiB request body
+  and the server's table intake. That is why wide or long requests have fewer series.
+- `fit` checks the history against the corners and `forecast` checks the horizon.
+  Both raise `InvalidInputError` with code `workload_limit`, naming the corners,
+  before anything is sent. Histories are never truncated.
+- The corners can change. Your code should read them from
+  `client.model("chronos-2")`, as above, rather than copy this table.
 
 ## What a forecast costs {#pricing}
 
