@@ -41,7 +41,10 @@ What "context" means depends on the task:
 - **Causal discovery:** the whole table, with every column a variable.
 - **Forecasting:** the history of one series. Forecasting uses the hidden `chronos-2`
   model, which your workspace must be granted access to; see
-  [forecast a time series](forecasting.md) for its history and horizon limits.
+  [forecast a time series](forecasting.md) for its history and horizon limits. Where
+  the server offers the `forecasting` task (SDK 0.14), the context is each series'
+  history, and limits are published per model as envelopes of context length,
+  variates (targets plus covariates), series count and horizon.
 
 A shape caps both axes at once. TabICLv2 refuses 6,000 rows × 30 features (plus the
 target): 8,000 × 20 is too narrow and 4,000 × 40 too short. Use 4,000 rows or 20

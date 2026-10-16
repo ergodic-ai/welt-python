@@ -343,6 +343,21 @@ class Client(_HTTP):
             headers=_model_run_headers(idempotency_key, expected_model_version, expected_configuration_version))
         return Job(self, result["id"])
 
+    def submit_forecast(self, request, *, idempotency_key=None,
+                        expected_model_version=None, expected_configuration_version=None):
+        """Submit one raw POST /v1/forecasts request (DEC-085); prefer Forecast for validation.
+
+        Version expectations are paired guard headers exactly as for model runs. Job.result()
+        returns the forecasting result dictionary; forecast_job(job.id) validates it.
+        """
+        result = self.request("POST", "/v1/forecasts", json=request,
+            headers=_model_run_headers(idempotency_key, expected_model_version, expected_configuration_version))
+        return Job(self, result["id"])
+
+    def delete_forecast(self, job_id):
+        """Explicitly remove one terminal forecast's stored input and result; keep job metadata and usage."""
+        return self.request("DELETE", f"/v1/forecasts/{_id(job_id)}")
+
     def delete_model_run(self, job_id):
         """Explicitly remove one terminal run's input/result; retain usage and job metadata."""
         return self.request("DELETE", f"/v1/model-runs/{_id(job_id)}")
@@ -566,7 +581,7 @@ class Client(_HTTP):
         return [Evaluation(self, item) for item in items]
 
     def forecast_job(self, job_id):
-        """Reconnect to one forecast run, borrowing this client; validates durable provenance."""
+        """Reconnect to one forecast job (forecasting or legacy univariate run), borrowing this client."""
         from .forecast import ForecastJob
         return ForecastJob(self.job(job_id))
 
@@ -648,7 +663,7 @@ class Job:
                 if job["operation"] == "discover":
                     return self.client.causal_result(self.id, _deadline=deadline)
                 return (self.client.request("GET", f"/v1/jobs/{_id(self.id)}/result", _deadline=deadline, _job_id=self.id)
-                        if job["operation"] in ("predict", "batch_predict", "model_run") else self.client.predictor(job["predictor_id"], _deadline=deadline, _job_id=self.id))
+                        if job["operation"] in ("predict", "batch_predict", "model_run", "forecast") else self.client.predictor(job["predictor_id"], _deadline=deadline, _job_id=self.id))
             _failed(job, secret(self.client.api_key))
             time.sleep(_wait(deadline, self.id, poll_interval))
             poll_interval = min(poll_interval * 1.4, 5)
@@ -764,6 +779,17 @@ class AsyncClient(_HTTP):
         result = await self.request("POST", "/v1/model-runs", json=payload,
             headers=_model_run_headers(idempotency_key, expected_model_version, expected_configuration_version))
         return AsyncJob(self, result["id"])
+
+    async def submit_forecast(self, request, *, idempotency_key=None,
+                              expected_model_version=None, expected_configuration_version=None):
+        """Async Client.submit_forecast with the same contract."""
+        result = await self.request("POST", "/v1/forecasts", json=request,
+            headers=_model_run_headers(idempotency_key, expected_model_version, expected_configuration_version))
+        return AsyncJob(self, result["id"])
+
+    async def delete_forecast(self, job_id):
+        """Async Client.delete_forecast with the same contract."""
+        return await self.request("DELETE", f"/v1/forecasts/{_id(job_id)}")
 
     async def delete_model_run(self, job_id):
         """Explicitly remove one terminal run's input/result; retain usage and job metadata."""
@@ -1015,7 +1041,7 @@ class AsyncJob:
                 if job["operation"] == "discover":
                     return await self.client.causal_result(self.id, _deadline=deadline)
                 return (await self.client.request("GET", f"/v1/jobs/{_id(self.id)}/result", _deadline=deadline, _job_id=self.id)
-                        if job["operation"] in ("predict", "batch_predict", "model_run") else await self.client.predictor(job["predictor_id"], _deadline=deadline, _job_id=self.id))
+                        if job["operation"] in ("predict", "batch_predict", "model_run", "forecast") else await self.client.predictor(job["predictor_id"], _deadline=deadline, _job_id=self.id))
             _failed(job, secret(self.client.api_key))
             await asyncio.sleep(_wait(deadline, self.id, poll_interval))
             poll_interval = min(poll_interval * 1.4, 5)

@@ -226,11 +226,15 @@ returns explicit expiry errors. Use the server's `expires_at` and version fields
 ```sh
 welt models get chronos-2
 welt run --input forecast.json --idempotency-key forecast-00000001
+welt forecast --input request.json --idempotency-key forecast-00000002  # servers with the forecasting task
 welt jobs wait job_returned --timeout 600
 welt model-runs delete job_returned --yes
 ```
 
 `forecast.json` uses the task payload in [Hidden model runs](model-runs.md).
+`welt forecast` submits a `POST /v1/forecasts` request body (history and future as
+dataset IDs or inline tables, column roles, horizon) and returns its job ID and
+idempotency key the same way.
 `models list` stays curated; inspect a hidden model by its exact ID. The server
 enforces workspace access.
 

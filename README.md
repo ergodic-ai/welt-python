@@ -196,6 +196,9 @@ or later and a server release with evaluations; an older server raises `NotFound
 `Forecast` snapshots regular timezone-aware history and submits guarded zero-shot
 Chronos-2 runs. It requires SDK 0.11 or later and the matching server capability.
 
-Supply your own 16–512 finite observations and a horizon of 1–64. Fit uploads no history;
+Supply your own finite observations within the model's published limits (16–512
+observations and a horizon of 1–64 on servers with only the univariate run). From SDK 0.14,
+servers with the `forecasting` task also accept long-format panels with several targets
+and past, future and categorical covariates through `Forecast.forecast()`. Fit uploads no history;
 each prediction call creates one run. Native quantiles are not calibrated
 intervals. [Forecast guide](https://ergodic-ai.github.io/welt-python/forecasting.html).

@@ -1,3 +1,159 @@
+# 0.14.0 (unreleased) — Forecasting panels and covariates
+
+SDK side of public Chronos-2 forecasting (DEC-085 §7, API-161). It needs a server that
+advertises the `forecasting` task. Against older servers, univariate forecasting behaves as in
+0.13; the remaining differences are listed under "Changed".
+
+## Added
+
+- `Forecast.fit` accepts a long-format DataFrame:
+  - `time`;
+  - an optional `id` (one series per ID; string or integer cells, rendered as strings in
+    results);
+  - `target` as a column name or a list (targets are forecast jointly);
+  - `past_covariates`, `future_covariates` and `categorical` (a subset of the covariates;
+    string or integer cells).
+- Rows may come in any order. Timezone-naive timestamps (for example from `pd.date_range`
+  without `tz` or `read_csv`) are read as UTC, and offsets are converted to UTC (DEC-085 §1),
+  in the history and in the future table.
+- Missing cells are sent as null (native missing-value handling) in numeric targets, numeric
+  past covariates and categorical past covariates. Future covariates must be complete.
+- These are refused before any request:
+  - duplicate (id, time) pairs and gaps;
+  - booleans, or text in numeric columns;
+  - nonfinite or non-FP32 values;
+  - incomplete future covariates;
+  - a target that is missing for a whole series.
+- `fit` uploads nothing.
+- **Dataset histories:** `fit` also takes an existing workspace dataset ID (for example one
+  created with `Client.upload_file`), or a dataset dictionary with `"id"`, together with
+  `time=` and `target=`. `forecast(future=...)` takes a dataset ID as well.
+  - Such rows travel by reference and only the server validates them. The fitted sizes and
+    times (`n_series_`, `context_length_`, `series_ids_`, `cutoff_`) are `None`.
+  - `predict()` needs a local history; use `forecast()` instead.
+  - A file path is refused with a hint to read it or upload it.
+- **Frequencies:** `frequency=` takes `{"unit", "every"}` (second, minute, hour, day, week,
+  month, quarter, year) or an alias, optionally with a multiple such as `"15min"`:
+
+  | Unit | Aliases |
+  | --- | --- |
+  | second | `s`, `S`, `sec` |
+  | minute | `min`, `T` |
+  | hour | `h`, `H` |
+  | day | `D`, `d` |
+  | week | `W` |
+  | month | `M`, `MS`, `ME` |
+  | quarter | `Q`, `QS`, `QE` |
+  | year | `Y`, `YS`, `YE`, `A`, `AS` |
+
+  The unit names themselves are also accepted.
+  - Month, quarter and year use calendar arithmetic. Each series is anchored on a day of the
+    month (1–28) or on month-ends, taken from its observations.
+  - A frequency is sent in its largest whole unit: `{"unit": "hour", "every": 24}` is sent as
+    one day.
+  - Without `frequency=`, the spacing is checked locally (one frequency shared by every
+    series) and the server infers it. Only the univariate form sends its fixed spacing
+    explicitly.
+- **New methods:** `Forecast.forecast(horizon, *, future=None, quantile_levels=(0.1, 0.5, 0.9),
+  cross_learning=False, idempotency_key=None)` and `submit_forecast(...)` submit one guarded
+  `POST /v1/forecasts` request.
+  - `future` is required exactly when the fit named future covariates. It is either the
+    known-future table (the time, id and future covariate columns, with exactly `horizon` rows
+    per series at its next timestamps) or a dataset ID.
+  - `quantile_levels` is any increasing subset of the levels the model publishes. When the
+    model publishes none, the allowed levels are the 21 native levels 0.01, 0.05, 0.10, …,
+    0.95, 0.99. The request default stays (0.1, 0.5, 0.9).
+- **Limits** come from model metadata, never from SDK constants.
+  - A request must fit inside one published `forecast_envelopes` corner: context, variates
+    (targets + covariates), series and horizon.
+  - Every series needs `min_context` observations.
+  - Refusals raise `InvalidInputError` (`workload_limit`, a `ValueError`) and name the
+    published corners.
+  - Wherever the server publishes larger envelopes, this lifts the 512-observation and
+    64-step univariate limits.
+- **Transport:** DataFrame tables always travel inline in the request body.
+  - A body above `welt.forecast.MAX_REQUEST_BYTES` (10 MiB of compact JSON, the Welt API's
+    default HTTP body limit) is refused locally with `InvalidInputError` (`workload_limit`)
+    before any request. Upload such a table as a dataset and pass its ID.
+  - The constant follows the server's default limit. The server does not publish its
+    limit, so a deployment that overrides `WELT_HTTP_BODY_BYTES` is not reflected: a lower
+    override answers HTTP 413 (`payload_limit`), and a higher one is still refused locally
+    above 10 MiB.
+  - The SDK never uploads datasets on its own, so replaying a call with the same
+    `idempotency_key` sends the same body and reconnects to the original job.
+  - Requests carry `Idempotency-Key` and the paired `X-Welt-Model-Version` /
+    `X-Welt-Configuration-Version` guards exactly like model runs (DEC-066).
+- **`ForecastResult` also holds `forecasting` results.**
+  - Every documented field is required and validated: finite values, sorted quantiles, a
+    median equal to q_0.5, and timestamps stepping at the reported frequency.
+  - The result is bound to the request: column roles, series order (first appearance of the
+    ID, then target order), context lengths, horizon, levels, `cross_learning`, frequency and
+    each series' future timestamps.
+  - Additional fields the server may add later are ignored.
+  - New properties: `task`, `series`, `rearranged_steps`, `horizon`, `frequency`,
+    `cross_learning` and `columns`.
+    - `series` is a tuple of `ForecastSeries`, with `id`, `target`, `context_length`,
+      `timestamps`, `predictions` and `quantiles`.
+    - `rearranged_steps` counts the steps whose crossing native quantiles the server sorted.
+  - For long-format and dataset fits, `to_frame()` is long: `id`, `target`, `timestamp` (UTC),
+    `median`, `q_<level>`.
+- **Univariate fits keep the 0.13 result shape.** This covers an array, a Series, or a
+  DataFrame with one string target and no id or covariates.
+  - `predict_details()`, `forecast()` and `submit_predict()` results keep the
+    `univariate_forecasting` `to_dict()` schema and the UTC-indexed `to_frame()`, on either
+    route.
+  - On the forecasting route, `frequency_seconds` is `None` for calendar frequencies.
+    `rearranged_steps` stays available on the property.
+  - The fitted `model_version_`/`configuration_version_` are the forecasting identity when
+    that route serves the fit.
+- `predict(horizon, future=None)` still returns a `(horizon,)` median array.
+  `predict_quantiles`, `predict_details` and `submit_predict` accept `future`. For a panel or
+  several targets they raise `ValueError` pointing to `forecast()`.
+- `Forecast(client=...)` borrows an existing synchronous `welt.Client`, for example one with
+  your own transport.
+  - It cannot be combined with `base_url`, `api_key` or `workspace`.
+  - It is never closed by the estimator or its jobs, and `sklearn.clone` copies share it.
+  - A replacement client is checked at the next call: it must reach the same origin,
+    credential and workspace.
+  - Pickling drops it (credentials are never pickled). After unpickling a fitted estimator,
+    set `estimator.client` again. A fitted estimator now pickles, with or without `client=`.
+- **Client methods:**
+  - `Client.submit_forecast` and `AsyncClient.submit_forecast` submit a raw `/v1/forecasts`
+    body with optional paired version guards.
+  - `Client.delete_forecast(job_id)` and `AsyncClient.delete_forecast` explicitly purge a
+    terminal forecast's stored input and result (`DELETE /v1/forecasts/{id}`). Job metadata
+    and usage remain.
+  - `Job.result()` returns the forecasting result dictionary.
+  - `forecast_job(id)` reconnects to either task with typed validation. A reconnect has no
+    request context, so it returns the native `forecasting` result.
+- **CLI:** `welt forecast --input request.json [--idempotency-key KEY]` mirrors `welt run`;
+  `welt forecasts delete ID --yes` mirrors `welt model-runs delete`.
+- New fitted attributes: `task_`, `n_series_`, `series_ids_`, `targets_` and `frequency_`.
+  They join `context_length_` (the longest series), `frequency_seconds_` (None for calendar
+  frequencies) and `cutoff_` (the latest observation).
+
+## Changed
+
+- **Route:** on servers with the `forecasting` task, single-series prediction uses
+  `POST /v1/forecasts`. The admitted context, horizon and levels follow the published
+  envelopes and levels, not 512/64 and 0.1–0.9.
+- **Limits after metadata:** the univariate form still refuses fewer than 16 observations
+  before any request. The upper context and horizon limits are checked after the metadata
+  read and need a credential. They raise `InvalidInputError` (`workload_limit`), which is
+  still a `ValueError`.
+- **Univariate-only servers:** on a server without the `forecasting` task, these raise
+  `InvalidInputError` (`unsupported_capability`, a `ValueError`) at fit instead of a plain
+  `ValueError` before any request:
+  - calendar-spaced (monthly, annual) history;
+  - fixed spacing above one year;
+  - panels;
+  - covariates;
+  - dataset histories.
+
+  `forecast()` raises the same error there.
+- **Unchanged (DEC-085 §8):** the legacy `univariate_forecasting` model-run request, result
+  schema, limits and levels. Runtime dependencies are also unchanged.
+
 # 0.13.1 (2026-10-15) — ergodic documentation address
 
 - The ergodic documentation moved to https://docs.ergodic.dev before it went live.
