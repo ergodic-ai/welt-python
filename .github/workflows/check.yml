@@ -33,7 +33,7 @@ jobs:
       - run: .venv/bin/python scripts/check_notebooks.py --check-source
       - run: .venv/bin/python scripts/build_docs.py
   # DEC-078 / API-142: to_ergodic against the oldest and latest supported ergodic
-  # (welt-client[ergodic] declares ergodic>=0.2,<0.3). ergodic 0.2.0 is not on PyPI
+  # (welt-client[ergodic] declares ergodic>=0.2,<0.4, API-164 / DEC-087 F4). ergodic 0.2.0 is not on PyPI
   # until the joint release; until then this job reports a notice and skips, and it
   # activates by itself once PyPI serves a matching version.
   ergodic:
@@ -61,11 +61,11 @@ jobs:
               return tuple(int(p) for p in v.split('.'))
           supported = sorted(
               (v for v, files in releases.items()
-               if files and v.replace('.', '').isdigit() and (0, 2) <= key(v)[:2] < (0, 3)),
+               if files and v.replace('.', '').isdigit() and (0, 2) <= key(v)[:2] < (0, 4)),
               key=key)
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
               if not supported:
-                  print('::notice::No ergodic>=0.2,<0.3 on PyPI yet; the compatibility job activates at the ergodic 0.2.0 release.')
+                  print('::notice::No ergodic>=0.2,<0.4 on PyPI yet; the compatibility job activates at the ergodic 0.2.0 release.')
                   out.write('version=\n')
               else:
                   out.write('version=' + (supported[0] if os.environ['WHICH'] == 'oldest' else supported[-1]) + '\n')

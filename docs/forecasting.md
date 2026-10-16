@@ -254,8 +254,6 @@ Step 4's panel (365 rows × 5 variates × 3 series × 14 steps) fits the 2,000 �
 
 ## What a forecast costs {#pricing}
 
-<!-- release: API-164 makes rate card 2026-10-v3 the default; until then forecasts are unpriced (credits: null). Delete this comment at release. -->
-
 A forecast is priced in tokens, at the same rate as tabular prediction: 50 credits per
 million tokens, rounded up, with a 5-credit minimum per request.
 

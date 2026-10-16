@@ -1,4 +1,4 @@
-# 0.14.0 (unreleased) — Forecasting panels and covariates
+# 0.14.0 (RELEASE_DATE) — Forecasting panels and covariates
 
 SDK side of public Chronos-2 forecasting (DEC-085 §7, API-161). It needs a server that
 advertises the `forecasting` task. Against older servers, univariate forecasting behaves as in
@@ -153,6 +153,9 @@ advertises the `forecasting` task. Against older servers, univariate forecasting
   `forecast()` raises the same error there.
 - **Unchanged (DEC-085 §8):** the legacy `univariate_forecasting` model-run request, result
   schema, limits and levels. Runtime dependencies are also unchanged.
+- **ergodic extra:** `pip install "welt-client[ergodic]"` now admits ergodic 0.3
+  (`ergodic>=0.2,<0.4`; ergodic 0.3 still reads and writes `ergodic.graph/1`, DEC-087). CI
+  tests conversion against the oldest and latest ergodic in that range.
 
 Documentation (API-162):
 

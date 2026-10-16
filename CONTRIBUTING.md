@@ -40,4 +40,6 @@ Guides are Markdown in `docs/` and can use these components (DEC-073):
 Renaming a heading changes its anchor; keep old anchors that published pages or
 redirects use. The Models table renders `docs/models-snapshot.json`; refresh it with
 `scripts/snapshot_models.py` (a credential-free read of the public catalogue) and
-review the diff before committing. The build never calls the live service.
+review the diff before committing. The build never calls the live service. Forecasting
+profiles (`univariate_forecasting`, `forecasting`) stay in the snapshot but are not rows of the
+table: their measured corners are documented in the forecasting guide.

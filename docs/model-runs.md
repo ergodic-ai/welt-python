@@ -38,7 +38,6 @@ submission.
 | `lcm-2.5m` | temporal_causal_discovery | allowlisted internal testing |
 | `chronos-2` | univariate_forecasting (legacy run; panels and covariates use [`Forecast`](forecasting.md)) | authenticated |
 
-<!-- release: API-164 makes chronos-2 public; until then it is hidden. -->
 With the forecasting release (SDK 0.14), Chronos-2 is also a public catalogue model for
 the `forecasting` task, so it appears in `Client.models()`. Its univariate run is still
 submitted here by exact ID.

@@ -1182,7 +1182,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "ergodic", marker = "extra == 'ergodic'", specifier = ">=0.2,<0.3" },
+    { name = "ergodic", marker = "extra == 'ergodic'", specifier = ">=0.2,<0.4" },
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "numpy", specifier = ">=2,<3" },
     { name = "pandas", specifier = ">=2.2,<4" },

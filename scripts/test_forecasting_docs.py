@@ -71,9 +71,10 @@ def test_guide_steps_run_in_order_as_one_script(service, capsys):
     assert namespace['job'].client.http.is_closed  # the estimator-owned job client was closed
 
 
-def test_guide_documents_release_placeholders_and_honest_intervals():
+def test_guide_has_no_release_placeholders_and_honest_intervals():
     text = GUIDE.read_text()
-    assert 'TBD-API-160' not in text and '<!-- release:' in text
+    # API-164 resolved the release placeholders: no TBD limits and no release markers remain.
+    assert 'TBD-API-160' not in text and '<!-- release:' not in text
     assert 'not calibrated' in text and 'rearranged_steps' in text and 'monotone' in text
     assert '50 credits per\nmillion tokens' in text or '50 credits per million tokens' in text
     assert 'https://docs.ergodic.dev/forecast-with-welt.html' in text

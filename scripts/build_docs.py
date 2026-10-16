@@ -520,7 +520,7 @@ def current_redirect(page):
 
 
 # Published historical documentation folders (v<version>/), oldest first.
-HISTORICAL_VERSIONS = ('0.6.0', '0.7.0', '0.7.1', '0.8.0', '0.9.1', '0.10.0', '0.10.1', '0.11.0', '0.11.1', '0.12.0')
+HISTORICAL_VERSIONS = ('0.6.0', '0.7.0', '0.7.1', '0.8.0', '0.9.1', '0.10.0', '0.10.1', '0.11.0', '0.11.1', '0.12.0', '0.13.1')
 
 
 def release_tuple(version):
@@ -592,6 +592,10 @@ def notebook_actions(name, version):
 MODELS_SNAPSHOT = ROOT / 'docs/models-snapshot.json'
 PUBLIC_CATALOGUE = 'https://welt.ergodic.dev/v1/models'
 TASK_LABELS = {'classification': 'Classification', 'regression': 'Regression', 'causal_discovery': 'Causal discovery'}
+# API-164: forecasting profiles publish measured corners (context x variates x series x horizon),
+# not rows x columns, so the Models table leaves them to the forecasting guide and the
+# capabilities Forecasting row instead of refusing the public chronos-2 entry.
+FORECASTING_TASKS = ('univariate_forecasting', 'forecasting')
 
 
 def available_models():
@@ -607,7 +611,7 @@ def available_models():
     rows, minimums = [], set()
     for model in snapshot['models']:
         for task in model['tasks']:
-            if task['status'] != 'available' or not task['execution_available']:
+            if task['status'] != 'available' or not task['execution_available'] or task['task'] in FORECASTING_TASKS:
                 continue
             limits = task['limits']
             width = 'max_features' if 'max_features' in limits else 'max_columns'

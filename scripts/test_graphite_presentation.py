@@ -182,7 +182,8 @@ def test_guides_have_pager_markdown_source_edit_link_and_llms_index(site):
 def test_models_table_renders_only_available_snapshot_profiles(site):
     _, out, _ = site
     snapshot = json.loads(build_docs.MODELS_SNAPSHOT.read_text())
-    available = {(m['id'], t['task']) for m in snapshot['models'] for t in m['tasks'] if t['status'] == 'available' and t['execution_available']}
+    available = {(m['id'], t['task']) for m in snapshot['models'] for t in m['tasks'] if t['status'] == 'available' and t['execution_available']
+                 and t['task'] not in build_docs.FORECASTING_TASKS}
     planned = {m['id'] for m in snapshot['models'] if not any(t['status'] == 'available' for t in m['tasks'])}
     for page in ('capabilities.html', 'index.html'):
         table = (out / page).read_text().split('aria-label="Available models"', 1)[1].split('</table>', 1)[0]
@@ -225,6 +226,23 @@ def test_models_table_lists_every_admitted_shape_as_context(tmp_path):
     path.write_text(json.dumps(snapshot))
     with patch.object(build_docs, 'MODELS_SNAPSHOT', path), pytest.raises(SystemExit, match='neither shapes'):
         build_docs.models_table()
+
+
+def test_models_table_leaves_forecasting_profiles_to_the_forecasting_guide(tmp_path):
+    # API-164: the public chronos-2 entry has corners, not shapes or max_rows; the table skips it.
+    snapshot = {'source': build_docs.PUBLIC_CATALOGUE, 'taken_at': '2026-10-16T00:00:00Z', 'models': [
+        {'id': 'wide', 'name': 'Wide', 'tasks': [{'task': 'classification', 'status': 'available', 'execution_available': True,
+         'limits': {'max_rows': 8000, 'max_columns': 20}, 'shapes': [{'rows': 8000, 'columns': 20}]}]},
+        {'id': 'chronos-2', 'name': 'Chronos-2', 'tasks': [
+            {'task': 'univariate_forecasting', 'status': 'available', 'execution_available': True,
+             'limits': {}, 'shapes': []},
+            {'task': 'forecasting', 'status': 'available', 'execution_available': True,
+             'limits': {}, 'shapes': []}]}]}
+    path = tmp_path / 'snapshot.json'
+    path.write_text(json.dumps(snapshot))
+    with patch.object(build_docs, 'MODELS_SNAPSHOT', path):
+        table, text = build_docs.models_table(), build_docs.models_markdown()
+    assert table.count('<tr>') == 2 and 'chronos-2' not in table and 'chronos-2' not in text
 
 
 def test_navigation_covers_every_guide_once(site):
