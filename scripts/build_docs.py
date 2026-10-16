@@ -870,7 +870,7 @@ def main():
     downloads=out/'downloads'; downloads.mkdir(exist_ok=True)
     for source in (ROOT/'examples/notebooks').glob('*'):
         if source.suffix in ('.ipynb','.py','.md'):shutil.copy2(source,downloads/source.name)
-    for name in ('first_prediction.py', 'first_request.py', 'forecasting.py', 'evaluation.py'):
+    for name in ('first_prediction.py', 'first_request.py', 'forecasting.py', 'forecasting_covariates.py', 'evaluation.py'):
         shutil.copy2(ROOT/'examples'/name, downloads/name)
     search=[]
     titles={}
@@ -922,7 +922,7 @@ def main():
             path.write_text(current_redirect(path.name))
     if (base/'v0.8.0/downloads').exists():
         for source in downloads.iterdir():
-            if source.is_file() and source.name not in ('forecasting.py', 'evaluation.py'):
+            if source.is_file() and source.name not in ('forecasting.py', 'forecasting_covariates.py', 'evaluation.py'):
                 shutil.copy2(source, base/'v0.8.0/downloads'/source.name)
     print(f'Built {len(pages)} guides plus landing for SDK {version}; no credentials or live model execution')
 

@@ -229,6 +229,7 @@ welt run --input forecast.json --idempotency-key forecast-00000001
 welt forecast --input request.json --idempotency-key forecast-00000002  # servers with the forecasting task
 welt jobs wait job_returned --timeout 600
 welt model-runs delete job_returned --yes
+welt forecasts delete forecast_job_returned --yes
 ```
 
 `forecast.json` uses the task payload in [Hidden model runs](model-runs.md).
@@ -241,7 +242,9 @@ enforces workspace access.
 `run` returns a durable job, and `jobs wait` returns its native task-specific JSON
 result. These bounded runs create no reusable fitted predictor. Deleting a terminal run
 explicitly purges both its private input and result, while job, replay and usage
-metadata remain.
+metadata remain. `welt forecasts delete ID --yes` (`Client.delete_forecast(id)`) does the
+same for a finished forecast; workspace datasets it read are not deleted. See
+[forecasting](forecasting.md#submit-now-collect-later).
 
 ## Next steps
 

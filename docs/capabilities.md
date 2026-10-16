@@ -10,13 +10,16 @@ what is still planned.
 
 The bounded upstream TabICLv2, Kumo Tabular Medium, TabDPT 1.3 and Mitra-v2 previews
 each have separately qualified classification and regression tasks. Arrow / ArrowFM,
-CDFM and AVICI each qualify observational discovery.
+CDFM and AVICI each qualify observational discovery. Chronos-2 forecasts time series
+within its measured envelopes.
+<!-- release: API-164. Until API-160 qualifies the corners and API-164 releases, chronos-2 is hidden and forecasts are unpriced; this sentence and the Forecasting row below describe the release. -->
 
 | Task | Qualified models | Notes |
 | --- | --- | --- |
 | Classification | TabICLv2, Kumo Tabular Medium, TabDPT 1.3, Mitra-v2 | Predictions and class probabilities. |
 | Regression | TabICLv2, Kumo Tabular Medium, TabDPT 1.3, Mitra-v2 | Returns mean points with its explicit constant-target policy. |
 | Observational causal discovery | Arrow / ArrowFM, CDFM, AVICI | Finite continuous variables, no supervised target. |
+| Forecasting | Chronos-2 (from the forecasting release) | One series or a panel, several targets, past and known-future covariates (numeric or categorical). Median and native quantiles, not calibrated intervals. See the [forecasting guide](forecasting.md). |
 
 Each model's context shapes, prediction rows per call and classes are in
 [Available models](#available-models).
@@ -30,6 +33,8 @@ This is not a claim to reproduce publisher benchmark recipes.
 
 ## Available models
 
+<!-- release: refresh models snapshot after API-164 flips chronos-2 public -->
+
 {{models-table}}
 
 What "context" means depends on the task:
@@ -39,12 +44,13 @@ What "context" means depends on the task:
   predicts. Prediction rows are separate: up to 100 per direct call, more with batch
   prediction.
 - **Causal discovery:** the whole table, with every column a variable.
-- **Forecasting:** the history of one series. Forecasting uses the hidden `chronos-2`
-  model, which your workspace must be granted access to; see
-  [forecast a time series](forecasting.md) for its history and horizon limits. Where
-  the server offers the `forecasting` task (SDK 0.14), the context is each series'
-  history, and limits are published per model as envelopes of context length,
-  variates (targets plus covariates), series count and horizon.
+- **Forecasting:** each series' history, counted in rows. Chronos-2's limits are
+  envelopes: measured corners of context (the longest series), variates (targets plus
+  past and future covariates), series count and horizon. A request must fit inside one
+  corner on all four at once, and every series needs at least `min_context` rows. Read
+  them with `client.model("chronos-2")["forecast_envelopes"]`; see
+  [check the limits](forecasting.md#limits). Servers without the `forecasting` task
+  offer only the univariate run, with 16–512 observations and a horizon of 1–64.
 
 A shape caps both axes at once. TabICLv2 refuses 6,000 rows × 30 features (plus the
 target): 8,000 × 20 is too narrow and 4,000 × 40 too short. Use 4,000 rows or 20
@@ -64,7 +70,8 @@ features instead.
 | Resumable files and true large batch jobs | Released sync and async upload-session, chunk and file resume, and batch methods. The server sets the enabled formats, parser envelopes and batch limits. Estimator file convenience reads still load into memory. |
 | Metadata export, recipes and deletion plans | `export_metadata()` returns pinned server provenance. Recipes and deletion plans require released routes. There is no executable, context or credential export. |
 | Causal discovery and Ergodic | ArrowFM is a bounded observational preview (limits in the table above), native DAG, owned scores and durable reopening. `to_ergodic()` converts a declared native DAG into an [ergodic]({{ergodic-docs}}) graph with `welt-client[ergodic]` (ergodic>=0.2,<0.3). CDFM preserves native directed output and its adaptive threshold. AVICI preserves native directed output and strict >0.5 decoding with fixed native PRNG 0. CDFM and AVICI both refuse to convert any graph that is not a declared DAG, including acyclic directed output. The remaining engines are gated. |
-| Confidence and conformal | Native probabilities are not calibrated coverage or conformal intervals; conformal comes later. |
+| Forecasting | `Forecast` sends one request per call for every series and target, with past and known-future covariates; limits come from published envelopes. No backtest, history update or hierarchy reconciliation in the SDK; ergodic adds them ([Forecast with Welt's Chronos-2](https://docs.ergodic.dev/forecast-with-welt.html)). See the [forecasting guide](forecasting.md). |
+| Confidence and conformal | Native probabilities and forecast quantiles are not calibrated coverage or conformal intervals; conformal comes later. |
 
 <details markdown="1"><summary>What do the scikit-learn, version and cache checks cover?</summary>
 
