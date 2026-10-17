@@ -1,6 +1,6 @@
 {
   "source": "https://welt.ergodic.dev/v1/models",
-  "taken_at": "2026-10-17T09:56:02Z",
+  "taken_at": "2026-10-17T19:13:10Z",
   "models": [
     {
       "id": "welt",
@@ -412,6 +412,32 @@
           "limits": {},
           "shapes": []
         },
+        {
+          "task": "forecasting",
+          "status": "available",
+          "execution_available": true,
+          "limits": {},
+          "shapes": []
+        }
+      ]
+    },
+    {
+      "id": "timestral-209m",
+      "name": "Timestral-209M",
+      "tasks": [
+        {
+          "task": "forecasting",
+          "status": "available",
+          "execution_available": true,
+          "limits": {},
+          "shapes": []
+        }
+      ]
+    },
+    {
+      "id": "timestral-28m",
+      "name": "Timestral-28M",
+      "tasks": [
         {
           "task": "forecasting",
           "status": "available",

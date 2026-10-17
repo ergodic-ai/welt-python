@@ -1,4 +1,4 @@
-# 0.14.1 (RELEASE_DATE) — Timestral forecasting
+# 0.14.1 (2026-10-17) — Timestral forecasting
 
 SDK side of the public Timestral release (API-174, DEC-088). `timestral-209m` (primary) and
 `timestral-28m` (small) use the same `POST /v1/forecasts` contract, `Forecast` calls, result
