@@ -1,4 +1,4 @@
-# 0.14.0 (RELEASE_DATE) — Forecasting panels and covariates
+# 0.14.0 (2026-10-17) — Forecasting panels and covariates
 
 SDK side of public Chronos-2 forecasting (DEC-085 §7, API-161). It needs a server that
 advertises the `forecasting` task. Against older servers, univariate forecasting behaves as in
