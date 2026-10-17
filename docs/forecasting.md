@@ -485,8 +485,10 @@ print({store: r.series[0].predictions[:3] for store, r in forecasts.items()})
 - **Same price.** A Timestral forecast is priced exactly like a Chronos-2 forecast
   (rate card `2026-10-v3`, the [same formula](#pricing)). Each series is its own
   request, so each pays the 5-credit minimum.
-- SDK 0.14.0 also forecasts single series with Timestral, but reports a panel as
-  `workload_limit`; 0.14.1 names it `unsupported_capability`.
+- SDK 0.14.0 also forecasts single series with Timestral, but reports a DataFrame
+  panel as `workload_limit` (its local corner check); a panel given as a dataset ID is
+  sent and gets the server's `unsupported_capability`. 0.14.1 refuses a DataFrame panel
+  locally with `unsupported_capability` too.
 
 At release, both sizes publish these three measured corners, single series only, and
 every series needs at least 16 rows (`min_context`):

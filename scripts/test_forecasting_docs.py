@@ -197,5 +197,12 @@ def test_timestral_steps_run_against_the_fixture(service, capsys):
            for p in stores]
     assert ids == [{'north'}, {'south'}] and all(p['id_column'] == 'store' for p in stores)
     assert set(namespace['forecasts']) == {'north', 'south'}
-    # The example fits the first published corner (365 rows x 2 variates x 1 series x 14 steps).
-    assert any(365 <= c and 2 <= v and n == 1 and 14 <= h for c, v, n, h in TIMESTRAL_MEASURED[:1])
+    # Every posted request is one series of 365 rows with 2 variates (sales, promo) and a
+    # 14-row future at horizon 14, inside the first published corner.
+    context, variates, series, horizon = TIMESTRAL_MEASURED[0]
+    for post in service.posts:
+        rows, columns = post['history']['table']['rows'], post['history']['table']['columns']
+        width = len(post['targets']) + len(post.get('past_covariates', [])) + len(post.get('future_covariates', []))
+        keys = {row[columns.index(post['id_column'])] for row in rows} if 'id_column' in post else {None}
+        assert (len(rows), width, len(keys), post['horizon'], len(post['future']['table']['rows'])) == (365, 2, 1, 14, 14)
+        assert len(rows) <= context and width <= variates and len(keys) <= series and post['horizon'] <= horizon
