@@ -1,3 +1,37 @@
+# 0.14.1 (RELEASE_DATE) — Timestral forecasting
+
+SDK side of the public Timestral release (API-174, DEC-088). `timestral-209m` (primary) and
+`timestral-28m` (small) use the same `POST /v1/forecasts` contract, `Forecast` calls, result
+and pricing as Chronos-2, and the catalogue lists them after Chronos-2. They forecast one series
+per request.
+
+## Changed
+
+- **Panel refusal names the capability.** When a model's forecasting configuration publishes
+  `supports_panels: false` (Timestral), `Forecast.fit` refuses a history with more than one
+  series before any request with `InvalidInputError` code `unsupported_capability` and the hint
+  to send one request per series. 0.14.0 refused the same panel as `workload_limit` ("reduce
+  series"), because the single-series corners admit no panel. The field is read from the
+  forecasting task profile like the envelopes; only an explicit `false` refuses, so Chronos-2,
+  models without the field and older servers keep panels.
+- Dataset histories (whose series only the server sees) and `welt forecast` send the request
+  as before; the server refuses a panel with 422 `unsupported_capability`, raised as
+  `InvalidInputError` with that code.
+
+## Documentation
+
+- Forecasting guide: [forecast with Timestral](https://ergodic-ai.github.io/welt-python/forecasting.html#timestral), with a
+  one-series example, a panel sent as one request per series, the differences from Chronos-2
+  (no cross-learning, categorical covariates need one target, histories up to 32,000 rows, the
+  publisher's symmetric averaging and non-negative clipping), the three published
+  single-series corners (32,000 × 10, 16,000 × 20 and 8,000 × 50 context × variates, horizon
+  1,024, `min_context` 16), the price (the Chronos-2 rate, rate card `2026-10-v3`) and the
+  attribution notice: "2026 - Mistral AI", Modified MIT licence, linked for both sizes.
+- Capabilities, README, CLI and model-runs pages name Timestral and its one-series rule; the
+  docs fixture serves both Timestral entries, and the docs tests pin their corners and
+  attribution.
+- Unchanged: the request and result schemas, the univariate API, runtime dependencies.
+
 # 0.14.0 (2026-10-17) — Forecasting panels and covariates
 
 SDK side of public Chronos-2 forecasting (DEC-085 §7, API-161). It needs a server that
