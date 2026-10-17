@@ -121,6 +121,11 @@ MEASURED = [(8000, 50, 1, 1024), (8000, 5, 8, 1024), (4000, 10, 8, 1024), (2000,
             (2000, 5, 32, 256), (1000, 50, 8, 256), (512, 20, 32, 256)]
 
 
+def corners(text):
+    rows = re.findall(r'^\| ([\d,]+) \| (\d+) \| (\d+) \| ([\d,]+) \|$', text, re.M)
+    return [tuple(int(v.replace(',', '')) for v in row) for row in rows]
+
+
 def admitting(context, variates, series, horizon):
     return [c for c in MEASURED if context <= c[0] and variates <= c[1] and series <= c[2] and horizon <= c[3]]
 
@@ -129,8 +134,7 @@ def test_fixture_and_guide_publish_exactly_the_measured_corners():
     fixture = [tuple(c[k] for k in ('max_context', 'max_variates', 'max_series', 'max_horizon'))
                for c in ForecastSyntheticService.envelopes]
     assert fixture == MEASURED and ForecastSyntheticService().metadata()['min_context'] == 16
-    rows = re.findall(r'^\| ([\d,]+) \| (\d+) \| (\d+) \| ([\d,]+) \|$', GUIDE.read_text(), re.M)
-    assert [tuple(int(v.replace(',', '')) for v in row) for row in rows] == MEASURED
+    assert corners(GUIDE.read_text().split(TIMESTRAL_HEADING)[0]) == MEASURED
 
 
 def test_published_examples_fit_a_measured_corner():
@@ -139,3 +143,59 @@ def test_published_examples_fit_a_measured_corner():
     assert (1000, 50, 8, 256) in admitting(392, 4, 5, 28)
     assert admitting(392, 1, 5, 28)
     assert not admitting(365, 5, 3, 100_000)  # the guide's error example stays refused
+
+
+# API-174: Timestral's published single-series corners (DEC-088 publication addendum, both sizes)
+# and the attribution notice and licence links recorded in DEC-088 and the model manifest.
+TIMESTRAL_HEADING = '## Forecast with Timestral {#timestral}'
+TIMESTRAL_MEASURED = [(32000, 10, 1, 1024), (16000, 20, 1, 1024), (8000, 50, 1, 1024)]
+TIMESTRAL_LICENCES = {
+    'timestral-209m': 'https://huggingface.co/mistralai/Timestral-209M/blob/9874d252ab0aae16f7f7c999f98f98d6ad7d8365/LICENSE',
+    'timestral-28m': 'https://huggingface.co/mistralai/Timestral-28M/blob/180698bbf5a50dda3516aa6419798437fb03a430/LICENSE'}
+
+
+def timestral_section():
+    return GUIDE.read_text().split(TIMESTRAL_HEADING, 1)[1].split('\n## ', 1)[0]
+
+
+def test_timestral_fixture_and_guide_publish_exactly_its_three_corners():
+    fixture = ForecastSyntheticService()
+    for model in TIMESTRAL_LICENCES:
+        meta = fixture.metadata(model)
+        assert [tuple(c[k] for k in ('max_context', 'max_variates', 'max_series', 'max_horizon'))
+                for c in meta['forecast_envelopes']] == TIMESTRAL_MEASURED
+        assert meta['min_context'] == 16 and meta['configuration']['supports_panels'] is False
+        assert meta['attribution'] == dict(notice='2026 - Mistral AI', licence='Modified MIT',
+                                           licence_url=TIMESTRAL_LICENCES[model])
+    assert corners(timestral_section()) == TIMESTRAL_MEASURED
+    assert all(series == 1 for _, _, series, _ in TIMESTRAL_MEASURED)
+
+
+def test_guide_shows_the_timestral_attribution_and_one_series_rule():
+    section = timestral_section()
+    notice = section.split('!!! note "Timestral attribution"', 1)[1]
+    assert '2026 - Mistral AI' in notice and 'Modified MIT' in notice
+    assert all(url in notice for url in TIMESTRAL_LICENCES.values())
+    assert 'listed after' in GUIDE.read_text().split(TIMESTRAL_HEADING)[0] and 'after Chronos-2' in section
+    assert 'one series per request' in section.lower() and 'supports_panels: false' in section
+    assert 'unsupported_capability' in section and '2026-10-v3' in section
+
+
+def test_timestral_steps_run_against_the_fixture(service, capsys):
+    programs = re.findall(r'```python file="forecast_timestral.py"\n(.*?)```', GUIDE.read_text(), re.S)
+    assert len(programs) == 2
+    namespace = {}
+    for program in programs:
+        exec(compile(program, 'forecast_timestral.py', 'exec'), namespace)
+    out = capsys.readouterr().out
+    assert '2026 - Mistral AI' in out and 'unsupported_capability' in out
+    # One covariate request, then one request per store: the refused panel sent nothing.
+    first, *stores = service.posts
+    assert all(p['model_id'] == 'timestral-209m' for p in service.posts) and len(stores) == 2
+    assert 'id_column' not in first and first['future_covariates'] == ['promo'] and first['horizon'] == 14
+    ids = [{row[p['history']['table']['columns'].index('store')] for row in p['history']['table']['rows']}
+           for p in stores]
+    assert ids == [{'north'}, {'south'}] and all(p['id_column'] == 'store' for p in stores)
+    assert set(namespace['forecasts']) == {'north', 'south'}
+    # The example fits the first published corner (365 rows x 2 variates x 1 series x 14 steps).
+    assert any(365 <= c and 2 <= v and n == 1 and 14 <= h for c, v, n, h in TIMESTRAL_MEASURED[:1])
