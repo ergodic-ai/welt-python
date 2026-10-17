@@ -191,11 +191,24 @@ and `predictions()` are DataFrames, `show()` displays the HTML report in Jupyter
 or later and a server release with evaluations; an older server raises `NotFoundError` with
 `code="evaluations_unavailable"`. [Evaluations guide](https://ergodic-ai.github.io/welt-python/evaluations.html).
 
-## Forecast a time series
+## Forecast time series
 
-`Forecast` snapshots regular timezone-aware history and submits guarded zero-shot
-Chronos-2 runs. It requires SDK 0.11 or later and the matching server capability.
-
-Supply your own 16–512 finite observations and a horizon of 1–64. Fit uploads no history;
-each prediction call creates one run. Native quantiles are not calibrated
-intervals. [Forecast guide](https://ergodic-ai.github.io/welt-python/forecasting.html).
+`Forecast(model="chronos-2")` forecasts one series or a long-format panel with
+Chronos-2. Fit with `time`, an optional `id` column, one or more `target` columns, and
+`past_covariates`, `future_covariates` and `categorical` drivers; then call
+`forecast(horizon, future=known_future_table)`. One request covers every series and
+target, and `to_frame()` returns one row per series, target and step with the median
+and `q_<level>` quantiles. Limits come from the model's published envelopes
+(`client.model("chronos-2")["forecast_envelopes"]`), and from the forecasting release a
+forecast is priced at the prediction rate per token: Σ (history rows + horizon) ×
+(targets + covariates), rounded up.
+Quantiles are not calibrated intervals; crossed native quantiles are sorted and
+counted in `rearranged_steps`. Panels and covariates need SDK 0.14 and a server with
+the `forecasting` task. History and future can also be workspace dataset IDs; tables are
+sent inline, never uploaded automatically, and bodies above 10 MiB are refused before
+sending. `client.delete_forecast(id)` removes a finished forecast's input and result.
+The univariate `predict` API from SDK 0.11 stays supported.
+[Forecast guide](https://ergodic-ai.github.io/welt-python/forecasting.html) ·
+[tutorial notebook](https://ergodic-ai.github.io/welt-python/notebook-forecasting-with-covariates.html) ·
+Use Chronos-2 inside ergodic's backtest and reconcile:
+https://docs.ergodic.dev/forecast-with-welt.html

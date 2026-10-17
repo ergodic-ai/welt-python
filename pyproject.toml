@@ -1,6 +1,6 @@
 [project]
 name = "welt-client"
-version = "0.13.1"
+version = "0.14.0"
 description = "Welt Python client and scikit-learn estimators"
 readme = "README.md"
 license = "Apache-2.0"
@@ -15,7 +15,7 @@ welt = "welt.cli:main"
 parquet = ["pyarrow>=19,<30"]
 research = ["pandas>=2.2,<4", "pyarrow>=19,<30"]
 # DEC-078: to_ergodic() checks ergodic.GRAPH_FORMAT; this range is tested in CI.
-ergodic = ["ergodic>=0.2,<0.3"]
+ergodic = ["ergodic>=0.2,<0.4"]
 
 [dependency-groups]
 dev = ["pytest>=8,<10", "nbformat>=5,<6", "nbclient>=0.10,<1", "ipykernel>=6,<8", "markdown>=3.7,<4", "pyarrow>=19,<30"]

@@ -10,13 +10,15 @@ what is still planned.
 
 The bounded upstream TabICLv2, Kumo Tabular Medium, TabDPT 1.3 and Mitra-v2 previews
 each have separately qualified classification and regression tasks. Arrow / ArrowFM,
-CDFM and AVICI each qualify observational discovery.
+CDFM and AVICI each qualify observational discovery. Chronos-2 forecasts time series
+within its measured envelopes.
 
 | Task | Qualified models | Notes |
 | --- | --- | --- |
 | Classification | TabICLv2, Kumo Tabular Medium, TabDPT 1.3, Mitra-v2 | Predictions and class probabilities. |
 | Regression | TabICLv2, Kumo Tabular Medium, TabDPT 1.3, Mitra-v2 | Returns mean points with its explicit constant-target policy. |
 | Observational causal discovery | Arrow / ArrowFM, CDFM, AVICI | Finite continuous variables, no supervised target. |
+| Forecasting | Chronos-2 (from the forecasting release) | One series or a panel, several targets, past and known-future covariates (numeric or categorical). Median and native quantiles, not calibrated intervals. See the [forecasting guide](forecasting.md). |
 
 Each model's context shapes, prediction rows per call and classes are in
 [Available models](#available-models).
@@ -30,6 +32,8 @@ This is not a claim to reproduce publisher benchmark recipes.
 
 ## Available models
 
+<!-- Models snapshot: refresh docs/models-snapshot.json with scripts/snapshot_models.py from the live public /v1/models after each catalogue change reaches production (see CONTRIBUTING.md). The 0.14.0 refresh runs after the API-164 promotion, when chronos-2 is listed. -->
+
 {{models-table}}
 
 What "context" means depends on the task:
@@ -39,9 +43,13 @@ What "context" means depends on the task:
   predicts. Prediction rows are separate: up to 100 per direct call, more with batch
   prediction.
 - **Causal discovery:** the whole table, with every column a variable.
-- **Forecasting:** the history of one series. Forecasting uses the hidden `chronos-2`
-  model, which your workspace must be granted access to; see
-  [forecast a time series](forecasting.md) for its history and horizon limits.
+- **Forecasting:** each series' history, counted in rows. Chronos-2's limits are
+  envelopes: measured corners of context (the longest series), variates (targets plus
+  past and future covariates), series count and horizon. A request must fit inside one
+  corner on all four at once, and every series needs at least `min_context` rows. Read
+  them with `client.model("chronos-2")["forecast_envelopes"]`; see
+  [check the limits](forecasting.md#limits). Servers without the `forecasting` task
+  offer only the univariate run, with 16–512 observations and a horizon of 1–64.
 
 A shape caps both axes at once. TabICLv2 refuses 6,000 rows × 30 features (plus the
 target): 8,000 × 20 is too narrow and 4,000 × 40 too short. Use 4,000 rows or 20
@@ -60,8 +68,9 @@ features instead.
 | Cross-validated evaluations | Up to 8 classification or regression models (or every eligible one) on the same seeded folds, 2–10 folds, with a leaderboard, fold metrics, seven-day out-of-fold predictions, an HTML report and signed report links. Each training fold must fit the model limits above; larger tables are refused unless you opt into `sample_rows`. No time-ordered splits yet. See [evaluations](evaluations.md). |
 | Resumable files and true large batch jobs | Released sync and async upload-session, chunk and file resume, and batch methods. The server sets the enabled formats, parser envelopes and batch limits. Estimator file convenience reads still load into memory. |
 | Metadata export, recipes and deletion plans | `export_metadata()` returns pinned server provenance. Recipes and deletion plans require released routes. There is no executable, context or credential export. |
-| Causal discovery and Ergodic | ArrowFM is a bounded observational preview (limits in the table above), native DAG, owned scores and durable reopening. `to_ergodic()` converts a declared native DAG into an [ergodic]({{ergodic-docs}}) graph with `welt-client[ergodic]` (ergodic>=0.2,<0.3). CDFM preserves native directed output and its adaptive threshold. AVICI preserves native directed output and strict >0.5 decoding with fixed native PRNG 0. CDFM and AVICI both refuse to convert any graph that is not a declared DAG, including acyclic directed output. The remaining engines are gated. |
-| Confidence and conformal | Native probabilities are not calibrated coverage or conformal intervals; conformal comes later. |
+| Causal discovery and Ergodic | ArrowFM is a bounded observational preview (limits in the table above), native DAG, owned scores and durable reopening. `to_ergodic()` converts a declared native DAG into an [ergodic]({{ergodic-docs}}) graph with `welt-client[ergodic]` (ergodic>=0.2,<0.4). CDFM preserves native directed output and its adaptive threshold. AVICI preserves native directed output and strict >0.5 decoding with fixed native PRNG 0. CDFM and AVICI both refuse to convert any graph that is not a declared DAG, including acyclic directed output. The remaining engines are gated. |
+| Forecasting | `Forecast` sends one request per call for every series and target, with past and known-future covariates; limits come from published envelopes. No backtest, history update or hierarchy reconciliation in the SDK; ergodic adds them ([Forecast with Welt's Chronos-2](https://docs.ergodic.dev/forecast-with-welt.html)). See the [forecasting guide](forecasting.md). |
+| Confidence and conformal | Native probabilities and forecast quantiles are not calibrated coverage or conformal intervals; conformal comes later. |
 
 <details markdown="1"><summary>What do the scikit-learn, version and cache checks cover?</summary>
 
@@ -115,11 +124,13 @@ the packages is a versioned graph format, not a package version.
 
 | ergodic | welt-client | Graph format | Python for the Welt link |
 | --- | --- | --- | --- |
+| 0.3.x | 0.14 or later | `ergodic.graph/1` | 3.11, 3.12, 3.13 |
 | 0.2.x | 0.13 or later | `ergodic.graph/1` | 3.11, 3.12, 3.13 |
 | 0.1.x | none | none | none |
 
-- `pip install "welt-client[ergodic]"` adds `ergodic>=0.2,<0.3`.
-- `pip install "ergodic[welt]"` adds `welt-client>=0.13` on Python 3.11 to 3.13.
+- `pip install "welt-client[ergodic]"` adds `ergodic>=0.2,<0.4`.
+- `pip install "ergodic[welt]"` adds `welt-client>=0.14` on Python 3.11 to 3.13
+  (`>=0.13` for ergodic 0.2).
 
 Only a graph that Welt declares a native DAG converts:
 

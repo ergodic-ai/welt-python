@@ -142,7 +142,7 @@ print(graph.is_dag())
 
 <details markdown="1"><summary>How is the ergodic dependency checked?</summary>
 
-The extra installs `ergodic>=0.2,<0.3`. Conversion checks the graph format the
+The extra installs `ergodic>=0.2,<0.4`. Conversion checks the graph format the
 installed package reads (`ergodic.GRAPH_FORMAT`, currently `ergodic.graph/1`), not its
 version. A missing package, or one without a supported format such as ergodic 0.1,
 raises a typed `OptionalDependencyError` that names the extra. Welt never downloads a

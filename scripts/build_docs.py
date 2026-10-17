@@ -25,7 +25,7 @@ from welt.causal import ERGODIC_DOCS_URL
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = "https://ergodic-ai.github.io/welt-python"
 REQUIRED = ('Client', 'Job', 'Classifier', 'Regressor', 'AsyncClient', 'AsyncJob',
-            'CausalDiscovery', 'CausalResult', 'Forecast', 'ForecastResult', 'ForecastJob', 'AsyncForecastJob',
+            'CausalDiscovery', 'CausalResult', 'Forecast', 'ForecastResult', 'ForecastSeries', 'ForecastJob', 'AsyncForecastJob',
             'Evaluation', 'AsyncEvaluation', 'ReportLink')
 # DEC-073: top sections and the guide sidebar. Order defines the previous/next pager.
 NAV = [('Get started', 'start'), ('Guides', 'own-data'), ('Reference', 'reference'), ('Models', 'capabilities'), ('CLI', 'cli')]
@@ -102,10 +102,18 @@ PARAMS = {
     'CausalResult': {'payload': 'Native result payload. Usually obtained from discover() or causal_result(), not built by hand.'},
     'Forecast': {'model': 'Forecast model ID.', 'configuration': "Model configuration. This version accepts only 'default'.",
                  'base_url': _CONNECTION['base_url'], 'api_key': _CONNECTION['api_key'], 'workspace': _CONNECTION['workspace'],
-                 'timeout': 'Seconds a blocking prediction waits locally. The run keeps going when it runs out.'},
-    'ForecastResult': {'payload': 'Native forecast payload, validated on construction.', 'job_id': 'ID of the run that produced it.'},
+                 'timeout': 'Seconds a blocking prediction waits locally. The run keeps going when it runs out.',
+                 'client': 'An existing welt.Client to borrow (for example with your own transport) instead of opening one per call. Mutually exclusive with base_url, api_key and workspace; never closed by the estimator or its jobs; clones share it.'},
+    'ForecastResult': {'payload': 'A forecasting or univariate_forecasting result payload, validated on construction.', 'job_id': 'ID of the run that produced it.'},
     'ForecastJob': {'job': 'Underlying Job handle.', 'expected': 'Request expectations the result must match.',
                     'owns_client': 'True when closing this job should also close its client.'},
+    'ForecastSeries': {'id': 'Series ID rendered as a string; None without an id column.',
+                       'target': 'Target column; None for model-run results.',
+                       'context_length': 'Observations the model used for this series.',
+                       'quantile_levels': 'Quantile levels, in the column order of quantiles.',
+                       'timestamps': 'Future UTC timestamps (ISO 8601), one per horizon step.',
+                       'predictions': 'Native medians, one per step.',
+                       'quantiles': 'Native quantile rows, one per step.'},
     'AsyncForecastJob': {'job': 'Underlying AsyncJob handle.'},
     'Evaluation': {'client': 'The Client the evaluation borrows for its reads.',
                    'payload': 'Evaluation resource. Usually obtained from evaluate(), submit_evaluation() or evaluation(), not built by hand.'},
@@ -165,19 +173,23 @@ METHODS.update({'workspace': ('Inspect the credential workspace, role, metadata 
 METHODS.update({
  'model': ('Inspect a catalogue model or explicitly named hidden model under current workspace authority.', 'Model metadata dictionary; hidden entries carry tasks, limits, resolved version/configuration, rights and availability.', 'NotFoundError for unknown or licence-restricted entries; unavailable native worker remains explicit.'),
  'submit_model_run': ('Submit one bounded hidden-model run with an explicit task payload and replay key.', 'Job or awaited AsyncJob. Job.result() returns the task-specific result dictionary.', 'Input/envelope, licence scope, worker availability, capacity or idempotency conflicts. No fitted predictor is created; resubmission with a new key executes again.'),
+ 'submit_forecast': ('Submit one raw POST /v1/forecasts request (DEC-085) with a replay key and optional paired model/configuration version guards. Prefer Forecast, which validates history, limits and results.', 'Job or awaited AsyncJob. Job.result() returns the forecasting result dictionary; forecast_job(job.id) returns a validated ForecastResult.', 'Input/envelope (workload_limit), unsupported capability, worker availability, capacity, version (409) or idempotency conflicts. Mutations never auto-retry; replay the same body and key after a transport failure.'),
+ 'delete_forecast': ('Explicitly purge an owned terminal forecast\'s stored input and result (DELETE /v1/forecasts/{id}).', 'Deletion dictionary {id, deleted: true}; job identity, idempotency and usage remain.', 'NotFoundError for foreign/missing/non-forecast jobs; ConflictError (operation_conflict) for an active forecast. Workspace datasets it read are not deleted.'),
  'delete_model_run': ('Explicitly purge an owned terminal model run input and result.', 'Deletion dictionary {id, deleted: true}; job identity, idempotency and usage remain.', 'NotFoundError for foreign/missing/non-model-run jobs; conflict for an active run. Subsequent result retrieval is NotFoundError.')})
 
 
 METHODS.update({
- 'forecast_job': ('Reconnect to a typed forecast run without submitting work; a regular factory on both clients.', 'ForecastJob or AsyncForecastJob borrowing this client; typed ForecastResult after waiting.', 'Task/identity/provenance validation on inspect/result/cancel; authorization and remote errors. Reconnect cannot reconstruct the original request context.'),
- 'predict_quantiles': ('Submit one guarded zero-shot forecast run with owned history and native quantile levels.', 'numpy.ndarray, shape (horizon, n_quantiles), in requested level order.', 'Unfitted or changed context/connection, invalid horizon/levels, version conflicts, availability, capacity, execution, JobTimeoutError or InvalidForecastResultError.'),
- 'to_frame': ('Copy native future UTC rows into a DataFrame; no remote call.', 'pandas.DataFrame with median and q_<level> columns.', 'No result repair, calibrated coverage or evaluation claim.'),
- 'to_dict': ('Return an independent JSON-compatible copy of the native result.', 'Dictionary preserving native result fields; job_id remains a separate property.', 'No remote call; mutations do not affect the immutable result.')})
+ 'forecast_job': ('Reconnect to a typed forecast job (forecasting or legacy univariate run) without submitting work; a regular factory on both clients.', 'ForecastJob or AsyncForecastJob borrowing this client; typed ForecastResult after waiting.', 'Task/identity/provenance validation on inspect/result/cancel; authorization and remote errors. Reconnect cannot reconstruct the original request context.'),
+ 'predict_quantiles': ('Submit one guarded zero-shot forecast for a single series and target with owned history and native quantile levels; future supplies known future covariates.', 'numpy.ndarray, shape (horizon, n_quantiles), in requested level order.', 'Unfitted or changed context/connection, a panel or several targets (use forecast), invalid horizon/levels/future, published-envelope limits (InvalidInputError workload_limit), version conflicts, availability, capacity, execution, JobTimeoutError or InvalidForecastResultError.'),
+ 'to_frame': ('Copy native future UTC rows into a DataFrame; no remote call.', 'Forecasting results: long pandas.DataFrame with id, target, timestamp (UTC), median and q_<level> columns, one row per series, target and step. Legacy univariate results: UTC-indexed median and q_<level> columns.', 'No result repair beyond the server-reported rearranged_steps, no calibrated coverage or evaluation claim.'),
+ 'to_dict': ('Return an independent JSON-compatible copy of the result.', 'Dictionary of the result fields; job_id remains a separate property. Causal and forecasting results keep the native wire fields; a univariate Forecast fit returns the 0.13-shaped univariate_forecasting view on either route, derived from the server result on the forecasting route.', 'No remote call; mutations do not affect the immutable result.')})
 FORECAST_METHODS = {
- 'fit': ('Copy and validate local univariate history, then resolve workspace/model versions. No history upload, predictor or training job.', 'The same fitted Forecast (self); zero-shot context only.', 'ValueError before transport for invalid history/time/parameters; authentication, metadata or unsupported-capability errors. Failed refit clears old context.'),
- 'predict': ('Submit one guarded run with copied history; wait within timeout.', 'numpy.ndarray, shape (horizon,), containing native medians.', METHODS['predict_quantiles'][2]),
- 'predict_details': ('Submit one guarded run, wait and validate native provenance and exact request expectations.', 'Immutable ForecastResult; properties and conversions share this one run.', METHODS['predict_quantiles'][2]),
- 'submit_predict': ('Submit one guarded durable forecast without waiting; retain job.id.', 'ForecastJob owning its new client; close explicitly or use a context manager.', METHODS['predict_quantiles'][2])}
+ 'fit': ('Copy and validate local history (long-format DataFrame with time, optional id, one or more targets and past/future/categorical covariates; one Series/array; or an existing workspace dataset ID, whose rows only the server validates), then resolve the route, workspace/model versions and published limits. Long-format naive timestamps are read as UTC; the univariate form still requires timezone-aware times. No history upload, predictor or training job.', 'The same fitted Forecast (self); zero-shot context only.', 'ValueError before transport for invalid history/time/frequency/parameters; InvalidInputError (a ValueError; workload_limit) when no published envelope or min_context admits the history, or unsupported_capability when panels, covariates, dataset histories or calendar frequencies meet a server without the forecasting task; authentication or metadata errors. Failed refit clears old context.'),
+ 'forecast': ('Submit one guarded POST /v1/forecasts request for every series and target, wait within timeout and validate the result against the request.', 'Immutable ForecastResult. Long-format and dataset fits: task forecasting with series, to_frame() in long format and rearranged_steps. Univariate fits: the 0.13-shaped univariate_forecasting result.', 'Invalid horizon/levels/future, published-envelope limits (InvalidInputError workload_limit), unsupported capability on servers without the forecasting task, version conflicts, availability, capacity, execution, JobTimeoutError or InvalidForecastResultError.'),
+ 'submit_forecast': ('Submit one guarded forecast without waiting; retain job.id. DataFrame tables travel inline; dataset IDs travel by reference. Replaying the same call with the same idempotency_key sends the same body and reconnects.', 'ForecastJob owning its new client, or borrowing Forecast(client=…); close explicitly or use a context manager.', 'Same as forecast; InvalidInputError (workload_limit) before any request when the encoded body exceeds MAX_REQUEST_BYTES (the default 10 MiB body limit of the API; a deployment override is not reflected).'),
+ 'predict': ('Submit one guarded run for a single series and target with copied history (POST /v1/forecasts when the server offers forecasting, otherwise the legacy model run); wait within timeout.', 'numpy.ndarray, shape (horizon,), containing native medians.', METHODS['predict_quantiles'][2]),
+ 'predict_details': ('Submit one guarded run, wait and validate native provenance and exact request expectations.', 'Immutable ForecastResult; properties and conversions share this one run. Univariate fits keep the 0.13 to_dict() schema and UTC-indexed to_frame() on either route.', METHODS['predict_quantiles'][2]),
+ 'submit_predict': ('Submit one guarded durable forecast without waiting; retain job.id.', 'ForecastJob owning its new client, or borrowing Forecast(client=…); close explicitly or use a context manager.', METHODS['predict_quantiles'][2])}
 METHODS.update({
  'submit_evaluation': ('Cross-validate models on a dataset ID, or upload a DataFrame, array, CSV or Parquet table with its target first. Empty models lets Welt choose every eligible model. Options are checked locally before any upload.', 'Evaluation (await for AsyncClient: AsyncEvaluation) with its ID, models, skipped models and estimated_credits.', 'ValueError for invalid options, targets or split columns before upload; InvalidInputError for server refusals (codes invalid_input, workload_limit, budget_exceeded, no_eligible_models with error.details); ModelUnavailableError; ConflictError for a reused key with different inputs; NotFoundError code evaluations_unavailable on a server without evaluations; TransportError names the dataset ID and key for a replay. Not retried automatically.'),
  'evaluate': ('Submit an evaluation and wait for it within a local timeout.', 'Finished Evaluation or AsyncEvaluation; partially_completed returns with an EvaluationWarning.', 'Submission errors; ExecutionError when no model finished; JobCancelledError; JobTimeoutError naming the evaluation, which keeps running.'),
@@ -258,10 +270,14 @@ def reference():
             parts.append('Immutable native result. Read `id`, `dataset_id`, `job_id`, `variables`, `edge_marks`, `native_graph_type`, `model_version`, `configuration_version`, `score_reference`, `decoder`, `assumptions` and `diagnostics`. The result retains no HTTP client or credentials. Scores remain a separate authenticated read.')
         if name == 'Forecast':
             parts.append('Zero-shot local history context, not a durable Predictor. See [forecasting](forecasting.md) for input/time/version/ownership rules; no score or automatic cross-validation contract.')
+            parts.append('**fit parameters.** `history`: a long-format DataFrame (one row per series ID and time, any order), a workspace dataset ID (or a dataset dictionary with `id`; the server validates its rows), a Series with a DatetimeIndex, or an array with `start` and `frequency_seconds`. `time`: the time column. `target`: one column name or a list, forecast jointly. `id`: the series column; absent means one series. `past_covariates`: columns observed in the history only. `future_covariates`: columns also known for the horizon, supplied through `forecast(future=...)`. `categorical`: covariates holding string or integer categories; missing cells are allowed in past covariates only. `frequency`: `{"unit", "every"}` with unit second, minute, hour, day, week, month, quarter or year, or an alias from `welt.forecast.FREQUENCY_ALIASES` (`s`, `min`/`T`, `h`/`H`, `D`, `W`, `M`/`MS`/`ME`, `Q`/`QS`/`QE`, `Y`/`YS`/`YE`/`A`/`AS`, optionally prefixed by a multiple such as `15min`); without it the spacing is checked locally and the server infers it. Long-format naive timestamps are read as UTC; the univariate form (array, Series, or one string target without id or covariates) requires timezone-aware times and at least 16 observations.')
+            parts.append('**forecast parameters.** `horizon`: steps after each series\' last observation, within a published envelope. `future`: required exactly when the fit named future covariates; a DataFrame with exactly the time, id and future covariate columns and `horizon` rows per series at its next timestamps, or a workspace dataset ID. `quantile_levels`: an increasing subset of the levels the model publishes (by default the 21 native levels 0.01, 0.05, 0.10, …, 0.95, 0.99); the request default is (0.1, 0.5, 0.9). `cross_learning`: True lets series share information. DataFrame tables travel inline; a body above `welt.forecast.MAX_REQUEST_BYTES` (10 MiB, the default body limit of the Welt API; the server does not publish its limit, so a deployment override of `WELT_HTTP_BODY_BYTES` is not reflected) is refused locally with `InvalidInputError` (`workload_limit`): upload the table (for example `Client.upload_file`) and pass its dataset ID. With `client=`, pickling drops the client; set `estimator.client` again after unpickling.')
         if name == 'Evaluation':
             parts.append('Cross-validated comparison handle; see [evaluations](evaluations.md). Properties: id, status, stage, finished, task, dataset_id, target, rows, primary_metric, positive_class, classes, models, skipped, estimated_credits, credits (settled, None until then), runtime, comparison, warnings and predictions_expires_at. Values are owned copies. Reads borrow the client.')
+        if name == 'ForecastSeries':
+            parts.append('One (series ID, target) forecast of a ForecastResult, from `result.series`; not built by hand. Properties `timestamps` (UTC DatetimeIndex), `predictions` (shape (horizon,)) and `quantiles` (shape (horizon, n_quantiles)) return owned copies; `id`, `target`, `context_length` and `quantile_levels` are plain values.')
         if name == 'ForecastResult':
-            parts.append('Immutable native result with job_id, model_id, model_version, configuration, timestamps, predictions, quantile_levels and quantiles properties. Arrays/dictionaries are owned copies; native medians and quantiles carry no calibrated coverage claim.')
+            parts.append('Immutable result with job_id, task, model_id, model_version, configuration, horizon, frequency, cross_learning, columns, quantile_levels, rearranged_steps and series (ForecastSeries with id, target, context_length, timestamps, predictions and quantiles) properties. timestamps, predictions and quantiles are also available directly for a single series and target. Results of univariate fits keep the 0.13 univariate_forecasting to_dict() schema and UTC-indexed to_frame() on either route (frequency_seconds is None for calendar frequencies; rearranged_steps stays on the property). Unknown additional fields in a forecasting result are ignored; documented fields are required. Arrays/dictionaries are owned copies; native medians and quantiles carry no calibrated coverage claim.')
         for key, method in inspect.getmembers(obj, inspect.isroutine):
             supported_inherited_score = name in ('Classifier', 'Regressor') and key == 'score'
             if key.startswith('_') or not (method.__module__.startswith('welt') or supported_inherited_score):
@@ -504,7 +520,7 @@ def current_redirect(page):
 
 
 # Published historical documentation folders (v<version>/), oldest first.
-HISTORICAL_VERSIONS = ('0.6.0', '0.7.0', '0.7.1', '0.8.0', '0.9.1', '0.10.0', '0.10.1', '0.11.0', '0.11.1', '0.12.0')
+HISTORICAL_VERSIONS = ('0.6.0', '0.7.0', '0.7.1', '0.8.0', '0.9.1', '0.10.0', '0.10.1', '0.11.0', '0.11.1', '0.12.0', '0.13.1')
 
 
 def release_tuple(version):
@@ -576,6 +592,10 @@ def notebook_actions(name, version):
 MODELS_SNAPSHOT = ROOT / 'docs/models-snapshot.json'
 PUBLIC_CATALOGUE = 'https://welt.ergodic.dev/v1/models'
 TASK_LABELS = {'classification': 'Classification', 'regression': 'Regression', 'causal_discovery': 'Causal discovery'}
+# API-164: forecasting profiles publish measured corners (context x variates x series x horizon),
+# not rows x columns, so the Models table leaves them to the forecasting guide and the
+# capabilities Forecasting row instead of refusing the public chronos-2 entry.
+FORECASTING_TASKS = ('univariate_forecasting', 'forecasting')
 
 
 def available_models():
@@ -591,7 +611,7 @@ def available_models():
     rows, minimums = [], set()
     for model in snapshot['models']:
         for task in model['tasks']:
-            if task['status'] != 'available' or not task['execution_available']:
+            if task['status'] != 'available' or not task['execution_available'] or task['task'] in FORECASTING_TASKS:
                 continue
             limits = task['limits']
             width = 'max_features' if 'max_features' in limits else 'max_columns'
@@ -663,7 +683,7 @@ def pager(name, version, link):
 def reference_index(link):
     """Class index for the single reference page; every link is an existing anchor."""
     groups = [('Connect', ('Client', 'AsyncClient')), ('Predict', ('Classifier', 'Regressor')),
-              ('Discover', ('CausalDiscovery', 'CausalResult')), ('Forecast', ('Forecast', 'ForecastResult', 'ForecastJob', 'AsyncForecastJob')),
+              ('Discover', ('CausalDiscovery', 'CausalResult')), ('Forecast', ('Forecast', 'ForecastResult', 'ForecastSeries', 'ForecastJob', 'AsyncForecastJob')),
               ('Evaluate', ('Evaluation', 'AsyncEvaluation', 'ReportLink')),
               ('Long-running work', ('Job', 'AsyncJob')),
               ('Errors', ())]
@@ -854,7 +874,7 @@ def main():
     downloads=out/'downloads'; downloads.mkdir(exist_ok=True)
     for source in (ROOT/'examples/notebooks').glob('*'):
         if source.suffix in ('.ipynb','.py','.md'):shutil.copy2(source,downloads/source.name)
-    for name in ('first_prediction.py', 'first_request.py', 'forecasting.py', 'evaluation.py'):
+    for name in ('first_prediction.py', 'first_request.py', 'forecasting.py', 'forecasting_covariates.py', 'evaluation.py'):
         shutil.copy2(ROOT/'examples'/name, downloads/name)
     search=[]
     titles={}
@@ -906,7 +926,7 @@ def main():
             path.write_text(current_redirect(path.name))
     if (base/'v0.8.0/downloads').exists():
         for source in downloads.iterdir():
-            if source.is_file() and source.name not in ('forecasting.py', 'evaluation.py'):
+            if source.is_file() and source.name not in ('forecasting.py', 'forecasting_covariates.py', 'evaluation.py'):
                 shutil.copy2(source, base/'v0.8.0/downloads'/source.name)
     print(f'Built {len(pages)} guides plus landing for SDK {version}; no credentials or live model execution')
 
