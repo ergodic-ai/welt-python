@@ -612,8 +612,11 @@ def _capabilities(meta, model, value):
             except (KeyError, TypeError, ValueError):
                 raise WeltError("Invalid forecasting metadata: version, configuration, forecast_envelopes "
                                 "and min_context are required.", code="invalid_response") from None
+            # API-174: a forecasting configuration may declare supports_panels false (Timestral):
+            # one series per request. An absent field, or any other value, keeps panels (Chronos-2).
+            panels = view["configuration"].get("supports_panels") is not False
             return dict(task="forecasting", model_version=model_version, configuration=config,
-                        envelopes=corners, min_context=minimum, levels=levels)
+                        envelopes=corners, min_context=minimum, levels=levels, panels=panels)
     view = _view(meta, "univariate_forecasting")
     operations = view.get("operations") if isinstance(view.get("operations"), list) else []
     if ("univariate_forecasting" in tasks and "model_run" in operations
@@ -636,8 +639,16 @@ def _corner(c):
             f"horizon ≤ {c['max_horizon']}")
 
 
-def _admit(envelopes, model, context, variates, series, horizon):
-    """A request is admitted when some published corner dominates it (no interpolation)."""
+def _admit(envelopes, model, context, variates, series, horizon, panels=True):
+    """A request is admitted when some published corner dominates it (no interpolation).
+
+    A model whose forecasting configuration declares supports_panels false forecasts one series
+    per request: a panel is refused as unsupported_capability, before the corners are read."""
+    if series > 1 and not panels:
+        raise InvalidInputError(
+            f"{model} forecasts one series per request (supports_panels is false), and this history holds "
+            f"{series} series. Send one request per series: fit and forecast each series separately.",
+            code="unsupported_capability")
     if not any(context <= c["max_context"] and variates <= c["max_variates"] and series <= c["max_series"]
                and horizon <= c["max_horizon"] for c in envelopes):
         raise InvalidInputError(
@@ -1228,7 +1239,9 @@ class Forecast(BaseEstimator):
         Limits come from the model's published forecast_envelopes and min_context and are
         checked after reading metadata (InvalidInputError, a ValueError, code
         workload_limit). The univariate form also keeps its 0.13 minimum of 16
-        observations before any request.
+        observations before any request. A model whose forecasting configuration declares
+        supports_panels false (Timestral) forecasts one series per request: a history with
+        more than one series raises InvalidInputError with code unsupported_capability.
         """
         self._clear_fitted()
         plan = _history(history, time, target, id, past_covariates, future_covariates, categorical,
@@ -1251,7 +1264,8 @@ class Forecast(BaseEstimator):
                 if lengths is not None and min(lengths) < route["min_context"]:
                     raise InvalidInputError(f"Each series needs at least {route['min_context']} observations "
                                             f"(min_context of {self.model}).", code="workload_limit")
-                _admit(route["envelopes"], self.model, max(lengths or [1]), variates, len(lengths or [1]), 1)
+                _admit(route["envelopes"], self.model, max(lengths or [1]), variates, len(lengths or [1]), 1,
+                       route["panels"])
             else:
                 if plan["legacy"] is None:
                     raise InvalidInputError(
@@ -1338,7 +1352,8 @@ class Forecast(BaseEstimator):
         if idempotency_key is not None and safe_id(idempotency_key) is None:
             raise ValueError("idempotency_key must be a bounded opaque identifier.")
         variates = len(plan["targets"]) + len(plan["past"]) + len(plan["future"])
-        _admit(route["envelopes"], self.model, self.context_length_ or 1, variates, self.n_series_ or 1, horizon)
+        _admit(route["envelopes"], self.model, self.context_length_ or 1, variates, self.n_series_ or 1, horizon,
+               route.get("panels", True))
         future_source = _future_source(plan, future, horizon)
         canon = None if plan["canon"] is None else tuple(plan["canon"])
         expected_series = None

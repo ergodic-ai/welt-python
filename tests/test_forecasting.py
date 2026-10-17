@@ -46,9 +46,11 @@ class Service:
         self.result_change = lambda value: None
         self.catalogue = []
         self.fail_post = False
+        self.model_id = 'chronos-2'
+        self.panels = None          # the server's supports_panels refusal (API-166 Timestral) when False
 
     def metadata(self):
-        return dict(id='chronos-2', version=self.version, configuration={'version': self.configuration},
+        return dict(id=self.model_id, version=self.version, configuration={'version': self.configuration},
                     operations=self.operations, tasks=self.tasks, supports_version_expectations=True,
                     limits={'min_context': 16, 'max_context': 512, 'max_horizon': 64},
                     forecast_envelopes=self.envelopes, min_context=self.min_context, quantile_levels=LEVELS)
@@ -99,7 +101,7 @@ class Service:
             return httpx.Response(200, json={'id': 'workspace-a', 'slug': 'example'})
         if path == '/v1/models':
             return httpx.Response(200, json={'items': self.catalogue})
-        if path == '/v1/models/chronos-2':
+        if path == f'/v1/models/{self.model_id}':
             return httpx.Response(200, json=self.metadata())
         if path == '/v1/datasets' and request.method == 'POST':
             body = json.loads(request.content)
@@ -111,6 +113,14 @@ class Service:
                 raise httpx.ConnectError('dropped')
             body = json.loads(request.content)
             self.posts.append((body, dict(request.headers)))
+            if self.panels is False and 'id_column' in body:
+                history = self.table(body['history'])
+                index = history['columns'].index(body['id_column'])
+                if len({str(row[index]) for row in history['rows']}) > 1:
+                    return httpx.Response(422, json={'error': {
+                        'code': 'unsupported_capability',
+                        'message': 'This model forecasts one series per request; submit each series separately '
+                                   '(requests with more than one series are refused).'}})
             if (request.headers.get('X-Welt-Model-Version') != self.version
                     or request.headers.get('X-Welt-Configuration-Version') != self.configuration):
                 return httpx.Response(409, json={'error': {'code': 'model_version_mismatch', 'message': 'Refit.'}})
@@ -120,7 +130,7 @@ class Service:
                         return httpx.Response(409, json={'error': {'code': 'idempotency_conflict', 'message': 'x'}})
                     return httpx.Response(202, json=self.jobs[job][0])
             name = 'fc-' + str(len(self.jobs) + 1)
-            job = dict(id=name, operation='forecast', task='forecasting', model_id='chronos-2',
+            job = dict(id=name, operation='forecast', task='forecasting', model_id=self.model_id,
                        model_version=self.version, resolved_configuration={'version': self.configuration},
                        status=self.status, predictor_id=None)
             self.jobs[name] = (job, body, request.headers['Idempotency-Key'])
@@ -874,3 +884,103 @@ def test_delete_forecast_sync_async_and_cli(capsys):
     assert asyncio.run(run())['deleted'] and svc.jobs[job.id][0]['purged']
     deletes = [r for r in svc.requests if r.method == 'DELETE']
     assert len(deletes) == 3 and all(r.url.path == f'/v1/forecasts/{job.id}' for r in deletes)
+
+
+# --- API-174: models whose forecasting configuration declares supports_panels false -----------
+
+TIMESTRAL_CORNERS = [dict(max_context=32000, max_variates=10, max_series=1, max_horizon=1024),
+                     dict(max_context=16000, max_variates=20, max_series=1, max_horizon=1024),
+                     dict(max_context=8000, max_variates=50, max_series=1, max_horizon=1024)]
+
+
+def timestral(service):
+    """The public catalogue entry shape of a forecasting-only model with supports_panels false."""
+    service.model_id, service.panels, service.envelopes = 'timestral-209m', False, TIMESTRAL_CORNERS
+    service.version, service.configuration = 'timestral-209m-v1', 'timestral-209m-forecast-v2'
+    config = {'version': service.configuration, 'supports_panels': False, 'supports_cross_learning': False,
+              'supports_categorical_with_multiple_targets': False}
+    profile = dict(task='forecasting', status='available', version=service.version, operations=['forecast'],
+                   limits={'min_context': 16}, configuration=config, supports_version_expectations=True,
+                   forecast_envelopes=TIMESTRAL_CORNERS, min_context=16, quantile_levels=LEVELS)
+    meta = dict(id='timestral-209m', name='Timestral-209M', family='forecasting', tasks=['forecasting'],
+                status='available', version=service.version, operations=['forecast'], limits={'min_context': 16},
+                configuration=config, supports_version_expectations=True, task_profiles=[profile],
+                forecast_envelopes=TIMESTRAL_CORNERS, min_context=16, quantile_levels=LEVELS,
+                attribution=dict(notice='2026 - Mistral AI', licence='Modified MIT', licence_url='https://example.invalid/LICENSE'))
+    service.metadata = lambda: meta
+    service.catalogue = [meta]
+    return meta
+
+
+def test_supports_panels_false_refuses_a_panel_locally_with_unsupported_capability(service):
+    timestral(service)
+    with pytest.raises(InvalidInputError, match='one series per request') as error:
+        Forecast(model='timestral-209m').fit(panel(), time='date', id='store', target=['sales'])
+    assert error.value.code == 'unsupported_capability' and isinstance(error.value, ValueError)
+    assert 'Send one request per series' in str(error.value) and '2 series' in str(error.value)
+    assert 'reduce' not in str(error.value)            # not the workload_limit hint
+    assert not service.posts
+    # One request per series: an id column naming one series, or no id at all, is admitted.
+    frame = panel()
+    for sid in ('b', 'a'):
+        model = Forecast(model='timestral-209m').fit(frame[frame['store'] == sid], time='date', id='store',
+                                                     target=['sales'], past_covariates=['temperature'])
+        assert model.n_series_ == 1 and model.configuration_version_ == 'timestral-209m-forecast-v2'
+        result = model.forecast(1024)
+        assert [s.id for s in result.series] == [sid] and result.model_id == 'timestral-209m'
+        assert service.posts[-1][0]['id_column'] == 'store' and service.posts[-1][0]['model_id'] == 'timestral-209m'
+    alone = Forecast(model='timestral-209m').fit(frame[frame['store'] == 'a'], time='date', target=['sales'])
+    assert alone.forecast(3).series[0].id is None and 'id_column' not in service.posts[-1][0]
+    with pytest.raises(InvalidInputError) as error:     # the published corners still bound one series
+        alone.forecast(1025)
+    assert error.value.code == 'workload_limit' and 'series ≤ 1' in str(error.value)
+    assert len(service.posts) == 3
+
+
+def test_supports_panels_absent_or_not_false_keeps_panels(service, monkeypatch):
+    for value in (None, True, 'no', 0):
+        config = {'version': service.configuration}
+        if value is not None:
+            config['supports_panels'] = value
+        meta = dict(Service.metadata(service), configuration=config)
+        monkeypatch.setattr(service, 'metadata', lambda meta=meta: meta)
+        assert fitted_panel().n_series_ == 2
+    # A Forecast fitted by 0.14.0 (its route has no panels field) still forecasts its panel.
+    model = fitted_panel()
+    model._route_ = forecast_module._freeze({k: v for k, v in forecast_module._thaw(model._route_).items()
+                                             if k != 'panels'})
+    assert len(model.forecast(2, future=future(panel(), 2)).series) == 4
+
+
+def test_supports_panels_false_dataset_panel_is_refused_by_the_server(service):
+    timestral(service)
+    frame = panel()
+    service.datasets['ds_panel'] = dict(columns=['date', 'store', 'sales'], rows=[
+        [d.isoformat(), s, v] for d, s, v in zip(frame['date'], frame['store'], frame['sales'])])
+    model = Forecast(model='timestral-209m').fit('ds_panel', time='date', id='store', target=['sales'])
+    assert model.n_series_ is None                      # a dataset's series are known only to the server
+    with pytest.raises(InvalidInputError, match='one series per request') as error:
+        model.forecast(14)
+    assert error.value.code == 'unsupported_capability' and error.value.status_code == 422
+    assert len(service.posts) == 1
+
+
+def test_cli_forecast_surfaces_the_server_panel_refusal(tmp_path):
+    svc = Service()
+    timestral(svc)
+    svc.version = svc.configuration = None              # raw CLI submissions send no version guards
+    rows = [[f'2026-01-{d:02d}T00:00:00Z', sid, float(d)] for sid in ('a', 'b') for d in range(1, 21)]
+    request = dict(model_id='timestral-209m', time_column='t', id_column='id', targets=['y'], past_covariates=[],
+                   future_covariates=[], categorical_covariates=[], horizon=1, quantile_levels=[.5],
+                   cross_learning=False, history={'table': {'columns': ['t', 'id', 'y'], 'rows': rows}})
+    path = tmp_path / 'request.json'
+    path.write_text(json.dumps(request))
+    with Client(api_key='fixture', transport=httpx.MockTransport(svc.handle)) as client:
+        with pytest.raises(InvalidInputError, match='submit each series separately') as error:
+            _run(_parser().parse_args(['forecast', '--input', str(path), '--idempotency-key', 'cli-panel']), client)
+    assert error.value.code == 'unsupported_capability'
+    request['history']['table']['rows'] = rows[:20]     # one series per request is admitted
+    path.write_text(json.dumps(request))
+    with Client(api_key='fixture', transport=httpx.MockTransport(svc.handle)) as client:
+        assert _run(_parser().parse_args(['forecast', '--input', str(path), '--idempotency-key', 'cli-one']),
+                    client)['job_id'] == 'fc-1'
