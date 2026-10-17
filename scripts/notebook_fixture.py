@@ -215,16 +215,40 @@ class ForecastSyntheticService:
     envelopes = [dict(max_context=c, max_variates=v, max_series=n, max_horizon=h) for c, v, n, h in (
         (8000, 50, 1, 1024), (8000, 5, 8, 1024), (4000, 10, 8, 1024), (2000, 20, 8, 1024),
         (2000, 5, 32, 256), (1000, 50, 8, 256), (512, 20, 32, 256))]
+    # API-174: Timestral's three published single-series corners (DEC-088 publication addendum),
+    # its supports_panels false refusal and its attribution; the same wire contract otherwise.
+    timestral_envelopes = [dict(max_context=c, max_variates=v, max_series=1, max_horizon=1024)
+                           for c, v in ((32000, 10), (16000, 20), (8000, 50))]
+    timestral_licences = {
+        'timestral-209m': ('Timestral-209M', 'https://huggingface.co/mistralai/Timestral-209M/blob/'
+                           '9874d252ab0aae16f7f7c999f98f98d6ad7d8365/LICENSE'),
+        'timestral-28m': ('Timestral-28M', 'https://huggingface.co/mistralai/Timestral-28M/blob/'
+                          '180698bbf5a50dda3516aa6419798437fb03a430/LICENSE')}
 
     def __init__(self):
         self.jobs, self.posts = {}, []
 
     def handles(self, path):
-        return (path in ('/v1/models/chronos-2', '/v1/forecasts')
+        return (path in ('/v1/forecasts', '/v1/models/chronos-2', *(f'/v1/models/{m}' for m in self.timestral_licences))
                 or path.startswith('/v1/jobs/forecast-'))
 
-    def metadata(self):
-        return dict(id='chronos-2', family='forecasting', status='available', tasks=['forecasting'],
+    def versions(self, model):
+        if model in self.timestral_licences:
+            return f'synthetic-{model}-v1', f'synthetic-{model}-forecast-v2'
+        return self.version, self.configuration
+
+    def metadata(self, model='chronos-2'):
+        if model in self.timestral_licences:
+            version, configuration = self.versions(model)
+            config = dict(version=configuration, supports_panels=False, supports_cross_learning=False,
+                          supports_categorical_with_multiple_targets=False)
+            name, licence_url = self.timestral_licences[model]
+            return dict(id=model, name=name, family='forecasting', status='available', tasks=['forecasting'],
+                        operations=['forecast'], version=version, configuration=config,
+                        supports_version_expectations=True, forecast_envelopes=self.timestral_envelopes,
+                        min_context=16, quantile_levels=FORECAST_LEVELS, limits=dict(min_context=16),
+                        attribution=dict(notice='2026 - Mistral AI', licence='Modified MIT', licence_url=licence_url))
+        return dict(id='chronos-2', name='Chronos-2', family='forecasting', status='available', tasks=['forecasting'],
                     operations=['forecast'], version=self.version,
                     configuration={'version': self.configuration}, supports_version_expectations=True,
                     forecast_envelopes=self.envelopes, min_context=16, quantile_levels=FORECAST_LEVELS,
@@ -274,8 +298,9 @@ class ForecastSyntheticService:
                 series.append(dict(id=key, target=target, context_length=len(members),
                                    timestamps=[s.isoformat().replace('+00:00', 'Z') for s in future],
                                    predictions=points, quantiles=quantiles))
-        return dict(task='forecasting', model_id=request['model_id'], model_version=self.version,
-                    configuration=self.configuration, horizon=request['horizon'], frequency=frequency,
+        version, configuration = self.versions(request['model_id'])
+        return dict(task='forecasting', model_id=request['model_id'], model_version=version,
+                    configuration=configuration, horizon=request['horizon'], frequency=frequency,
                     quantile_levels=request['quantile_levels'], point_semantics='median',
                     calibrated_intervals=False, cross_learning=request['cross_learning'], rearranged_steps=0,
                     columns=dict(time=request['time_column'], id=request.get('id_column'),
@@ -289,19 +314,26 @@ class ForecastSyntheticService:
         path, method = request.url.path, request.method
         if path == '/v1/workspace':
             return httpx.Response(200, json={'id': 'workspace-fixture'})
-        if path == '/v1/models':
-            return httpx.Response(200, json={'items': [self.metadata()]})
-        if path == '/v1/models/chronos-2':
-            return httpx.Response(200, json=self.metadata())
+        if path == '/v1/models':  # Timestral is listed after Chronos-2.
+            return httpx.Response(200, json={'items': [self.metadata(m) for m in ('chronos-2', *self.timestral_licences)]})
+        if path.startswith('/v1/models/'):
+            return httpx.Response(200, json=self.metadata(path.split('/')[3]))
         if path == '/v1/forecasts' and method == 'POST':
             body = json.loads(request.content)
             headers = request.headers
             assert 'dataset_id' not in body['history'], 'Fixture tables are sent inline.'
-            if (headers.get('X-Welt-Model-Version') != self.version
-                    or headers.get('X-Welt-Configuration-Version') != self.configuration):
+            version, configuration = self.versions(body['model_id'])
+            if (headers.get('X-Welt-Model-Version') != version
+                    or headers.get('X-Welt-Configuration-Version') != configuration):
                 return httpx.Response(409, json={'error': {'code': 'model_version_mismatch',
                                                            'message': 'Fit again.'}})
             self.posts.append(body)
+            table = body['history']['table']
+            if body['model_id'] in self.timestral_licences and 'id_column' in body and len(
+                    {str(row[table['columns'].index(body['id_column'])]) for row in table['rows']}) > 1:
+                return httpx.Response(422, json={'error': {'code': 'unsupported_capability', 'message': (
+                    'This model forecasts one series per request; submit each series separately '
+                    '(requests with more than one series are refused).')}})
             for job, previous, key in self.jobs.values():
                 if key == headers['Idempotency-Key']:
                     if previous != body:
@@ -310,7 +342,7 @@ class ForecastSyntheticService:
                     return httpx.Response(202, json=job)
             name = f'forecast-{len(self.jobs) + 1}'
             job = dict(id=name, operation='forecast', task='forecasting', model_id=body['model_id'],
-                       model_version=self.version, resolved_configuration={'version': self.configuration},
+                       model_version=version, resolved_configuration={'version': configuration},
                        status='succeeded', predictor_id=None)
             self.jobs[name] = (job, body, headers['Idempotency-Key'])
             return httpx.Response(202, json=job)

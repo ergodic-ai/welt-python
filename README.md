@@ -208,6 +208,11 @@ the `forecasting` task. History and future can also be workspace dataset IDs; ta
 sent inline, never uploaded automatically, and bodies above 10 MiB are refused before
 sending. `client.delete_forecast(id)` removes a finished forecast's input and result.
 The univariate `predict` API from SDK 0.11 stays supported.
+`Forecast(model="timestral-209m")` (or `timestral-28m`), listed after Chronos-2, uses the same
+calls and price but forecasts one series per request: SDK 0.14.1 refuses a panel before sending
+with `unsupported_capability`, so fit and forecast each series separately. Timestral weights:
+2026 - Mistral AI, Modified MIT licence ([Timestral-209M](https://huggingface.co/mistralai/Timestral-209M/blob/9874d252ab0aae16f7f7c999f98f98d6ad7d8365/LICENSE),
+[Timestral-28M](https://huggingface.co/mistralai/Timestral-28M/blob/180698bbf5a50dda3516aa6419798437fb03a430/LICENSE)) ([forecast with Timestral](https://ergodic-ai.github.io/welt-python/forecasting.html#timestral)).
 [Forecast guide](https://ergodic-ai.github.io/welt-python/forecasting.html) ·
 [tutorial notebook](https://ergodic-ai.github.io/welt-python/notebook-forecasting-with-covariates.html) ·
 Use Chronos-2 inside ergodic's backtest and reconcile:

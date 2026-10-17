@@ -235,7 +235,9 @@ welt forecasts delete forecast_job_returned --yes
 `forecast.json` uses the task payload in [Hidden model runs](model-runs.md).
 `welt forecast` submits a `POST /v1/forecasts` request body (history and future as
 dataset IDs or inline tables, column roles, horizon) and returns its job ID and
-idempotency key the same way.
+idempotency key the same way. It sends the body as written: for `timestral-209m` and
+`timestral-28m`, which forecast one series per request, the server refuses a history
+with more than one series with `unsupported_capability` (JSON on stderr, exit status 1).
 `models list` stays curated; inspect a hidden model by its exact ID. The server
 enforces workspace access.
 

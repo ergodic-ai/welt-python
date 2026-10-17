@@ -1,8 +1,10 @@
-# Forecast time series with Chronos-2
+# Forecast time series with Chronos-2 and Timestral
 
 Forecast one series or a whole panel with Chronos-2. Add several targets, drivers you
 only observe in the past, and drivers you know ahead of time. You get a median and
-native quantiles for every series, target and future step.
+native quantiles for every series, target and future step. Timestral, listed after
+Chronos-2, forecasts one series per request through the same calls; see
+[forecast with Timestral](#timestral).
 
 !!! need "You'll need"
     - `welt-client>=0.14.0`: `pip install "welt-client>=0.14"`.
@@ -356,7 +358,7 @@ except InvalidInputError as error:
 | `ValueError` | A local check failed: a gap, a repeated time, a missing future value, wrong future rows. | Fix the table. Nothing was sent. |
 | `InvalidInputError`, code `workload_limit` | No published corner admits the request, a series is shorter than `min_context`, or the request body is above 10 MiB. | Shorten the history, use fewer variates or series, or ask for a shorter horizon. For a large table, upload it and pass its dataset ID. |
 | `InvalidInputError`, code `invalid_input` | The server refused the request. | Read the message. It never repeats your cell values. |
-| `InvalidInputError`, code `unsupported_capability` | The server has no `forecasting` task, but you asked for a panel, covariates, a dataset history, a calendar frequency or `forecast()`. | Use the [univariate API](#forecast-a-univariate-time-series), or a current server. |
+| `InvalidInputError`, code `unsupported_capability` | The server has no `forecasting` task, but you asked for a panel, covariates, a dataset history, a calendar frequency or `forecast()`. Or the model doesn't offer what you asked for: a panel, `cross_learning=True`, or categorical covariates with several targets on [Timestral](#timestral). | Use the [univariate API](#forecast-a-univariate-time-series), or a current server. For Timestral, send one request per series, with `cross_learning=False`, and one target when you use categorical covariates. |
 | `ConflictError`, code `model_version_mismatch` or `configuration_version_mismatch` | The model changed after your `fit`. | Fit again. |
 | `ConflictError`, code `idempotency_conflict` | You reused a replay key with a different request. | Use a new key. |
 | `JobTimeoutError` | Your local wait ended. | [Reconnect](#submit-now-collect-later). The forecast keeps running. |
@@ -408,6 +410,104 @@ Forecast inputs and results stay private in your workspace until you delete them
 !!! tip "Backtest and reconcile in ergodic"
     Use Chronos-2 inside ergodic's backtest and reconcile:
     [Forecast with Welt's Chronos-2](https://docs.ergodic.dev/forecast-with-welt.html).
+
+## Forecast with Timestral {#timestral}
+
+Timestral is Mistral AI's forecasting model, in two sizes: `timestral-209m` (primary)
+and `timestral-28m` (small). The catalogue lists both after Chronos-2. They use the same
+`Forecast` calls, request, result and quantile levels as Chronos-2, with one
+difference that matters most: **one series per request**.
+
+```python file="forecast_timestral.py"
+import numpy as np
+import pandas as pd
+from welt import Client, Forecast
+
+# A year of simulated daily sales for one store, with planned Friday promotions.
+rng = np.random.default_rng(0)
+days = pd.date_range("2025-01-01", periods=365, freq="D")
+north = pd.DataFrame({"date": days,
+                      "sales": 120 * (1 + 0.3 * (days.dayofweek >= 5)) + rng.normal(0, 5, len(days))})
+north["promo"] = (north["date"].dt.dayofweek == 4).astype(int)
+
+model = Forecast(model="timestral-209m").fit(
+    north, time="date", target=["sales"], future_covariates=["promo"])
+ahead = pd.DataFrame({"date": pd.date_range("2026-01-01", periods=14, freq="D")})
+ahead["promo"] = (ahead["date"].dt.dayofweek == 4).astype(int)
+result = model.forecast(14, future=ahead)
+print(result.to_frame().head())
+
+with Client() as client:
+    timestral = client.model("timestral-209m")
+print(timestral["forecast_envelopes"])  # the published single-series corners
+print(timestral["attribution"]["notice"])  # 2026 - Mistral AI
+```
+
+A panel is refused before anything is sent. Fit and forecast each series on its own
+instead:
+
+```python file="forecast_timestral.py"
+from welt import InvalidInputError
+
+stores = pd.concat([north.assign(store="north"),
+                    north.assign(store="south", sales=0.75 * north["sales"])], ignore_index=True)
+try:
+    Forecast(model="timestral-209m").fit(stores, time="date", id="store", target=["sales"])
+except InvalidInputError as error:
+    print(error.code)  # unsupported_capability: one series per request
+
+forecasts = {}
+for store, rows in stores.groupby("store"):
+    single = Forecast(model="timestral-209m").fit(
+        rows, time="date", id="store", target=["sales"], future_covariates=["promo"])
+    forecasts[store] = single.forecast(14, future=ahead.assign(store=store))
+print({store: r.series[0].predictions[:3] for store, r in forecasts.items()})
+```
+
+- **One series per request.** The model's forecasting configuration publishes
+  `supports_panels: false`. `fit` raises `InvalidInputError` with code
+  `unsupported_capability` for a history with more than one series. A dataset history
+  is checked by the server, which refuses a panel with the same code. An `id` column
+  that names a single series is fine. The reason: when Welt qualified Timestral, a
+  series forecast inside a multi-series call didn't always match the same series
+  forecast alone, so no panel corner is published.
+- **No cross-learning.** `cross_learning=True` is refused (`unsupported_capability`).
+- **Categorical covariates need one target.** With several targets, categorical
+  covariates are refused (`unsupported_capability`). Forecast each target separately,
+  or encode the categories as numbers.
+- **Longer histories.** A series can have up to 32,000 rows (the native context is
+  32,768 steps); a longer one is refused, never truncated.
+- **Non-negative targets stay non-negative.** Welt keeps the publisher's defaults:
+  the forecast is averaged with the mirrored forecast of the negated history, and a
+  target whose history is entirely non-negative is clipped at 0, so it never gets a
+  negative quantile. The resolved configuration records both
+  (`symmetric_averaging`, `clip_nonnegative`).
+- **Same price.** A Timestral forecast is priced exactly like a Chronos-2 forecast
+  (rate card `2026-10-v3`, the [same formula](#pricing)). Each series is its own
+  request, so each pays the 5-credit minimum.
+- SDK 0.14.0 also forecasts single series with Timestral, but reports a DataFrame
+  panel as `workload_limit` (its local corner check); a panel given as a dataset ID is
+  sent and gets the server's `unsupported_capability`. 0.14.1 refuses a DataFrame panel
+  locally with `unsupported_capability` too.
+
+At release, both sizes publish these three measured corners, single series only, and
+every series needs at least 16 rows (`min_context`):
+
+| Context (rows) | Variates | Series | Horizon |
+| --- | --- | --- | --- |
+| 32,000 | 10 | 1 | 1,024 |
+| 16,000 | 20 | 1 | 1,024 |
+| 8,000 | 50 | 1 | 1,024 |
+
+The example above (365 rows × 2 variates × 1 series × 14 steps) fits the first. As for
+Chronos-2, read the corners from `client.model("timestral-209m")` rather than copying
+this table.
+
+!!! note "Timestral attribution"
+    Timestral weights: 2026 - Mistral AI. Licensed under the Modified MIT licence:
+    [Timestral-209M licence](https://huggingface.co/mistralai/Timestral-209M/blob/9874d252ab0aae16f7f7c999f98f98d6ad7d8365/LICENSE),
+    [Timestral-28M licence](https://huggingface.co/mistralai/Timestral-28M/blob/180698bbf5a50dda3516aa6419798437fb03a430/LICENSE).
+    Model metadata carries the same notice and link as `attribution`.
 
 ## Forecast one series with the univariate API {#forecast-a-univariate-time-series}
 
@@ -531,6 +631,7 @@ Delete with `client.delete_forecast(id)`. Only runs created on servers without t
 
 - [Forecasting notebook](notebook-forecasting-with-covariates.html): a retail panel with a holdout, a baseline, MASE and coverage.
 - [Chronos-2 in ergodic](https://docs.ergodic.dev/forecast-with-welt.html): backtest against baselines and reconcile a hierarchy.
+- [Forecast with Timestral](#timestral): one series per request, longer histories.
 - [Models and limits](capabilities.md): every model Welt runs and its published limits.
 - [Wait and recover](async-and-errors.md): typed errors and waiting.
 

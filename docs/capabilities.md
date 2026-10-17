@@ -11,7 +11,8 @@ what is still planned.
 The bounded upstream TabICLv2, Kumo Tabular Medium, TabDPT 1.3 and Mitra-v2 previews
 each have separately qualified classification and regression tasks. Arrow / ArrowFM,
 CDFM and AVICI each qualify observational discovery. Chronos-2 forecasts time series
-within its measured envelopes.
+within its measured envelopes, and Timestral (listed after Chronos-2) forecasts one series
+per request within its own.
 
 | Task | Qualified models | Notes |
 | --- | --- | --- |
@@ -19,6 +20,7 @@ within its measured envelopes.
 | Regression | TabICLv2, Kumo Tabular Medium, TabDPT 1.3, Mitra-v2 | Returns mean points with its explicit constant-target policy. |
 | Observational causal discovery | Arrow / ArrowFM, CDFM, AVICI | Finite continuous variables, no supervised target. |
 | Forecasting | Chronos-2 (from the forecasting release) | One series or a panel, several targets, past and known-future covariates (numeric or categorical). Median and native quantiles, not calibrated intervals. See the [forecasting guide](forecasting.md). |
+| Forecasting | Timestral-209M, Timestral-28M (listed after Chronos-2) | One series per request (a panel is refused with `unsupported_capability`), histories up to 32,000 rows, several targets, past and known-future covariates; no cross-learning, and categorical covariates need one target. Same request, result and price as Chronos-2. Weights: 2026 - Mistral AI, Modified MIT licence ([209M](https://huggingface.co/mistralai/Timestral-209M/blob/9874d252ab0aae16f7f7c999f98f98d6ad7d8365/LICENSE), [28M](https://huggingface.co/mistralai/Timestral-28M/blob/180698bbf5a50dda3516aa6419798437fb03a430/LICENSE)). See [forecast with Timestral](forecasting.md#timestral). |
 
 Each model's context shapes, prediction rows per call and classes are in
 [Available models](#available-models).
@@ -48,7 +50,10 @@ What "context" means depends on the task:
   past and future covariates), series count and horizon. A request must fit inside one
   corner on all four at once, and every series needs at least `min_context` rows. Read
   them with `client.model("chronos-2")["forecast_envelopes"]`; see
-  [check the limits](forecasting.md#limits). Servers without the `forecasting` task
+  [check the limits](forecasting.md#limits). Timestral publishes single-series corners
+  only (32,000 × 10, 16,000 × 20 and 8,000 × 50 context × variates, horizon 1,024 each),
+  because it forecasts one series per request; see
+  [forecast with Timestral](forecasting.md#timestral). Servers without the `forecasting` task
   offer only the univariate run, with 16–512 observations and a horizon of 1–64.
 
 A shape caps both axes at once. TabICLv2 refuses 6,000 rows × 30 features (plus the
@@ -69,7 +74,7 @@ features instead.
 | Resumable files and true large batch jobs | Released sync and async upload-session, chunk and file resume, and batch methods. The server sets the enabled formats, parser envelopes and batch limits. Estimator file convenience reads still load into memory. |
 | Metadata export, recipes and deletion plans | `export_metadata()` returns pinned server provenance. Recipes and deletion plans require released routes. There is no executable, context or credential export. |
 | Causal discovery and Ergodic | ArrowFM is a bounded observational preview (limits in the table above), native DAG, owned scores and durable reopening. `to_ergodic()` converts a declared native DAG into an [ergodic]({{ergodic-docs}}) graph with `welt-client[ergodic]` (ergodic>=0.2,<0.4). CDFM preserves native directed output and its adaptive threshold. AVICI preserves native directed output and strict >0.5 decoding with fixed native PRNG 0. CDFM and AVICI both refuse to convert any graph that is not a declared DAG, including acyclic directed output. The remaining engines are gated. |
-| Forecasting | `Forecast` sends one request per call for every series and target, with past and known-future covariates; limits come from published envelopes. No backtest, history update or hierarchy reconciliation in the SDK; ergodic adds them ([Forecast with Welt's Chronos-2](https://docs.ergodic.dev/forecast-with-welt.html)). See the [forecasting guide](forecasting.md). |
+| Forecasting | `Forecast` sends one request per call for every series and target, with past and known-future covariates; limits come from published envelopes. Timestral takes one series per request, so a panel is one request per series. No backtest, history update or hierarchy reconciliation in the SDK; ergodic adds them ([Forecast with Welt's Chronos-2](https://docs.ergodic.dev/forecast-with-welt.html)). See the [forecasting guide](forecasting.md). |
 | Confidence and conformal | Native probabilities and forecast quantiles are not calibrated coverage or conformal intervals; conformal comes later. |
 
 <details markdown="1"><summary>What do the scikit-learn, version and cache checks cover?</summary>

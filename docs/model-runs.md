@@ -21,7 +21,8 @@ submission.
     the `Forecast` estimator and `POST /v1/forecasts`, not a model run. See
     [forecast time series with Chronos-2](forecasting.md). The `chronos-2`
     `univariate_forecasting` run below stays supported for code written against SDK
-    0.11–0.13.
+    0.11–0.13. Timestral (`timestral-209m`, `timestral-28m`) is forecasting only and has
+    no model run.
 
 ## Exact model IDs
 
