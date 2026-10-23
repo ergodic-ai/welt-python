@@ -82,13 +82,25 @@ def test_guide_has_no_release_placeholders_and_honest_intervals():
     assert 'client.model("chronos-2")' in text
 
 
-def test_covariate_script_runs_end_to_end(service, capsys):
+def test_covariate_script_runs_end_to_end(service, capsys, monkeypatch):
+    monkeypatch.setattr("sys.argv", ["forecasting_covariates.py"])
     runpy.run_path(str(ROOT / 'examples/forecasting_covariates.py'), run_name='__main__')
     out = capsys.readouterr().out
     assert 'MASE' in out and 'coverage' in out
     (request,) = service.posts
     assert request['future_covariates'] == ['promo', 'holiday'] and request['past_covariates'] == ['temperature']
     assert request['categorical_covariates'] == ['holiday'] and request['horizon'] == 28
+
+
+@pytest.mark.parametrize('model', ['timestral-209m', 'timestral-28m'])
+def test_covariate_script_runs_one_timestral_series(service, capsys, monkeypatch, model):
+    monkeypatch.setattr('sys.argv', ['forecasting_covariates.py', '--model', model, '--store', 'berlin'])
+    runpy.run_path(str(ROOT / 'examples/forecasting_covariates.py'), run_name='__main__')
+    (request,) = service.posts
+    assert request['model_id'] == model and request['targets'] == ['sales']
+    assert {row[1] for row in request['history']['table']['rows']} == {'berlin'}
+    assert request['future_covariates'] == ['promo', 'holiday']
+    assert 'coverage' in capsys.readouterr().out
 
 
 def test_forecasting_notebook_cells_run_in_order(service, capsys):

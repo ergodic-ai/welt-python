@@ -109,6 +109,26 @@ each one:
 - **Categorical** names the covariates whose cells are labels (strings or integers)
   rather than amounts.
 
+The same arguments work with `model="chronos-2"`, `"timestral-209m"` and
+`"timestral-28m"`. Start with one series and `target=["sales"]` to use the same
+example across all three models; Chronos-2 also accepts panels within its published
+envelopes. Timestral accepts one series per request and needs one target when any
+covariate is categorical. From SDK 0.14.2, `fit` checks the model's categorical/
+multiple-target restriction locally, and `forecast(cross_learning=True)` checks
+its cross-learning restriction before submitting a job. SDK 0.14.0 and 0.14.1
+receive the same `unsupported_capability` error from the server.
+
+The downloadable [covariate script](downloads/forecasting_covariates.py) accepts
+the same model choices. To run one simulated store with Timestral:
+
+```sh
+python forecasting_covariates.py --model timestral-28m --store berlin
+# Or use --model timestral-209m, or --model chronos-2.
+```
+
+This sends one priced forecast request. The script requires an explicit store for
+Timestral before making any request; it does not fan out into multiple paid calls.
+
 ```python file="forecast_sales.py"
 def holidays(dates):
     """Public holidays are on the calendar long before they happen."""
@@ -471,10 +491,11 @@ print({store: r.series[0].predictions[:3] for store, r in forecasts.items()})
   that names a single series is fine. The reason: when Welt qualified Timestral, a
   series forecast inside a multi-series call didn't always match the same series
   forecast alone, so no panel corner is published.
-- **No cross-learning.** `cross_learning=True` is refused (`unsupported_capability`).
+- **No cross-learning.** `cross_learning=True` is refused (`unsupported_capability`;
+  checked locally before submission from SDK 0.14.2).
 - **Categorical covariates need one target.** With several targets, categorical
-  covariates are refused (`unsupported_capability`). Forecast each target separately,
-  or encode the categories as numbers.
+  covariates are refused (`unsupported_capability`; checked in `fit` from SDK
+  0.14.2, including when history is a dataset ID). Forecast each target separately.
 - **Longer histories.** A series can have up to 32,000 rows (the native context is
   32,768 steps); a longer one is refused, never truncated.
 - **Non-negative targets stay non-negative.** Welt keeps the publisher's defaults:

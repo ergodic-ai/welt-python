@@ -1,3 +1,16 @@
+# 0.14.2 (unreleased) — Forecast covariate capability checks
+
+- `Forecast.fit` now honors the forecasting task's
+  `supports_categorical_with_multiple_targets: false` flag locally, including
+  dataset references, with `unsupported_capability` and no submitted job.
+- `Forecast.forecast` and `submit_forecast` honor
+  `supports_cross_learning: false` before reconnecting or submitting. Missing
+  capability flags and older saved fitted routes preserve server validation.
+- The covariate guide names all three supported model IDs, separates model limits,
+  and recommends one target per request for Timestral categorical covariates.
+- No model recipe, forecast result shape, runtime dependency or server contract
+  changes. Low-level sync/async requests remain server-validated.
+
 # 0.14.1 (2026-10-17) — Timestral forecasting
 
 SDK side of the public Timestral release (API-174, DEC-088). `timestral-209m` (primary) and

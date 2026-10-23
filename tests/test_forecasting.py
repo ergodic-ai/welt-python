@@ -506,6 +506,7 @@ def _shift_times(r):
     lambda r: r.update(configuration='chronos-2-research-v1'),
     lambda r: r.update(task='univariate_forecasting'),
     lambda r: r['columns'].update(past_covariates=[]),
+    lambda r: r['columns'].update(categorical_covariates=[]),
     lambda r: r['columns'].update(targets=['visits', 'sales']),
     lambda r: r.pop('rearranged_steps'),
 ])
@@ -963,6 +964,53 @@ def test_supports_panels_false_dataset_panel_is_refused_by_the_server(service):
         model.forecast(14)
     assert error.value.code == 'unsupported_capability' and error.value.status_code == 422
     assert len(service.posts) == 1
+
+
+@pytest.mark.parametrize('dataset', [False, True])
+def test_categorical_multiple_targets_refused_before_submission(service, dataset):
+    timestral(service)
+    frame = panel().query("store == 'a'")
+    history = 'ds_history' if dataset else frame
+    with pytest.raises(InvalidInputError, match='categorical covariates.*one target') as error:
+        Forecast(model='timestral-209m').fit(
+            history, time='date', target=['sales', 'visits'],
+            future_covariates=['holiday'], categorical=['holiday'])
+    assert error.value.code == 'unsupported_capability'
+    assert not service.posts
+
+
+def test_timestral_cross_learning_is_refused_before_reconnecting_or_submitting(service):
+    timestral(service)
+    model = Forecast(model='timestral-209m').fit(
+        panel().query("store == 'a'"), time='date', target=['sales'])
+    requests = len(service.requests)
+    with pytest.raises(InvalidInputError, match='cross.learning') as error:
+        model.forecast(3, cross_learning=True)
+    assert error.value.code == 'unsupported_capability'
+    assert len(service.requests) == requests and not service.posts
+    assert model.forecast(3).series[0].target == 'sales'
+
+
+def test_covariate_capability_flags_are_task_specific_and_optional(service):
+    # Explicit task metadata wins over a different default-task configuration.
+    meta = timestral(service)
+    meta['configuration'] = dict(meta['configuration'], supports_cross_learning=True,
+                                 supports_categorical_with_multiple_targets=True)
+    with pytest.raises(InvalidInputError, match='categorical covariates'):
+        Forecast(model='timestral-209m').fit(
+            'ds_history', time='date', target=['sales', 'visits'],
+            past_covariates=['holiday'], categorical=['holiday'])
+    # Servers and fitted objects predating the fields retain their existing behavior.
+    profile = meta['task_profiles'][0]
+    profile['configuration'] = {'version': service.configuration, 'supports_panels': False}
+    model = Forecast(model='timestral-209m').fit(
+        panel().query("store == 'a'"), time='date', target=['sales', 'visits'],
+        past_covariates=['holiday'], categorical=['holiday'])
+    route = forecast_module._thaw(model._route_)
+    route.pop('cross_learning', None)
+    route.pop('categorical_multiple_targets', None)
+    model._route_ = forecast_module._freeze(route)
+    assert len(model.forecast(3, cross_learning=True).series) == 2
 
 
 def test_cli_forecast_surfaces_the_server_panel_refusal(tmp_path):
