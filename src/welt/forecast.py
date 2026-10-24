@@ -1422,6 +1422,41 @@ class Forecast(BaseEstimator):
                 client.close()
             raise
 
+    def submit_backtest(self, horizon, *, folds=5, **options):
+        """Backtest this fitted context with one pinned model; no fold modifies the estimator.
+
+        Returns a durable Backtest handle. With an estimator-created client use the
+        handle as a context manager or call close() after reading results. For very
+        long histories that need a rolling context use Client.backtest directly.
+        """
+        self._ready()
+        plan = _thaw(self._plan_)
+        if self.task_ != "forecasting":
+            raise InvalidInputError("Backtesting requires the forecasting task.", code="unsupported_capability")
+        history = plan["dataset"] if plan["form"] == "dataset" else pd.DataFrame(plan["rows"], columns=plan["columns"])
+        client, owned = self._connected()
+        try:
+            result = client.submit_backtest(history, models=[self.model], horizon=horizon, folds=folds,
+                time=plan["time"], target=plan["targets"], id=plan["id"], past_covariates=plan["past"],
+                future_covariates=plan["future"], categorical=plan["categorical"], frequency=self.frequency_,
+                expected_versions={self.model: dict(model_version=self.model_version_,
+                                                    configuration_version=self.configuration_version_)}, **options)
+            result._owns_client = owned
+            return result
+        except Exception:
+            if owned:
+                client.close()
+            raise
+
+    def backtest(self, horizon, *, folds=5, **options):
+        """Submit and wait for a backtest of this context; final_horizon is optional."""
+        result = self.submit_backtest(horizon, folds=folds, **options)
+        try:
+            return result.wait(timeout=self.timeout)
+        except Exception:
+            result.close()
+            raise
+
     def submit_forecast(self, horizon, *, future=None, quantile_levels=(0.1, 0.5, 0.9),
                         cross_learning=False, idempotency_key=None):
         """Submit one guarded POST /v1/forecasts request without waiting; retain job.id.

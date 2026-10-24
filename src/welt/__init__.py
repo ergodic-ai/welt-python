@@ -20,6 +20,7 @@ from .causal import CausalDiscovery, CausalResult
 from .errors import InvalidCausalResultError, OptionalDependencyError, UnsupportedGraphConversionError
 from .research import ResearchDownload, ResearchMetadata, ResearchNoticeWarning
 from .evaluation import AsyncEvaluation, Evaluation, EvaluationWarning, ReportLink
+from .backtest import Backtest, AsyncBacktest, BacktestWarning
 
 __all__ = [
     "AsyncClient", "AsyncJob", "Credential", "ConflictError", "JobCancelledError",
@@ -40,5 +41,6 @@ __all__ = [
     "OptionalDependencyError", "UnsupportedGraphConversionError",
     "ResearchDownload", "ResearchMetadata", "ResearchNoticeWarning",
     "Evaluation", "AsyncEvaluation", "EvaluationWarning", "ReportLink",
+    "Backtest", "AsyncBacktest", "BacktestWarning",
 ]
-__version__ = "0.14.2"
+__version__ = "0.15.0"
