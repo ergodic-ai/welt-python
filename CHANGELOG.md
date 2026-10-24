@@ -1,4 +1,4 @@
-# 0.14.2 (unreleased) — Forecast covariate capability checks
+# 0.14.2 (2026-10-24) — Forecast covariate capability checks
 
 - `Forecast.fit` now honors the forecasting task's
   `supports_categorical_with_multiple_targets: false` flag locally, including

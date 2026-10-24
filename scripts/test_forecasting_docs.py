@@ -218,3 +218,26 @@ def test_timestral_steps_run_against_the_fixture(service, capsys):
         keys = {row[columns.index(post['id_column'])] for row in rows} if 'id_column' in post else {None}
         assert (len(rows), width, len(keys), post['horizon'], len(post['future']['table']['rows'])) == (365, 2, 1, 14, 14)
         assert len(rows) <= context and width <= variates and len(keys) <= series and post['horizon'] <= horizon
+
+
+def test_release_build_preserves_preceding_forecasting_urls(tmp_path, monkeypatch):
+    from scripts import build_docs
+    preserved = {}
+    for version in ('0.14.0', '0.14.1'):
+        for name in ('index.html', 'forecasting.html', 'downloads/forecasting_covariates.py'):
+            path = tmp_path / ('v' + version) / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            content = ('immutable ' + version + ' ' + name).encode()
+            path.write_bytes(content)
+            preserved[path] = content
+    monkeypatch.setattr('sys.argv', ['build_docs', '--output', str(tmp_path)])
+    build_docs.main()
+    for path, content in preserved.items():
+        assert path.read_bytes() == content
+    version = __import__('welt').__version__
+    manifest = json.loads((tmp_path / ('v' + version) / 'manifest.json').read_text())
+    assert {'0.14.0', '0.14.1'} <= set(manifest['historical_versions'])
+    landing = (tmp_path / ('v' + version) / 'index.html').read_text()
+    for historical in ('0.14.0', '0.14.1'):
+        assert 'value="../v' + historical + '/"' in landing
+        assert '/v' + historical + '/forecasting.html' in (tmp_path / 'sitemap.xml').read_text()
