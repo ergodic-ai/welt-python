@@ -236,8 +236,8 @@ panel:
 ```python file="forecast_sales.py"
 from welt import Client
 
-with Client() as client:
-    chronos = client.model("chronos-2")
+client = Client()
+chronos = client.model("chronos-2")
 print("Minimum rows per series:", chronos["min_context"])
 for corner in chronos["forecast_envelopes"]:
     print(corner)  # max_context, max_variates, max_series, max_horizon
@@ -408,9 +408,9 @@ except JobTimeoutError:
 finally:
     job.close()
 
-with Client() as client:
-    with client.forecast_job(job.id) as reopened:
-        result = reopened.result(timeout=600)
+client = Client()
+with client.forecast_job(job.id) as reopened:
+    result = reopened.result(timeout=600)
 print(result.to_frame().shape)
 ```
 
@@ -460,8 +460,8 @@ ahead["promo"] = (ahead["date"].dt.dayofweek == 4).astype(int)
 result = model.forecast(14, future=ahead)
 print(result.to_frame().head())
 
-with Client() as client:
-    timestral = client.model("timestral-209m")
+client = Client()
+timestral = client.model("timestral-209m")
 print(timestral["forecast_envelopes"])  # the published single-series corners
 print(timestral["attribution"]["notice"])  # 2026 - Mistral AI
 ```
@@ -626,10 +626,10 @@ with forecast.submit_predict(24, idempotency_key="my-forecast-20260101") as job:
         # Accepted work remains running; reconnect later. Do not resubmit here.
 
 if saved_job_id is not None:
-    with Client() as client:
-        with client.forecast_job(saved_job_id) as job:
-            result = job.result(timeout=600)
-            print(result.to_frame())
+    client = Client()
+    with client.forecast_job(saved_job_id) as job:
+        result = job.result(timeout=600)
+        print(result.to_frame())
 ```
 
 - A job from the estimator owns its HTTP client: use `with` or `job.close()`. A

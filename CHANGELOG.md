@@ -14,6 +14,11 @@
 - Added the backtesting guide. Runtime dependencies are unchanged. API-194 /
   DEC-103 record qualification/release status separately from this source change.
 
+- Guides, README, examples and notebooks create a `Client` with `client = Client()`
+  (or `Client().connect()`) instead of wrapping one-off calls in `with Client() as
+  client:`. The SDK guide explains when closing matters: long-running services and
+  code that creates many clients. No SDK behavior changes (API-199).
+
 # 0.14.2 (2026-10-24) — Forecast covariate capability checks
 
 - `Forecast.fit` now honors the forecasting task's

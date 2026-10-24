@@ -6,9 +6,19 @@ to workspace credits.
 
 ## Fit and predict with Client
 
-`Client()` connects to `https://welt.ergodic.dev` by default. Always close it, or use
-it as a context manager. `Client.models()` reports actual capabilities, not blanket
-task support.
+`Client()` connects to `https://welt.ergodic.dev` by default. Create one and reuse it;
+`Client.models()` reports actual capabilities, not blanket task support.
+
+!!! note "Closing a client"
+    A `Client` keeps a pool of HTTP connections open for reuse. In a notebook or a
+    short script you don't need to close it: the connections are released when Python
+    exits. In a long-running service, or code that creates many clients, call
+    `client.close()` or use `with Client() as client:`. Closing a client never
+    cancels or deletes anything, but a job you got from it can't be polled after the
+    client is closed. With `AsyncClient`, use `async with` or `await client.aclose()`.
+    A job submitted from an estimator owns its own client. In long-running code,
+    close it with `job.client.close()`, or with `job.close()` or `with` for forecast
+    jobs.
 
 This example continues with the real Iris `train` and test tables from
 [Start](start.md):
@@ -18,12 +28,12 @@ This example continues with the real Iris `train` and test tables from
 from welt import Client
 from sklearn.metrics import accuracy_score
 
-with Client() as client:
-    dataset = client.upload(columns=list(train.columns), rows=train.values.tolist(), target=target)
-    job = client.submit_fit(dataset["id"], model="tabicl-v2", task="classification", seed=9)
-    print("Keep the job ID:", job.id)
-    predictor = job.result(timeout=600)
-    result = client.predict(predictor["id"], columns=list(query.columns), rows=query.values.tolist())
+client = Client()
+dataset = client.upload(columns=list(train.columns), rows=train.values.tolist(), target=target)
+job = client.submit_fit(dataset["id"], model="tabicl-v2", task="classification", seed=9)
+print("Keep the job ID:", job.id)
+predictor = job.result(timeout=600)
+result = client.predict(predictor["id"], columns=list(query.columns), rows=query.values.tolist())
 print("Test accuracy:", accuracy_score(y_test, result["predictions"]))
 ```
 
@@ -104,8 +114,7 @@ priced operation (usage kind `evaluate`) with a single five-credit minimum; see
 List your usage events:
 
 ```python
-with Client() as client:
-    events = client.usage()
+events = client.usage()
 for event in events:
     print(event["operation_id"], event["status"],
           event.get("credits"), event.get("rate_card_version"))

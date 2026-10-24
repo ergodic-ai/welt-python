@@ -37,9 +37,9 @@ workspace credentials. This retrieval uploads no training table and submits no f
 ```python
 from welt import Client, Classifier
 
-with Client() as client:
-    job = client.job("your-recorded-job-id")
-    predictor = job.result(timeout=600)
+client = Client()
+job = client.job("your-recorded-job-id")
+predictor = job.result(timeout=600)
 model = Classifier.from_predictor(predictor["id"])
 # model.predict(query) now reuses this completed classification fit.
 ```

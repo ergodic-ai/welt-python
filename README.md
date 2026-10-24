@@ -21,8 +21,7 @@ origin-bound credential for later Python sessions. In a notebook, connect once:
 ```python
 from welt import Client
 
-with Client() as client:
-    client.connect()
+client = Client().connect()
 ```
 
 Open its printed verification link on your own computer if Python is remote.
@@ -51,10 +50,10 @@ from welt import Client, Classifier
 # 1. Get a real table from Welt's research inventory.
 dataset_id = "asset-d839644b6de36fc5cafdda18c5daeca3"
 path = Path(mkdtemp(prefix="welt-iris-")) / "iris.parquet"
-with Client() as client:
-    info = client.research_dataset(dataset_id)
-    print("Dataset:", info["name"])
-    client.download_research_dataset(dataset_id, path)
+client = Client()
+info = client.research_dataset(dataset_id)
+print("Dataset:", info["name"])
+client.download_research_dataset(dataset_id, path)
 data = pd.read_parquet(path)
 target = "target"  # The outcome column in this table.
 
@@ -97,11 +96,10 @@ beside a download with `metadata=True`, or load a table directly with the
 `research` extra (`pip install "welt-client[research]"`):
 
 ```python
-with Client() as client:
-    saved = client.download_research_dataset(
-        dataset_id, path.with_name("iris-2.parquet"), metadata=True)
-    # saved.path, saved.metadata_path ("iris-2.parquet.metadata.json"), saved.metadata
-    data, meta = client.load_research_dataset(dataset_id, metadata=True)
+saved = client.download_research_dataset(
+    dataset_id, path.with_name("iris-2.parquet"), metadata=True)
+# saved.path, saved.metadata_path ("iris-2.parquet.metadata.json"), saved.metadata
+data, meta = client.load_research_dataset(dataset_id, metadata=True)
 print(meta.name, meta.column_descriptions)
 ```
 
@@ -159,15 +157,15 @@ check the model metadata for enabled tasks, limits, readiness and workspace acce
 
 ```python
 from welt import Client
-with Client() as client:
-    job = client.submit_model_run({
-        "model_id": "chronos-2", "task": "univariate_forecasting",
-        "series": {"values": [float(i) for i in range(48)],
-                   "start": "2026-01-01T00:00:00Z", "frequency_seconds": 3600},
-        "horizon": 12,
-    }, idempotency_key="forecast-example-1")
-    result = job.result()
-    print(result["predictions"])
+client = Client()
+job = client.submit_model_run({
+    "model_id": "chronos-2", "task": "univariate_forecasting",
+    "series": {"values": [float(i) for i in range(48)],
+               "start": "2026-01-01T00:00:00Z", "frequency_seconds": 3600},
+    "horizon": 12,
+}, idempotency_key="forecast-example-1")
+result = job.result()
+print(result["predictions"])
 ```
 
 CLI equivalents: `welt models get chronos-2`, `welt run --input request.json`,
