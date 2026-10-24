@@ -40,20 +40,19 @@ def main():
     parser.add_argument("--output", type=Path, default=Path("research") / "iris.parquet")
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    with Client(base_url=ORIGIN) as client:
-        client.connect()
-        key = client.api_key
-        info = client.research_dataset(DATASET_ID)
-        content = info.get("content") or {}
-        if content.get("media_type") != "application/vnd.apache.parquet":
-            raise RuntimeError("Iris currently has no direct Parquet download.")
-        if args.output.exists():
-            if (args.output.is_symlink() or args.output.stat().st_size != content["size_bytes"]
-                    or local_digest(args.output) != content["sha256"]):
-                raise FileExistsError("Existing output differs from current Iris; choose a new --output path.")
-        else:
-            client.download_research_dataset(DATASET_ID, args.output)
-        print("Research data:", info["name"])
+    client = Client(base_url=ORIGIN).connect()
+    key = client.api_key
+    info = client.research_dataset(DATASET_ID)
+    content = info.get("content") or {}
+    if content.get("media_type") != "application/vnd.apache.parquet":
+        raise RuntimeError("Iris currently has no direct Parquet download.")
+    if args.output.exists():
+        if (args.output.is_symlink() or args.output.stat().st_size != content["size_bytes"]
+                or local_digest(args.output) != content["sha256"]):
+            raise FileExistsError("Existing output differs from current Iris; choose a new --output path.")
+    else:
+        client.download_research_dataset(DATASET_ID, args.output)
+    print("Research data:", info["name"])
     data = pd.read_parquet(args.output)
     print(data.head())
     print("Rows and columns:", data.shape)

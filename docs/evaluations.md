@@ -19,12 +19,12 @@ import pandas as pd
 from welt import Client
 
 data = pd.read_csv("churn.csv")
-with Client() as client:
-    evaluation = client.evaluate(data, "churned", task="classification", seed=7)
-    print(evaluation.summary())   # leaderboard: one row per model, then the baseline
-    folds = evaluation.folds()    # long table: model_id, fold, rows, metric, value
-    oof = evaluation.predictions()
-    evaluation.show()             # in Jupyter, displays the report
+client = Client()
+evaluation = client.evaluate(data, "churned", task="classification", seed=7)
+print(evaluation.summary())   # leaderboard: one row per model, then the baseline
+folds = evaluation.folds()    # long table: model_id, fold, rows, metric, value
+oof = evaluation.predictions()
+evaluation.show()             # in Jupyter, displays the report
 ```
 
 The first argument can also be an existing dataset ID (`"ds_…"`, which already names
@@ -193,18 +193,18 @@ Submit without waiting to keep the evaluation ID first:
 ```python
 from welt import Client, JobTimeoutError
 
-with Client() as client:
-    evaluation = client.submit_evaluation(data, "churned", task="classification",
-                                          idempotency_key="churn-eval-0001")
-    saved_id = evaluation.id  # retain before waiting
-    print(saved_id, evaluation.estimated_credits)
-    try:
-        evaluation.wait(timeout=60)
-    except JobTimeoutError:
-        pass  # The evaluation keeps running. Reconnect later; don't resubmit.
+client = Client()
+evaluation = client.submit_evaluation(data, "churned", task="classification",
+                                      idempotency_key="churn-eval-0001")
+saved_id = evaluation.id  # retain before waiting
+print(saved_id, evaluation.estimated_credits)
+try:
+    evaluation.wait(timeout=60)
+except JobTimeoutError:
+    pass  # The evaluation keeps running. Reconnect later; don't resubmit.
 
-with Client() as client:
-    evaluation = client.evaluation(saved_id).wait()
+# Later, reconnect with the saved ID (it works from a new process too):
+evaluation = Client().evaluation(saved_id).wait()
 ```
 
 - `wait()` raises `ExecutionError` when no model finished and `JobCancelledError`

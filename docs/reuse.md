@@ -52,10 +52,10 @@ List your predictors, fetch one predictor's metadata and read usage events:
 ```python
 from welt import Client
 
-with Client() as client:
-    predictors = client.predictors()
-    metadata = client.predictor(predictor_id)
-    events = client.usage()
+client = Client()
+predictors = client.predictors()
+metadata = client.predictor(predictor_id)
+events = client.usage()
 ```
 
 !!! note "What persists"

@@ -56,20 +56,20 @@ before waiting.
 ```python
 from welt import Client
 
-with Client() as client:
-    print(client.model("chronos-2"))
-    # A small illustrative hourly series. Use your own chronological observations.
-    payload = {
-        "model_id": "chronos-2", "task": "univariate_forecasting",
-        "series": {"values": [12, 14, 15, 13, 12, 15, 16, 14,
-                              13, 15, 17, 15, 14, 16, 18, 16],
-                   "start": "2026-01-01T00:00:00Z", "frequency_seconds": 3600},
-        "horizon": 4, "quantile_levels": [0.1, 0.5, 0.9],
-    }
-    job = client.submit_model_run(payload, idempotency_key="forecast-00000001")
-    print(job.id)  # retain before waiting
-    result = job.result(timeout=600)
-    print(result["timestamps"], result["predictions"], result["quantiles"])
+client = Client()
+print(client.model("chronos-2"))
+# A small illustrative hourly series. Use your own chronological observations.
+payload = {
+    "model_id": "chronos-2", "task": "univariate_forecasting",
+    "series": {"values": [12, 14, 15, 13, 12, 15, 16, 14,
+                          13, 15, 17, 15, 14, 16, 18, 16],
+               "start": "2026-01-01T00:00:00Z", "frequency_seconds": 3600},
+    "horizon": 4, "quantile_levels": [0.1, 0.5, 0.9],
+}
+job = client.submit_model_run(payload, idempotency_key="forecast-00000001")
+print(job.id)  # retain before waiting
+result = job.result(timeout=600)
+print(result["timestamps"], result["predictions"], result["quantiles"])
 ```
 
 - `AsyncClient` offers the same methods with `await`.

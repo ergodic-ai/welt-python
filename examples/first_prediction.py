@@ -18,10 +18,10 @@ def run(task="classification"):
         # 1. Get a real table from Welt's research inventory.
         dataset_id = "asset-d839644b6de36fc5cafdda18c5daeca3"
         path = Path(mkdtemp(prefix="welt-iris-")) / "iris.parquet"
-        with Client() as client:
-            info = client.research_dataset(dataset_id)
-            print("Dataset:", info["name"])
-            client.download_research_dataset(dataset_id, path)
+        client = Client()
+        info = client.research_dataset(dataset_id)
+        print("Dataset:", info["name"])
+        client.download_research_dataset(dataset_id, path)
         data = pd.read_parquet(path)
         target = "target"  # The outcome column in this table.
 
@@ -61,10 +61,10 @@ def run(task="classification"):
         # 1. Get a real table from Welt's research inventory.
         dataset_id = "asset-bc7dddd884c5e798c1b2abfc559a36ab"
         path = Path(mkdtemp(prefix="welt-yacht-")) / "yacht.parquet"
-        with Client() as client:
-            info = client.research_dataset(dataset_id)
-            print("Dataset:", info["name"])
-            client.download_research_dataset(dataset_id, path)
+        client = Client()
+        info = client.research_dataset(dataset_id)
+        print("Dataset:", info["name"])
+        client.download_research_dataset(dataset_id, path)
         data = pd.read_parquet(path)
         target = "Residuary.resistance"  # The outcome column in this table.
 
@@ -102,8 +102,7 @@ def main():
     parser.add_argument("--task", choices=("classification", "regression"), default="classification")
     args = parser.parse_args()
     from welt import Client
-    with Client() as client:
-        client.connect()
+    Client().connect()
     run(args.task)
 
 

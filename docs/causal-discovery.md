@@ -65,16 +65,16 @@ from welt import Client
 X = data.drop(columns=target)
 print(X.head())
 print(X.shape)
-with Client() as client:
-    profile = next(m for m in client.models() if m["id"] == "arrow")
-    ready = any(p["task"] == "causal_discovery" and p["execution_available"]
-                for p in profile["task_profiles"])
-    if ready:
-        dataset = client.upload(columns=list(X.columns), rows=X.values.tolist(), target=None)
-        job = client.submit_discover(dataset["id"], model="arrow", seed=42)
-        result = job.result()
-        scores = client.causal_scores(job.id)
-        reopened = client.causal_result(job.id)
+client = Client()
+profile = next(m for m in client.models() if m["id"] == "arrow")
+ready = any(p["task"] == "causal_discovery" and p["execution_available"]
+            for p in profile["task_profiles"])
+if ready:
+    dataset = client.upload(columns=list(X.columns), rows=X.values.tolist(), target=None)
+    job = client.submit_discover(dataset["id"], model="arrow", seed=42)
+    result = job.result()
+    scores = client.causal_scores(job.id)
+    reopened = client.causal_result(job.id)
 ```
 
 Submission returns the existing durable `Job` or `AsyncJob` handle. A successful
