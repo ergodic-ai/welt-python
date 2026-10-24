@@ -23,8 +23,7 @@ notebook, connect from Python instead:
 ```python
 from welt import Client
 
-with Client() as client:
-    client.connect()
+client = Client().connect()
 ```
 
 !!! note "Running Python on a remote server?"
@@ -64,10 +63,10 @@ from welt import Client, Classifier
 # 1. Get a real table from Welt's research inventory.
 dataset_id = "asset-d839644b6de36fc5cafdda18c5daeca3"
 path = Path(mkdtemp(prefix="welt-iris-")) / "iris.parquet"
-with Client() as client:
-    info = client.research_dataset(dataset_id)
-    print("Dataset:", info["name"])
-    client.download_research_dataset(dataset_id, path)
+client = Client()
+info = client.research_dataset(dataset_id)
+print("Dataset:", info["name"])
+client.download_research_dataset(dataset_id, path)
 data = pd.read_parquet(path)
 target = "target"  # The outcome column in this table.
 
@@ -139,10 +138,10 @@ from welt import Client, Regressor
 # 1. Get a real table from Welt's research inventory.
 dataset_id = "asset-bc7dddd884c5e798c1b2abfc559a36ab"
 path = Path(mkdtemp(prefix="welt-yacht-")) / "yacht.parquet"
-with Client() as client:
-    info = client.research_dataset(dataset_id)
-    print("Dataset:", info["name"])
-    client.download_research_dataset(dataset_id, path)
+client = Client()
+info = client.research_dataset(dataset_id)
+print("Dataset:", info["name"])
+client.download_research_dataset(dataset_id, path)
 data = pd.read_parquet(path)
 target = "Residuary.resistance"  # The outcome column in this table.
 

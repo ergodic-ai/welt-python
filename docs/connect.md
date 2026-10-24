@@ -33,8 +33,7 @@ already connected in the current process is saved only if you ask with `save=Tru
 ```python
 from welt import Client
 
-with Client() as client:
-    client.connect()
+client = Client().connect()
 ```
 
 Open the printed verification link on your own computer. The short verification code
@@ -48,8 +47,7 @@ approved origin and credentials. It never changes environment variables.
 To keep the connection after the process exits, opt in explicitly:
 
 ```python
-with Client() as client:
-    client.connect(save=True)
+client = Client().connect(save=True)
 ```
 
 !!! tip "No browser on this machine?"
@@ -125,8 +123,8 @@ client = Client().connect(workspace="acme-research")
 # Explicitly persist a revocable workspace credential only when desired:
 client.connect(workspace="acme-research", save=True)
 
-with Client(workspace="acme-research") as selected:
-    print(selected.workspace())
+selected = Client(workspace="acme-research")
+print(selected.workspace())
 # Async resources use the same saved selection; browser connection itself is sync.
 async_client = AsyncClient(workspace="acme-research")
 ```

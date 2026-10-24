@@ -25,13 +25,13 @@ same test rows.
 ```python
 from welt import Client, Classifier
 
-with Client() as client:  # WELT_BASE_URL and WELT_API_KEY configured locally
-    entries = {entry["id"]: entry for entry in client.models()}
-    for model_id in ("tabicl-v2", "kumo-medium", "tabdpt-1.3", "mitra-v2"):
-        profile = next((p for p in entries[model_id]["task_profiles"]
-                        if p["task"] == "classification"), None)
-        if not profile or profile["status"] != "available" or not profile["execution_available"]:
-            raise RuntimeError(f"Requested classifier unavailable: {model_id}")
+client = Client()  # WELT_BASE_URL and WELT_API_KEY configured locally
+entries = {entry["id"]: entry for entry in client.models()}
+for model_id in ("tabicl-v2", "kumo-medium", "tabdpt-1.3", "mitra-v2"):
+    profile = next((p for p in entries[model_id]["task_profiles"]
+                    if p["task"] == "classification"), None)
+    if not profile or profile["status"] != "available" or not profile["execution_available"]:
+        raise RuntimeError(f"Requested classifier unavailable: {model_id}")
 
 # Continue with Start's Iris train/test split. Each fit retains a new predictor.
 from sklearn.metrics import accuracy_score

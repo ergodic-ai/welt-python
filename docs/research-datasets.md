@@ -16,10 +16,10 @@ Search the catalogue by keyword:
 ```python
 from welt import Client
 
-with Client() as client:
-    page = client.research_datasets(q="iris", availability="available", limit=10)
-    for item in page["items"]:
-        print(item["id"], item["name"], item["rows"], item["columns"])
+client = Client()
+page = client.research_datasets(q="iris", availability="available", limit=10)
+for item in page["items"]:
+    print(item["id"], item["name"], item["rows"], item["columns"])
 ```
 
 Search filters include `q`, `source` and `availability`, with `limit` from 1 to 50.
@@ -29,8 +29,7 @@ Use the dataset ID to inspect its columns and recorded targets:
 
 ```python
 dataset_id = "asset-d839644b6de36fc5cafdda18c5daeca3"
-with Client() as client:
-    info = client.research_dataset(dataset_id)
+info = client.research_dataset(dataset_id)
 print([column["name"] for column in info["schema"]])
 print(info["targets"])
 ```
@@ -43,8 +42,7 @@ For this Iris table the outcome column is `target`. For Yacht Hydrodynamics it i
 Install the reader with `pip install "welt-client[parquet]"`, then load a table:
 
 ```python
-with Client() as client:
-    data = client.load_research_dataset(dataset_id)
+data = client.load_research_dataset(dataset_id)
 print(data.head())
 print(data.shape)
 ```
@@ -56,8 +54,7 @@ archive content.
 Pass `metadata=True` when you also want the table's column descriptions:
 
 ```python
-with Client() as client:
-    data, meta = client.load_research_dataset(dataset_id, metadata=True)
+data, meta = client.load_research_dataset(dataset_id, metadata=True)
 print(meta.name)
 print(meta.column_descriptions)
 ```
@@ -75,8 +72,7 @@ from pathlib import Path
 from tempfile import mkdtemp
 
 path = Path(mkdtemp(prefix="welt-research-")) / "iris.parquet"
-with Client() as client:
-    client.download_research_dataset(dataset_id, path)
+client.download_research_dataset(dataset_id, path)
 print(path)
 ```
 
@@ -90,10 +86,9 @@ Pass `metadata=True` to also save `<path>.metadata.json`. You get back a
 `ResearchDownload` containing both paths and the dataset metadata:
 
 ```python
-with Client() as client:
-    saved = client.download_research_dataset(
-        dataset_id, Path(mkdtemp(prefix="welt-research-")) / "iris.parquet",
-        metadata=True)
+saved = client.download_research_dataset(
+    dataset_id, Path(mkdtemp(prefix="welt-research-")) / "iris.parquet",
+    metadata=True)
 print(saved.path, saved.metadata_path)
 ```
 

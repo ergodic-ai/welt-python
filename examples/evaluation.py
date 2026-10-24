@@ -16,14 +16,14 @@ def main():
     parser.add_argument('--report', default='evaluation-report.html')
     args = parser.parse_args()
     data = pd.read_csv(args.table)
-    with Client() as client:
-        evaluation = client.evaluate(data, args.target, task=args.task, models=args.models, folds=args.folds)
-        print('Evaluation:', evaluation.id, evaluation.status)
-        print(evaluation.summary())
-        for model in evaluation.skipped:
-            print('Skipped:', model['model_id'], model['reason'])
-        Path(args.report).write_text(evaluation.report_html(), encoding="utf-8")
-        print('Report saved to', args.report)
+    client = Client()
+    evaluation = client.evaluate(data, args.target, task=args.task, models=args.models, folds=args.folds)
+    print('Evaluation:', evaluation.id, evaluation.status)
+    print(evaluation.summary())
+    for model in evaluation.skipped:
+        print('Skipped:', model['model_id'], model['reason'])
+    Path(args.report).write_text(evaluation.report_html(), encoding="utf-8")
+    print('Report saved to', args.report)
 
 
 if __name__ == '__main__':
