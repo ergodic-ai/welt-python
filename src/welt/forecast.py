@@ -616,7 +616,10 @@ def _capabilities(meta, model, value):
             # one series per request. An absent field, or any other value, keeps panels (Chronos-2).
             panels = view["configuration"].get("supports_panels") is not False
             return dict(task="forecasting", model_version=model_version, configuration=config,
-                        envelopes=corners, min_context=minimum, levels=levels, panels=panels)
+                        envelopes=corners, min_context=minimum, levels=levels, panels=panels,
+                        cross_learning=view["configuration"].get("supports_cross_learning") is not False,
+                        categorical_multiple_targets=view["configuration"].get(
+                            "supports_categorical_with_multiple_targets") is not False)
     view = _view(meta, "univariate_forecasting")
     operations = view.get("operations") if isinstance(view.get("operations"), list) else []
     if ("univariate_forecasting" in tasks and "model_run" in operations
@@ -637,6 +640,21 @@ def _capabilities(meta, model, value):
 def _corner(c):
     return (f"context ≤ {c['max_context']}, variates ≤ {c['max_variates']}, series ≤ {c['max_series']}, "
             f"horizon ≤ {c['max_horizon']}")
+
+
+def _covariate_capabilities(route, plan, model, cross_learning=False):
+    """Refuse explicit unsupported features without creating a forecast job.
+
+    Absent flags (including routes saved by earlier SDKs) retain server validation.
+    Column roles are known even when the history itself is a dataset reference.
+    """
+    if cross_learning and route.get("cross_learning", True) is False:
+        raise InvalidInputError(f"{model} does not support cross-learning; use cross_learning=False.",
+                                code="unsupported_capability")
+    if (len(plan["targets"]) > 1 and plan["categorical"]
+            and route.get("categorical_multiple_targets", True) is False):
+        raise InvalidInputError(f"{model} supports categorical covariates with one target only. "
+                                "Forecast each target separately.", code="unsupported_capability")
 
 
 def _admit(envelopes, model, context, variates, series, horizon, panels=True):
@@ -1242,6 +1260,8 @@ class Forecast(BaseEstimator):
         observations before any request. A model whose forecasting configuration declares
         supports_panels false (Timestral) forecasts one series per request: a history with
         more than one series raises InvalidInputError with code unsupported_capability.
+        A configuration with supports_categorical_with_multiple_targets false also
+        refuses categorical covariates with several targets, including dataset histories.
         """
         self._clear_fitted()
         plan = _history(history, time, target, id, past_covariates, future_covariates, categorical,
@@ -1261,6 +1281,7 @@ class Forecast(BaseEstimator):
             lengths = None if plan["series"] is None else [s["length"] for s in plan["series"]]
             variates = len(plan["targets"]) + len(plan["past"]) + len(plan["future"])
             if route["task"] == "forecasting":
+                _covariate_capabilities(route, plan, self.model)
                 if lengths is not None and min(lengths) < route["min_context"]:
                     raise InvalidInputError(f"Each series needs at least {route['min_context']} observations "
                                             f"(min_context of {self.model}).", code="workload_limit")
@@ -1349,6 +1370,7 @@ class Forecast(BaseEstimator):
         levels = _levels(quantile_levels, route["levels"])
         if type(cross_learning) is not bool:
             raise ValueError("cross_learning must be True or False.")
+        _covariate_capabilities(route, plan, self.model, cross_learning)
         if idempotency_key is not None and safe_id(idempotency_key) is None:
             raise ValueError("idempotency_key must be a bounded opaque identifier.")
         variates = len(plan["targets"]) + len(plan["past"]) + len(plan["future"])
@@ -1409,7 +1431,9 @@ class Forecast(BaseEstimator):
         at the steps after its last observation, or a workspace dataset ID. quantile_levels is
         an increasing subset of the levels the model publishes (by default the 21 native
         levels 0.01, 0.05, 0.10, …, 0.95, 0.99); the request default is (0.1, 0.5, 0.9).
-        cross_learning=True lets series share information. DataFrame tables travel inline;
+        cross_learning=True lets series share information. A configuration with
+        supports_cross_learning false refuses True locally before submission. The
+        server also validates model-specific restrictions. DataFrame tables travel inline;
         a request body above MAX_REQUEST_BYTES (the API's default 10 MiB body limit; a
         server override is not reflected) is refused before any request. The job owns
         its new client, or borrows Forecast(client=...).

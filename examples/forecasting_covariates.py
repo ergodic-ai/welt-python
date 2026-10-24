@@ -1,12 +1,14 @@
 """Forecast simulated store demand with covariates, then score a four-week holdout.
 
 Script version of the forecasting-with-covariates notebook. The data is simulated, so
-the scores say nothing about Chronos-2 on your data. The run sends one priced
+the scores say nothing about the selected model on your data. The run sends one priced
 forecast request to your Welt workspace.
 """
 import numpy as np
 import pandas as pd
 from welt import Forecast
+
+MODELS = {"chronos-2": "Chronos-2", "timestral-209m": "Timestral-209M", "timestral-28m": "Timestral-28M"}
 
 HORIZON = 28  # days held out and forecast
 HOLIDAYS = {"2024-12-24": "holiday_eve", "2024-12-25": "holiday", "2024-12-26": "holiday",
@@ -52,13 +54,21 @@ def mase(actual, forecast, past, m=7):
     return np.mean(np.abs(actual - forecast)) / np.mean(np.abs(past[m:] - past[:-m]))
 
 
-def main():
+def main(model_id="chronos-2", store=None):
     data = simulate()
+    if model_id not in MODELS:
+        raise ValueError("Choose chronos-2, timestral-209m or timestral-28m.")
+    if store is not None:
+        data = data.loc[data["store"] == store].copy()
+        if data.empty:
+            raise ValueError("Choose a store from the simulated data, such as berlin.")
+    if model_id.startswith("timestral-") and store is None:
+        raise ValueError("Timestral forecasts one series per request; choose --store berlin.")
     cutoff = data["date"].max() - pd.Timedelta(days=HORIZON)
     history, test = data[data["date"] <= cutoff], data[data["date"] > cutoff]
     future = test[["date", "store", "promo", "holiday"]]  # known in advance; no sales, no temperature
 
-    model = Forecast(model="chronos-2").fit(
+    model = Forecast(model=model_id).fit(
         history, time="date", id="store", target=["sales"],
         past_covariates=["temperature"], future_covariates=["promo", "holiday"], categorical=["holiday"])
     result = model.forecast(HORIZON, future=future, quantile_levels=[0.1, 0.5, 0.9])
@@ -72,14 +82,19 @@ def main():
         past = history.loc[history["store"] == store, "sales"].to_numpy()
         inside = (part["sales"] >= part["q_0.1"]) & (part["sales"] <= part["q_0.9"])
         rows.append({"store": store, "seasonal naive": mase(part["sales"], part["baseline"], past),
-                     "Chronos-2": mase(part["sales"], part["median"], past), "80% coverage": inside.mean()})
+                     MODELS[model_id]: mase(part["sales"], part["median"], past), "80% coverage": inside.mean()})
     per_store = pd.DataFrame(rows).set_index("store")
     print(per_store.round(3))
     print("Mean MASE, seasonal naive:", round(per_store["seasonal naive"].mean(), 3))
-    print("Mean MASE, Chronos-2:", round(per_store["Chronos-2"].mean(), 3))
+    print(f"Mean MASE, {MODELS[model_id]}:", round(per_store[MODELS[model_id]].mean(), 3))
     print("80% interval coverage:", round(per_store["80% coverage"].mean(), 3), "(intervals are not calibrated)")
     print("Sorted quantile steps:", result.rearranged_steps, "· Job:", result.job_id)
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--model", choices=MODELS, default="chronos-2")
+    parser.add_argument("--store", help="one simulated store, such as berlin; required for Timestral")
+    args = parser.parse_args()
+    main(args.model, args.store)

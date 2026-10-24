@@ -82,13 +82,25 @@ def test_guide_has_no_release_placeholders_and_honest_intervals():
     assert 'client.model("chronos-2")' in text
 
 
-def test_covariate_script_runs_end_to_end(service, capsys):
+def test_covariate_script_runs_end_to_end(service, capsys, monkeypatch):
+    monkeypatch.setattr("sys.argv", ["forecasting_covariates.py"])
     runpy.run_path(str(ROOT / 'examples/forecasting_covariates.py'), run_name='__main__')
     out = capsys.readouterr().out
     assert 'MASE' in out and 'coverage' in out
     (request,) = service.posts
     assert request['future_covariates'] == ['promo', 'holiday'] and request['past_covariates'] == ['temperature']
     assert request['categorical_covariates'] == ['holiday'] and request['horizon'] == 28
+
+
+@pytest.mark.parametrize('model', ['timestral-209m', 'timestral-28m'])
+def test_covariate_script_runs_one_timestral_series(service, capsys, monkeypatch, model):
+    monkeypatch.setattr('sys.argv', ['forecasting_covariates.py', '--model', model, '--store', 'berlin'])
+    runpy.run_path(str(ROOT / 'examples/forecasting_covariates.py'), run_name='__main__')
+    (request,) = service.posts
+    assert request['model_id'] == model and request['targets'] == ['sales']
+    assert {row[1] for row in request['history']['table']['rows']} == {'berlin'}
+    assert request['future_covariates'] == ['promo', 'holiday']
+    assert 'coverage' in capsys.readouterr().out
 
 
 def test_forecasting_notebook_cells_run_in_order(service, capsys):
@@ -206,3 +218,26 @@ def test_timestral_steps_run_against_the_fixture(service, capsys):
         keys = {row[columns.index(post['id_column'])] for row in rows} if 'id_column' in post else {None}
         assert (len(rows), width, len(keys), post['horizon'], len(post['future']['table']['rows'])) == (365, 2, 1, 14, 14)
         assert len(rows) <= context and width <= variates and len(keys) <= series and post['horizon'] <= horizon
+
+
+def test_release_build_preserves_preceding_forecasting_urls(tmp_path, monkeypatch):
+    from scripts import build_docs
+    preserved = {}
+    for version in ('0.14.0', '0.14.1'):
+        for name in ('index.html', 'forecasting.html', 'downloads/forecasting_covariates.py'):
+            path = tmp_path / ('v' + version) / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            content = ('immutable ' + version + ' ' + name).encode()
+            path.write_bytes(content)
+            preserved[path] = content
+    monkeypatch.setattr('sys.argv', ['build_docs', '--output', str(tmp_path)])
+    build_docs.main()
+    for path, content in preserved.items():
+        assert path.read_bytes() == content
+    version = __import__('welt').__version__
+    manifest = json.loads((tmp_path / ('v' + version) / 'manifest.json').read_text())
+    assert {'0.14.0', '0.14.1'} <= set(manifest['historical_versions'])
+    landing = (tmp_path / ('v' + version) / 'index.html').read_text()
+    for historical in ('0.14.0', '0.14.1'):
+        assert 'value="../v' + historical + '/"' in landing
+        assert '/v' + historical + '/forecasting.html' in (tmp_path / 'sitemap.xml').read_text()

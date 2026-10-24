@@ -1,27 +1,7 @@
 {
   "source": "https://welt.ergodic.dev/v1/models",
-  "taken_at": "2026-10-17T19:13:10Z",
+  "taken_at": "2026-10-24T11:28:33Z",
   "models": [
-    {
-      "id": "welt",
-      "name": "Welt",
-      "tasks": [
-        {
-          "task": "classification",
-          "status": "planned",
-          "execution_available": false,
-          "limits": {},
-          "shapes": []
-        },
-        {
-          "task": "regression",
-          "status": "planned",
-          "execution_available": false,
-          "limits": {},
-          "shapes": []
-        }
-      ]
-    },
     {
       "id": "kumo-medium",
       "name": "Kumo Tabular Medium",
@@ -78,46 +58,6 @@
       ]
     },
     {
-      "id": "causilo",
-      "name": "Causilo",
-      "tasks": [
-        {
-          "task": "classification",
-          "status": "planned",
-          "execution_available": false,
-          "limits": {},
-          "shapes": []
-        },
-        {
-          "task": "regression",
-          "status": "planned",
-          "execution_available": false,
-          "limits": {},
-          "shapes": []
-        }
-      ]
-    },
-    {
-      "id": "tabpfn-3.5-fast",
-      "name": "TabPFN 3.5 Fast",
-      "tasks": [
-        {
-          "task": "classification",
-          "status": "planned",
-          "execution_available": false,
-          "limits": {},
-          "shapes": []
-        },
-        {
-          "task": "regression",
-          "status": "planned",
-          "execution_available": false,
-          "limits": {},
-          "shapes": []
-        }
-      ]
-    },
-    {
       "id": "mitra-v2",
       "name": "Mitra-v2",
       "tasks": [
@@ -169,26 +109,6 @@
               "columns": 80
             }
           ]
-        }
-      ]
-    },
-    {
-      "id": "exaone-tabular",
-      "name": "EXAONE Tabular",
-      "tasks": [
-        {
-          "task": "classification",
-          "status": "planned",
-          "execution_available": false,
-          "limits": {},
-          "shapes": []
-        },
-        {
-          "task": "regression",
-          "status": "planned",
-          "execution_available": false,
-          "limits": {},
-          "shapes": []
         }
       ]
     },
@@ -287,19 +207,6 @@
       ]
     },
     {
-      "id": "welt-r",
-      "name": "Welt R",
-      "tasks": [
-        {
-          "task": "causal_discovery",
-          "status": "planned",
-          "execution_available": false,
-          "limits": {},
-          "shapes": []
-        }
-      ]
-    },
-    {
       "id": "avici",
       "name": "AVICI",
       "tasks": [
@@ -385,19 +292,6 @@
               "columns": 80
             }
           ]
-        }
-      ]
-    },
-    {
-      "id": "tabcausal",
-      "name": "TabCausal",
-      "tasks": [
-        {
-          "task": "causal_discovery",
-          "status": "planned",
-          "execution_available": false,
-          "limits": {},
-          "shapes": []
         }
       ]
     },
