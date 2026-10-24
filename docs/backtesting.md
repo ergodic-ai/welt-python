@@ -10,19 +10,19 @@ import pandas as pd
 from welt import Client
 
 history = pd.read_csv("sales.csv")  # date, sales
-with Client() as client:
-    result = client.backtest(
-        history, time="date", target="sales",
-        models=["chronos-2", "timestral-209m"],
-        folds=5, horizon=24, frequency="h", seasonal_period=24,
-        final_horizon=24,   # omit for historical tests only
-        max_credits=60,     # includes every fold and final call
-    )
-    print(result.to_frame())
-    predictions = result.predictions()
-    metrics = result.metrics()
-    future = result.final_predictions()
-    report = result.report_html()
+client = Client()
+result = client.backtest(
+    history, time="date", target="sales",
+    models=["chronos-2", "timestral-209m"],
+    folds=5, horizon=24, frequency="h", seasonal_period=24,
+    final_horizon=24,   # omit for historical tests only
+    max_credits=60,     # includes every fold and final call
+)
+print(result.to_frame())
+predictions = result.predictions()
+metrics = result.metrics()
+future = result.final_predictions()
+report = result.report_html()
 ```
 
 Use explicit `chronos-2`, `timestral-209m` or `timestral-28m` model IDs. Every call
@@ -44,12 +44,12 @@ and never enter historical scores. Fold execution does not update pretrained wei
 Bare arrays and ordinary Series use integer positions, with no invented dates:
 
 ```python
-with Client() as client:
-    result = client.backtest(
-        [float(i) for i in range(100)],
-        models=["chronos-2"], folds=3, horizon=12,
-    )
-    print(result.predictions()[["cutoff", "index", "lead"]])
+client = Client()
+result = client.backtest(
+    [float(i) for i in range(100)],
+    models=["chronos-2"], folds=3, horizon=12,
+)
+print(result.predictions()[["cutoff", "index", "lead"]])
 ```
 
 A Series/DataFrame with a DatetimeIndex automatically supplies its past index.
@@ -106,13 +106,13 @@ pooled leaderboard without a remote call.
 ## Submit and reconnect
 
 ```python
-with Client() as client:
-    pending = client.submit_backtest(
-        history, time="date", target="sales", models=["chronos-2"],
-        folds=5, horizon=24, idempotency_key="sales-backtest-v1",
-    )
-    print(pending.id)  # retain before waiting
-    result = client.reopen_backtest(pending.id).wait(timeout=600)
+client = Client()
+pending = client.submit_backtest(
+    history, time="date", target="sales", models=["chronos-2"],
+    folds=5, horizon=24, idempotency_key="sales-backtest-v1",
+)
+print(pending.id)  # retain before waiting
+result = client.reopen_backtest(pending.id).wait(timeout=600)
 ```
 
 Local timeout never cancels server work. Reopen by ID. After an uncertain POST,

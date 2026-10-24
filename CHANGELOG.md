@@ -1,4 +1,4 @@
-# 0.15.0 (unreleased) — Walk-forward forecasting backtests
+# 0.15.0 (2026-10-24) — Walk-forward forecasting backtests
 
 - Sync/async `Client.backtest`, `submit_backtest`, `reopen_backtest` and `backtests`
   add durable multi-model walk-forward evaluation, metrics, reference forecasts,
