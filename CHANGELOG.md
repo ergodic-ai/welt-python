@@ -1,3 +1,19 @@
+# 0.15.0 (unreleased) — Walk-forward forecasting backtests
+
+- Sync/async `Client.backtest`, `submit_backtest`, `reopen_backtest` and `backtests`
+  add durable multi-model walk-forward evaluation, metrics, reference forecasts,
+  optional final forecasts and authenticated HTML reports on compatible servers.
+- `Forecast.backtest` / `submit_backtest` evaluate a copied fitted context with
+  pinned model/configuration versions; existing forward methods stay compatible.
+- Backtests accept bare positional arrays/Series, datetime-indexed data, explicit
+  time-column tables and dataset references. They never invent public calendar
+  dates for positional inputs, fill gaps or silently truncate model context.
+- Typed Backtest/AsyncBacktest handles validate request identities, fold/job counts,
+  result indices and quantile invariants. Invalid wait options are refused before
+  submission; timeouts preserve backtest-specific reconnect instructions.
+- Added the backtesting guide. Runtime dependencies are unchanged. API-194 /
+  DEC-103 record qualification/release status separately from this source change.
+
 # 0.14.2 (2026-10-24) — Forecast covariate capability checks
 
 - `Forecast.fit` now honors the forecasting task's

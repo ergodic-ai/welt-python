@@ -26,14 +26,15 @@ ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = "https://ergodic-ai.github.io/welt-python"
 REQUIRED = ('Client', 'Job', 'Classifier', 'Regressor', 'AsyncClient', 'AsyncJob',
             'CausalDiscovery', 'CausalResult', 'Forecast', 'ForecastResult', 'ForecastSeries', 'ForecastJob', 'AsyncForecastJob',
-            'Evaluation', 'AsyncEvaluation', 'ReportLink')
+            'Evaluation', 'AsyncEvaluation', 'ReportLink', 'Backtest', 'AsyncBacktest')
 # DEC-073: top sections and the guide sidebar. Order defines the previous/next pager.
 NAV = [('Get started', 'start'), ('Guides', 'own-data'), ('Reference', 'reference'), ('Models', 'capabilities'), ('CLI', 'cli')]
 GUIDES = [('Get started', [('First prediction', 'start'), ('Connect your workspace', 'connect'), ('Install and accounts', 'onboarding'),
                            ('Notebook examples', 'notebooks')]),
           ('Guides', [('Use your own table', 'own-data'), ('Predict a number', 'regression'), ('Reuse a predictor', 'reuse'),
                       ('Select a model', 'model-selection'), ('Compare models', 'evaluations'),
-                      ('Forecast a time series', 'forecasting'), ('Hidden model runs', 'model-runs'),
+                      ('Forecast a time series', 'forecasting'), ('Backtest a time series', 'backtesting'),
+                      ('Hidden model runs', 'model-runs'),
                       ('Research datasets', 'research-datasets'), ('Wait and recover', 'async-and-errors'),
                       ('Discover a graph', 'causal-discovery'), ('Workspace resources', 'usage')]),
           ('Reference', [('Python reference', 'reference'), ('Models and limits', 'capabilities'), ('Agent CLI', 'cli')]),
@@ -216,6 +217,40 @@ TYPED_FORECAST_METHODS = {
  'close': ('Close an estimator-submitted job’s owned client. Reconnected handles borrow and leave their client open.', 'None; no cancellation or deletion.', 'Local cleanup only.'),
  'aclose': ('Finish a reconnected async handle; its borrowed AsyncClient remains open.', 'Awaited None; no cancellation or deletion.', 'Local cleanup only.')}
 
+# API-194: explicit task contracts, separate from tabular cross-validation.
+_BACKTEST_PARAMS = {'client': 'Borrowed Client or AsyncClient; estimator-created synchronous handles may own it.',
+    'payload': 'Validated /v1/backtests resource, normally obtained from submission or reconnect.',
+    'expected_id': 'Optional reconnect identity guard; internal callers normally supply it.',
+    'expected_request': 'Optional exact submitted request used to bind initial model/options/version responses.'}
+PARAMS.update({'Backtest': _BACKTEST_PARAMS, 'AsyncBacktest': _BACKTEST_PARAMS})
+_BACKTEST_ERRORS = ('Authentication/permission, workload/capability/budget/capacity/credit refusals, '
+    'version/idempotency conflicts or TransportError. Replay the identical request/key after uncertain submission.')
+METHODS.update({
+ 'submit_backtest': ('Submit explicit forecasting models at chronological walk-forward origins. See backtesting for fold/context/index/covariate/final options; no implicit upload or model selection.',
+                     'Backtest or awaited AsyncBacktest borrowing this client, with durable ID, pinned versions, child jobs and estimates.', _BACKTEST_ERRORS),
+ 'backtest': ('Submit and wait for a walk-forward forecasting evaluation; validate timeout before submission. final_horizon is opt-in and excluded from historical scores.',
+              'Backtest or awaited AsyncBacktest; partial completion emits BacktestWarning.', _BACKTEST_ERRORS + ' JobTimeoutError names reopen_backtest(id).wait(); work is not cancelled. Failed/cancelled waits raise typed errors.'),
+ 'reopen_backtest': ('Reconnect to an existing workspace-owned backtest; submit no work.',
+                     'Backtest or awaited AsyncBacktest borrowing this client.', 'NotFoundError for foreign/deleted IDs; authentication/permission or malformed-response errors.'),
+ 'backtests': ('List workspace-owned backtests and current progress.', 'List of Backtest or awaited AsyncBacktest handles.', 'Authentication, permission, transport or malformed-response errors.')})
+FORECAST_METHODS.update({
+ 'submit_backtest': ('Evaluate this fitted copied context with its pinned model/configuration at walk-forward origins. Does not change context or weights.',
+                     'Backtest. It owns only an estimator-created client; close it or use a context manager.', _BACKTEST_ERRORS),
+ 'backtest': ('Submit and wait for an explicit backtest of this fitted context. Optional final_horizon forecasts from its end without entering scores.',
+              'Backtest; close owned clients after reading. Borrowed clients stay open.', _BACKTEST_ERRORS + ' Local timeout preserves server work and backtest reconnect ID.')})
+BACKTEST_METHODS = {
+ 'refresh': ('Read current metadata and validate immutable identities/options.', 'Same handle, updated; await for AsyncBacktest.', 'NotFoundError, auth/transport or invalid_response.'),
+ 'wait': ('Wait locally without cancelling or resubmitting on timeout.', 'Same handle; partial success emits BacktestWarning.', 'JobTimeoutError retains ID and reopen_backtest guidance; failed/cancelled waits raise typed errors.'),
+ 'predictions': ('Read historical origin/lead events, including training-only naive references; validate indices, columns and quantiles.', 'Owned long pandas.DataFrame; await for AsyncBacktest.', 'ResultExpiredError after seven days; not-ready/auth/transport or invalid_response.'),
+ 'final_predictions': ('Read only the separately requested final forecasts, never backtest scores.', 'Owned long pandas.DataFrame; empty when final_horizon was omitted; await for AsyncBacktest.', 'ResultExpiredError, not-ready/auth/transport or invalid_response.'),
+ 'metrics': ('Read overall, fold, series/target and lead metric detail with eligible counts and undefined reasons.', 'Owned pandas.DataFrame; await for AsyncBacktest.', 'ResultExpiredError, not-ready/auth/transport or malformed-response error.'),
+ 'report_html': ('Read an authenticated self-contained report with no script or external resources; not cached past remote expiry.', 'HTML string; await for AsyncBacktest.', 'ResultExpiredError, not-ready/auth/transport errors.'),
+ 'to_frame': ('Build the pooled leaderboard locally for completely backtested models only.', 'Owned pandas.DataFrame; no remote call.', 'No ranking of incomplete models or final forecasts.'),
+ 'to_dict': ('Copy last-read backtest metadata, versions, split hash, jobs and estimates.', 'Independent dictionary; no remote call.', 'No remote call.'),
+ 'cancel': ('Cancel unfinished child forecasts and preserve completed outcomes/charges.', 'Same handle with current metadata; await for AsyncBacktest.', 'Auth/transport/NotFoundError; completion may race cancellation.'),
+ 'delete': ('Explicitly delete retained terminal-group plan/inputs/results, preserving datasets and usage.', 'None; await for AsyncBacktest.', 'ConflictError while children run; auth/transport/NotFoundError; repeat deletion is safe.'),
+ 'close': ('Close only an estimator-created owned synchronous client; never cancel server work.', 'None.', 'Borrowed clients remain open; local cleanup only.')}
+
 
 def public_signature(obj):
     signature = inspect.signature(obj)
@@ -269,7 +304,7 @@ def reference():
         if name == 'CausalResult':
             parts.append('Immutable native result. Read `id`, `dataset_id`, `job_id`, `variables`, `edge_marks`, `native_graph_type`, `model_version`, `configuration_version`, `score_reference`, `decoder`, `assumptions` and `diagnostics`. The result retains no HTTP client or credentials. Scores remain a separate authenticated read.')
         if name == 'Forecast':
-            parts.append('Zero-shot local history context, not a durable Predictor. See [forecasting](forecasting.md) for input/time/version/ownership rules; no score or automatic cross-validation contract.')
+            parts.append('Zero-shot local history context, not a durable Predictor. See [forecasting](forecasting.md) for input/time/version/ownership rules and [backtesting](backtesting.md) for explicit walk-forward evaluation. No automatic cross-validation or score call.')
             parts.append('**fit parameters.** `history`: a long-format DataFrame (one row per series ID and time, any order), a workspace dataset ID (or a dataset dictionary with `id`; the server validates its rows), a Series with a DatetimeIndex, or an array with `start` and `frequency_seconds`. `time`: the time column. `target`: one column name or a list, forecast jointly. `id`: the series column; absent means one series. `past_covariates`: columns observed in the history only. `future_covariates`: columns also known for the horizon, supplied through `forecast(future=...)`. `categorical`: covariates holding string or integer categories; missing cells are allowed in past covariates only. `frequency`: `{"unit", "every"}` with unit second, minute, hour, day, week, month, quarter or year, or an alias from `welt.forecast.FREQUENCY_ALIASES` (`s`, `min`/`T`, `h`/`H`, `D`, `W`, `M`/`MS`/`ME`, `Q`/`QS`/`QE`, `Y`/`YS`/`YE`/`A`/`AS`, optionally prefixed by a multiple such as `15min`); without it the spacing is checked locally and the server infers it. Long-format naive timestamps are read as UTC; the univariate form (array, Series, or one string target without id or covariates) requires timezone-aware times and at least 16 observations.')
             parts.append('**forecast parameters.** `horizon`: steps after each series\' last observation, within a published envelope. `future`: required exactly when the fit named future covariates; a DataFrame with exactly the time, id and future covariate columns and `horizon` rows per series at its next timestamps, or a workspace dataset ID. `quantile_levels`: an increasing subset of the levels the model publishes (by default the 21 native levels 0.01, 0.05, 0.10, …, 0.95, 0.99); the request default is (0.1, 0.5, 0.9). `cross_learning`: True lets series share information. DataFrame tables travel inline; a body above `welt.forecast.MAX_REQUEST_BYTES` (10 MiB, the default body limit of the Welt API; the server does not publish its limit, so a deployment override of `WELT_HTTP_BODY_BYTES` is not reflected) is refused locally with `InvalidInputError` (`workload_limit`): upload the table (for example `Client.upload_file`) and pass its dataset ID. With `client=`, pickling drops the client; set `estimator.client` again after unpickling.')
         if name == 'Evaluation':
@@ -283,7 +318,8 @@ def reference():
             if key.startswith('_') or not (method.__module__.startswith('welt') or supported_inherited_score):
                 continue
             overrides = (FORECAST_METHODS if name == 'Forecast' else TYPED_FORECAST_METHODS if name in ('ForecastJob', 'AsyncForecastJob')
-                         else EVALUATION_METHODS if name in ('Evaluation', 'AsyncEvaluation') else {})
+                         else EVALUATION_METHODS if name in ('Evaluation', 'AsyncEvaluation')
+                         else BACKTEST_METHODS if name in ('Backtest', 'AsyncBacktest') else {})
             if key not in METHODS and key not in overrides:
                 raise SystemExit(f'Missing annotated method contract: {name}.{key}')
             purpose, returns, errors = (html.escape(text, quote=False) for text in (overrides[key] if key in overrides else METHODS[key]))
@@ -684,7 +720,7 @@ def reference_index(link):
     """Class index for the single reference page; every link is an existing anchor."""
     groups = [('Connect', ('Client', 'AsyncClient')), ('Predict', ('Classifier', 'Regressor')),
               ('Discover', ('CausalDiscovery', 'CausalResult')), ('Forecast', ('Forecast', 'ForecastResult', 'ForecastSeries', 'ForecastJob', 'AsyncForecastJob')),
-              ('Evaluate', ('Evaluation', 'AsyncEvaluation', 'ReportLink')),
+              ('Evaluate', ('Evaluation', 'AsyncEvaluation', 'ReportLink', 'Backtest', 'AsyncBacktest')),
               ('Long-running work', ('Job', 'AsyncJob')),
               ('Errors', ())]
     listed = {name for _, names in groups for name in names}

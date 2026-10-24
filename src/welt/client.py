@@ -580,6 +580,44 @@ class Client(_HTTP):
             raise unavailable(error) from None
         return [Evaluation(self, item) for item in items]
 
+    def submit_backtest(self, history, *, models, horizon, idempotency_key=None, **options):
+        """Submit a durable walk-forward backtest. See Client.backtest for the options."""
+        from .backtest import Backtest, replay_key, request, transport_error
+        body = request(history, models=models, horizon=horizon, **options)
+        key = replay_key(idempotency_key)
+        value = secret(self.api_key)
+        if value and value in key:
+            raise ValueError("The idempotency key must not contain the configured credential.")
+        try:
+            payload = self.request("POST", "/v1/backtests", json=body, headers={"Idempotency-Key": key})
+        except TransportError:
+            raise transport_error(key) from None
+        return Backtest(self, payload, expected_request=body)
+
+    def backtest(self, history, *, models, horizon, timeout=600, idempotency_key=None, **options):
+        """Submit and wait for chronological backtesting; timeout leaves it running.
+
+        Options: folds=5, step=horizon, context_length=None (expanding), seasonal_period=1,
+        time/target/id column names, past_covariates/future_covariates/categorical,
+        frequency, start (arrays only), quantile_levels, cross_learning=False,
+        primary_metric='mae', max_credits, final_horizon and future. Final forecasts
+        are opt-in and excluded from metrics. Arrays without dates use positions.
+        Known-future covariates assert availability at every historical origin.
+        """
+        from .evaluation import _waiting
+        _waiting(timeout, .25)
+        return self.submit_backtest(history, models=models, horizon=horizon,
+            idempotency_key=idempotency_key, **options).wait(timeout=timeout)
+
+    def reopen_backtest(self, backtest_id):
+        """Reconnect by ID without submitting any work."""
+        from .backtest import Backtest
+        return Backtest(self, self.request("GET", f"/v1/backtests/{_id(backtest_id)}"), expected_id=backtest_id)
+
+    def backtests(self):
+        from .backtest import Backtest
+        return [Backtest(self, p) for p in self.request("GET", "/v1/backtests")["items"]]
+
     def forecast_job(self, job_id):
         """Reconnect to one forecast job (forecasting or legacy univariate run), borrowing this client."""
         from .forecast import ForecastJob
@@ -999,6 +1037,36 @@ class AsyncClient(_HTTP):
         except WeltError as error:
             raise unavailable(error) from None
         return [AsyncEvaluation(self, item) for item in items]
+
+    async def submit_backtest(self, history, *, models, horizon, idempotency_key=None, **options):
+        from .backtest import AsyncBacktest, replay_key, request, transport_error
+        body = request(history, models=models, horizon=horizon, **options)
+        key = replay_key(idempotency_key)
+        value = secret(self.api_key)
+        if value and value in key:
+            raise ValueError("The idempotency key must not contain the configured credential.")
+        try:
+            payload = await self.request("POST", "/v1/backtests", json=body, headers={"Idempotency-Key": key})
+        except TransportError:
+            raise transport_error(key) from None
+        return AsyncBacktest(self, payload, expected_request=body)
+
+    async def backtest(self, history, *, models, horizon, timeout=600, idempotency_key=None, **options):
+        """Async Client.backtest, with the same options and durable timeout behavior."""
+        from .evaluation import _waiting
+        _waiting(timeout, .25)
+        result = await self.submit_backtest(history, models=models, horizon=horizon,
+                                           idempotency_key=idempotency_key, **options)
+        return await result.wait(timeout=timeout)
+
+    async def reopen_backtest(self, backtest_id):
+        from .backtest import AsyncBacktest
+        return AsyncBacktest(self, await self.request("GET", f"/v1/backtests/{_id(backtest_id)}"),
+                             expected_id=backtest_id)
+
+    async def backtests(self):
+        from .backtest import AsyncBacktest
+        return [AsyncBacktest(self, p) for p in (await self.request("GET", "/v1/backtests"))["items"]]
 
     def forecast_job(self, job_id):
         """Reconnect borrowing this client; await the typed job's result()."""

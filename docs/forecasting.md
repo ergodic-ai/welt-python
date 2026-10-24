@@ -1,5 +1,8 @@
 # Forecast time series with Chronos-2 and Timestral
 
+For historical walk-forward accuracy and optional final forecasts, see
+[Backtest a time series](backtesting.md).
+
 Forecast one series or a whole panel with Chronos-2. Add several targets, drivers you
 only observe in the past, and drivers you know ahead of time. You get a median and
 native quantiles for every series, target and future step. Timestral, listed after
