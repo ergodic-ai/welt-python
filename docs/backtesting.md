@@ -96,8 +96,23 @@ Laplace accepts up to 512 training rows and 64 leads; the other benchmarks up to
 4,096 rows and 64 leads. There are at most 32 fold/series/target units, and the
 existing 10,000 combined prediction-event limit includes CPU output. These
 bounds do not promise every admitted workload finishes before the shared budget.
-History is never shortened to fit. Statistical models require finite observed
+The shared input/fold history is retained; model-specific lookbacks are explicit
+configuration, not adaptive truncation at the time limit. Statistical models require finite observed
 targets and at least two declared seasonal periods; unsupported units are skipped.
+
+The fast Laplace configuration is **Laplace (lookback 64)**, revision
+`single-scale-lookback64-v1` in the `fast-v1:laplace` family. It runs upstream
+single-scale Laplace (`scales=[1]`, default CRPS/sticky/GPD-tail settings) on the
+most recent `min(64, available_context_length)` target observations inside each
+fold. Its parameters record `lookback=64`; per-unit details expose
+`available_context_length`, `effective_context_length`, `effective_train_start`
+and exclusive `effective_train_stop`. Event `train_start`/`train_stop` still
+identify the shared available fold, and MASE uses that complete fold's training
+scale for every model. Other models keep their supplied context. Final Laplace
+forecasts use the same explicit preset and remain unscored. This is a fast
+configured variant, not the publisher's full-context/multi-scale default.
+Retained older configurations keep their original revision and parameters; inspect
+`benchmarks()['metadata']['models']` and `benchmarks()['details']` for provenance.
 
 Laplace publishes predictive medians and requested quantiles. AutoTheta/AutoETS/
 MFLES publish their native point means; linear models publish regression point

@@ -94,5 +94,11 @@ results.pageActionsWithoutOutline = await evaluate("!!document.querySelector('.p
 results.steps = await evaluate("document.querySelectorAll('.steps > section.step').length > 0 && document.querySelectorAll('h2.step').length === 0 && getComputedStyle(document.querySelector('section.step'), '::before').content !== 'none'");
 results.errors = errors;
 console.log(JSON.stringify(results));
-socket.close(); chrome.kill();
-process.exit(0);
+socket.close();
+// Chrome still writes its profile while shutting down. Wait before the Python
+// caller removes that directory, including on faster CI runners.
+const chromeExited = new Promise((resolve) => chrome.once('close', resolve));
+chrome.kill();
+const shutdownLimit = setTimeout(() => chrome.kill('SIGKILL'), 5000);
+await chromeExited;
+clearTimeout(shutdownLimit);
