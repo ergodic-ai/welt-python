@@ -1,3 +1,9 @@
+# 0.16.2 (2026-10-25) — Evaluation reports and seasonal benchmark documentation
+
+Document the unified Evaluations area, self-contained shareable forecasting
+reports, historical chart zoom and versioned declared-seasonality Laplace preset.
+Preserve immutable earlier guides. No SDK runtime behavior or dependency changes.
+
 # 0.16.1 (2026-10-25) — Explicit fast Laplace context documentation
 
 - Clarify Laplace's named 64-observation model lookback, single-scale configuration
