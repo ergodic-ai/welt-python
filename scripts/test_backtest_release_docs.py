@@ -9,7 +9,7 @@ from scripts import build_docs
 
 def test_release_workflow_builds_old_sources_and_exact_published_wheels():
     workflow=(build_docs.ROOT/'.github/workflows/sdk-docs.yml').read_text()
-    assert 'default: v0.16.2' in workflow
+    assert 'default: v0.16.3' in workflow
     for line in workflow.splitlines():
         if line.lstrip().startswith('if:') and "'v0.14.2'" in line:
             assert "github.event.release.tag_name == 'v0.15.0'" in line
@@ -24,18 +24,18 @@ def test_release_workflow_builds_old_sources_and_exact_published_wheels():
 def test_current_builder_preserves_previous_page_and_download_bytes_and_navigation():
     with tempfile.TemporaryDirectory() as folder:
         root=Path(folder);sentinels={}
-        for old in ['0.14.0','0.14.1','0.14.2','0.15.0','0.16.0','0.16.1']:
+        for old in ['0.14.0','0.14.1','0.14.2','0.15.0','0.16.0','0.16.1','0.16.2']:
             for name in ['index.html','forecasting.html','backtesting.html','downloads/forecasting_covariates.py','downloads/forecasting-with-covariates.ipynb']:
                 p=root/f'v{old}'/name;p.parent.mkdir(parents=True,exist_ok=True)
                 p.write_bytes(f'immutable {old} {name}\n'.encode());sentinels[p]=p.read_bytes()
         with patch.object(sys,'argv',['build_docs','--output',folder]):build_docs.main()
         for p,expected in sentinels.items():assert p.read_bytes()==expected
-        manifest=json.loads((root/'v0.16.2/manifest.json').read_text())
-        assert {'0.14.0','0.14.1','0.14.2','0.15.0','0.16.0','0.16.1'}<=set(manifest['historical_versions'])
-        for old in ['0.14.0','0.14.1','0.14.2','0.15.0','0.16.0','0.16.1']:
+        manifest=json.loads((root/'v0.16.3/manifest.json').read_text())
+        assert {'0.14.0','0.14.1','0.14.2','0.15.0','0.16.0','0.16.1','0.16.2'}<=set(manifest['historical_versions'])
+        for old in ['0.14.0','0.14.1','0.14.2','0.15.0','0.16.0','0.16.1','0.16.2']:
             assert f'/v{old}/</loc>' in (root/'sitemap.xml').read_text()
-            assert f'value="../v{old}/"' in (root/'v0.16.2/index.html').read_text()
-        assert (root/'v0.16.2/backtesting.html').is_file()
+            assert f'value="../v{old}/"' in (root/'v0.16.3/index.html').read_text()
+        assert (root/'v0.16.3/backtesting.html').is_file()
 
 def test_benchmark_release_retains_matching_old_source_and_published_wheel():
     workflow=(build_docs.ROOT/'.github/workflows/sdk-docs.yml').read_text()
@@ -63,3 +63,21 @@ def test_report_documentation_preserves_preceding_client_and_guide_source():
     assert 'declared-seasonality-lookback64-v1' in guide
     assert 'report-links' in guide
     assert 'does not authorize model execution' in guide
+
+
+def test_share_report_example_uses_the_handle_defined_by_the_initial_example():
+    import ast
+    from types import SimpleNamespace
+    text=(build_docs.ROOT/'docs/backtesting.md').read_text()
+    first=text.split('```python\n',1)[1].split('```',1)[0]
+    handle=next(n.targets[0].id for n in ast.parse(first).body if isinstance(n,ast.Assign) and isinstance(n.value,ast.Call) and isinstance(n.value.func,ast.Attribute) and n.value.func.attr=='backtest')
+    example=text.split('To create a shareable',1)[1].split('```python\n',1)[1].split('```',1)[0]
+    calls=[]
+    def request(method,url,**kwargs):
+        calls.append((method,url,kwargs))
+        return {'url':'https://test.example/reports/test-capability'}
+    exec(compile(example,'backtesting-share-example','exec'),{'client':SimpleNamespace(request=request),handle:SimpleNamespace(id='bt_example'),'print':lambda *a:None})
+    assert calls==[('POST','/v1/backtests/bt_example/report-links',{'json':{'expires_in_days':7}})]
+    workflow=(build_docs.ROOT/'.github/workflows/sdk-docs.yml').read_text()
+    assert '5bb7b372c9e8624958c8ed14191338944ce9dded' in workflow
+    assert '/v0.16.2/welt_client-0.16.2-py3-none-any.whl' in workflow
