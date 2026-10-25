@@ -249,7 +249,7 @@ link with the current client’s generic request method:
 
 ```python
 link = client.request(
-    "POST", f"/v1/backtests/{backtest.id}/report-links",
+    "POST", f"/v1/backtests/{result.id}/report-links",
     json={"expires_in_days": 7},
 )
 print(link["url"])  # only returned on creation; treat it as a secret

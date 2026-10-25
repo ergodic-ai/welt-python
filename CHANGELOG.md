@@ -1,3 +1,8 @@
+# 0.16.3 (2026-10-25) — Share-report example handle
+
+Use the existing `result` handle in the share-report example. Add an executable
+guide regression and retain immutable0.16.2 documentation. Runtime unchanged.
+
 # 0.16.2 (2026-10-25) — Evaluation reports and seasonal benchmark documentation
 
 Document the unified Evaluations area, self-contained shareable forecasting
