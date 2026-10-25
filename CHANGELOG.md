@@ -1,3 +1,16 @@
+# 0.16.0 (2026-10-25) — Fast CPU backtest benchmarks
+
+- Opt in with `benchmark_suite="fast-v1"`; sync/async waits include the bounded CPU
+  suite on compatible servers. Native jobs, results, accounting and model limits
+  retain their existing contracts.
+- Added validated `benchmarks()`, `benchmark_predictions(final=...)`,
+  `benchmark_scores()` and `feature_selection()` results. Optional
+  `to_frame(include_benchmarks=True)` combines already-fetched complete scores.
+- Documented the shared 20-second compute deadline, partial/unsupported outcomes,
+  point/quantile semantics, training-only direct linear feature selection and
+  covariate/calendar availability. SDK runtime dependencies are unchanged.
+- API-201/202 and DEC-108 track qualification/publication/deployment separately.
+
 # 0.15.0 (2026-10-24) — Walk-forward forecasting backtests
 
 - Sync/async `Client.backtest`, `submit_backtest`, `reopen_backtest` and `backtests`
