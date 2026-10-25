@@ -1,3 +1,12 @@
+# 0.16.1 (2026-10-25) — Explicit fast Laplace context documentation
+
+- Clarify Laplace's named 64-observation model lookback, single-scale configuration
+  revision and effective-context provenance. Shared folds/actuals and full-fold
+  MASE remain unchanged; final forecasts use the same preset and remain unscored.
+- Retain the complete published 0.16 documentation and downloads when publishing
+  the corrected guide. SDK methods, runtime dependencies and numerical behavior
+  are unchanged; 0.16 can read the additive server metadata.
+
 # 0.16.0 (2026-10-25) — Fast CPU backtest benchmarks
 
 - Opt in with `benchmark_suite="fast-v1"`; sync/async waits include the bounded CPU
