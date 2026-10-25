@@ -239,13 +239,17 @@ FORECAST_METHODS.update({
  'backtest': ('Submit and wait for an explicit backtest of this fitted context. Optional final_horizon forecasts from its end without entering scores.',
               'Backtest; close owned clients after reading. Borrowed clients stay open.', _BACKTEST_ERRORS + ' Local timeout preserves server work and backtest reconnect ID.')})
 BACKTEST_METHODS = {
+ 'benchmarks': ('Compute or reconnect the optional fast-v1 CPU suite after native jobs finish; one shared 20-second compute deadline.', 'Validated dictionary with metadata, units, predictions, metrics, complete leaderboard and feature details; await for AsyncBacktest.', 'Unsupported suite, busy/not-ready, expiry/auth/transport or invalid_response. Partial CPU results emit BacktestWarning; no native resubmission.'),
+ 'benchmark_predictions': ('Read CPU historical or final event rows with original fold/index provenance.', 'Owned pandas.DataFrame; final=True selects unscored final forecasts. Await for AsyncBacktest.', 'Same errors/limits as benchmarks(); point-only models have null quantiles.'),
+ 'benchmark_scores': ('Read pooled CPU scores for models with every historical unit completed.', 'Owned pandas.DataFrame; await for AsyncBacktest.', 'Same errors/limits as benchmarks(); final forecasts are excluded.'),
+ 'feature_selection': ('Inspect direct Elastic Net/Ridge selected features and standardized coefficients by fold, series, target and lead.', 'Owned pandas.DataFrame; null fold identifies a final fit. Await for AsyncBacktest.', 'Same errors/limits as benchmarks(); coefficients are predictive associations, not causal effects.'),
  'refresh': ('Read current metadata and validate immutable identities/options.', 'Same handle, updated; await for AsyncBacktest.', 'NotFoundError, auth/transport or invalid_response.'),
- 'wait': ('Wait locally without cancelling or resubmitting on timeout.', 'Same handle; partial success emits BacktestWarning.', 'JobTimeoutError retains ID and reopen_backtest guidance; failed/cancelled waits raise typed errors.'),
+ 'wait': ('Wait for native jobs and an explicitly requested CPU suite; timeout never cancels or resubmits.', 'Same handle; partial success emits BacktestWarning.', 'JobTimeoutError retains ID and reopen_backtest guidance; failed/cancelled waits raise typed errors.'),
  'predictions': ('Read historical origin/lead events, including training-only naive references; validate indices, columns and quantiles.', 'Owned long pandas.DataFrame; await for AsyncBacktest.', 'ResultExpiredError after seven days; not-ready/auth/transport or invalid_response.'),
  'final_predictions': ('Read only the separately requested final forecasts, never backtest scores.', 'Owned long pandas.DataFrame; empty when final_horizon was omitted; await for AsyncBacktest.', 'ResultExpiredError, not-ready/auth/transport or invalid_response.'),
  'metrics': ('Read overall, fold, series/target and lead metric detail with eligible counts and undefined reasons.', 'Owned pandas.DataFrame; await for AsyncBacktest.', 'ResultExpiredError, not-ready/auth/transport or malformed-response error.'),
  'report_html': ('Read an authenticated self-contained report with no script or external resources; not cached past remote expiry.', 'HTML string; await for AsyncBacktest.', 'ResultExpiredError, not-ready/auth/transport errors.'),
- 'to_frame': ('Build the pooled leaderboard locally for completely backtested models only.', 'Owned pandas.DataFrame; no remote call.', 'No ranking of incomplete models or final forecasts.'),
+ 'to_frame': ('Build the pooled native leaderboard locally; include_benchmarks=True adds already-fetched complete CPU scores.', 'Owned pandas.DataFrame; no remote call.', 'No ranking of incomplete models or final forecasts.'),
  'to_dict': ('Copy last-read backtest metadata, versions, split hash, jobs and estimates.', 'Independent dictionary; no remote call.', 'No remote call.'),
  'cancel': ('Cancel unfinished child forecasts and preserve completed outcomes/charges.', 'Same handle with current metadata; await for AsyncBacktest.', 'Auth/transport/NotFoundError; completion may race cancellation.'),
  'delete': ('Explicitly delete retained terminal-group plan/inputs/results, preserving datasets and usage.', 'None; await for AsyncBacktest.', 'ConflictError while children run; auth/transport/NotFoundError; repeat deletion is safe.'),
@@ -556,7 +560,7 @@ def current_redirect(page):
 
 
 # Published historical documentation folders (v<version>/), oldest first.
-HISTORICAL_VERSIONS = ('0.6.0', '0.7.0', '0.7.1', '0.8.0', '0.9.1', '0.10.0', '0.10.1', '0.11.0', '0.11.1', '0.12.0', '0.13.1', '0.14.0', '0.14.1', '0.14.2')
+HISTORICAL_VERSIONS = ('0.6.0', '0.7.0', '0.7.1', '0.8.0', '0.9.1', '0.10.0', '0.10.1', '0.11.0', '0.11.1', '0.12.0', '0.13.1', '0.14.0', '0.14.1', '0.14.2', '0.15.0')
 
 
 def release_tuple(version):

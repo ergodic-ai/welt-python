@@ -60,9 +60,78 @@ a timezone; naive table/DatetimeIndex times are UTC. Nonzero sub-microsecond
 precision, duplicates, gaps and irregular spacing are refused. Nothing is filled
 or resampled. Positional inputs have no frequency. Panels need equal grids/lengths.
 
-Time metadata is separate from model features. Calendar feature generation is a
-future opt-in extension needing an explicit local timezone. Current fixed daily
-steps are 24 elapsed UTC hours, including across daylight-saving transitions.
+Native foundation-model time metadata is separate from model features. The
+optional CPU linear benchmarks below generate calendar features in UTC only.
+Local business timezones remain a future extension. Fixed daily steps are 24
+elapsed UTC hours, including across daylight-saving transitions.
+
+## Fast CPU benchmarks
+
+SDK 0.16 adds an explicit optional suite on compatible servers:
+
+```python
+result = client.backtest(
+    history, time="date", target="sales", frequency="h",
+    models=["chronos-2"], folds=3, horizon=24,
+    seasonal_period=24, context_length=168, final_horizon=24,
+    benchmark_suite="fast-v1", max_credits=20,
+)
+print(result.to_frame(include_benchmarks=True))
+cpu_predictions = result.benchmark_predictions()
+cpu_future = result.benchmark_predictions(final=True)
+selected_features = result.feature_selection()
+diagnostics = result.benchmarks()
+```
+
+`fast-v1` contains Laplace (skaters 0.16.0), AutoTheta, AutoETS and MFLES
+(StatsForecast 2.1.1), direct auto-feature Elastic Net and Ridge (scikit-learn
+1.9.1), and drift. These are independent per-series/target CPU references; they
+share **20 seconds of compute wall time for the entire suite**, including imports,
+all folds and optional final forecasts. Queueing, HTTP and native GPU time are
+separate. No additional benchmark credits are charged. A timeout preserves whole
+completed units and reports unfinished/skipped units explicitly. Only models
+with every historical unit completed enter the benchmark leaderboard.
+
+Laplace accepts up to 512 training rows and 64 leads; the other benchmarks up to
+4,096 rows and 64 leads. There are at most 32 fold/series/target units, and the
+existing 10,000 combined prediction-event limit includes CPU output. These
+bounds do not promise every admitted workload finishes before the shared budget.
+History is never shortened to fit. Statistical models require finite observed
+targets and at least two declared seasonal periods; unsupported units are skipped.
+
+Laplace publishes predictive medians and requested quantiles. AutoTheta/AutoETS/
+MFLES publish their native point means; linear models publish regression point
+estimates and drift publishes its deterministic path. Their interval metrics are
+unavailable. All use the same outer folds, actuals, training-only MASE scale and
+metric definitions. Final forecasts never enter backtest scores.
+
+Laplace, AutoTheta, AutoETS and drift ignore covariates. MFLES uses known-future
+numeric covariates. Elastic Net/Ridge use target lags, recent summaries/changes,
+declared observed covariates at the origin, known-future covariates at the
+destination, and UTC cyclical calendar features when actual timestamps exist.
+Positional arrays get no calendar features. Each lead is fitted directly to its
+future value; outputs are levels, not cumulative totals.
+
+Elastic Net selects sparse coefficients; Ridge provides dense shrinkage. Three
+fixed alphas use a chronological inner holdout with training labels ending before
+validation origins. Imputation, category encoding and scaling fit on training
+only, then refit on the fold's complete training window. Category vocabularies
+retain at most 16 sorted training levels; other/unknown levels use all-zero
+encoding. `benchmarks()['details']` records vocabulary, settings and coefficients;
+`feature_selection()` provides one row per selected feature/fold/lead, including
+final fits with a null fold. Coefficients use standardized inputs and describe
+predictive associations, not causal effects.
+
+`wait()` waits for both native and requested CPU work; local timeout never cancels
+or resubmits. `finished` and `status` retain native-job semantics for compatibility.
+Inspect `to_dict()['benchmarks']` or `benchmarks()['metadata']` for CPU status.
+Partial CPU outcomes emit `BacktestWarning` while native results remain available.
+`predictions()`, `metrics()` and default `to_frame()` keep their native contracts;
+CPU results use the separate methods above. Async handles expose the same methods
+with `await`; `to_frame()` remains local. Reports include already-retained CPU
+scores without starting computation. Results expire with the parent after seven
+days; cancellation also stops unfinished CPU work, and explicit parent deletion
+removes its CPU artifacts. Reopen the existing ID to recover an uncertain read.
 
 ## Covariates
 

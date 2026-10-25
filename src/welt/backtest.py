@@ -55,10 +55,12 @@ def request(history, *, models, horizon, folds=5, step=None, context_length=None
             time=None, target=None, id=None, past_covariates=(), future_covariates=(), categorical=(),
             frequency=None, start=None, future=None, final_horizon=None,
             quantile_levels=(.1, .5, .9), cross_learning=False, primary_metric="mae", max_credits=None,
-            expected_versions=None):
+            expected_versions=None, benchmark_suite=None):
     """Build an owned JSON request. No uploads or prediction calls occur here."""
     if isinstance(models, str):
         raise ValueError("models must be a list of explicit model IDs.")
+    if benchmark_suite not in (None, "fast-v1"):
+        raise ValueError("benchmark_suite must be None or fast-v1.")
     models = list(models)
     if not 1 <= len(models) <= 8 or len(set(models)) != len(models) or any(safe_id(m) is None for m in models):
         raise ValueError("models must contain 1-8 unique explicit model IDs.")
@@ -147,6 +149,8 @@ def request(history, *, models, horizon, folds=5, step=None, context_length=None
             future = future.copy(deep=True)
             future[time] = [_utc(v, naive_utc=True).isoformat() for v in future[time]]
         body["future"] = _table(future, "future")
+    if benchmark_suite is not None:
+        body["benchmark_suite"] = benchmark_suite
     if expected_versions is not None:
         body["expected_versions"] = deepcopy(expected_versions)
     import json
@@ -180,6 +184,7 @@ class _View:
         self.client = client
         self._owns_client = False
         self._payload = None
+        self._benchmark_payload = None
         self._update(payload, expected_id=expected_id)
         if expected_request is not None:
             try:
@@ -196,6 +201,8 @@ class _View:
                     raise ValueError()
                 if request.get("frequency") and _frequency(request["frequency"]) != _frequency(payload["frequency"]):
                     raise ValueError()
+                if request.get("benchmark_suite") != payload.get("benchmark_suite"):
+                    raise ValueError()
                 for model in payload["models"]:
                     pin = (request.get("expected_versions") or {}).get(model["model_id"])
                     if pin and (pin["model_version"] != model["model_version"]
@@ -211,6 +218,8 @@ class _View:
                     or payload["index_kind"] not in ("position", "datetime")
                     or expected_id is not None and payload["id"] != expected_id
                     or not isinstance(payload["models"], list) or not payload["models"]):
+                raise ValueError()
+            if payload.get("benchmark_suite") not in (None, "fast-v1"):
                 raise ValueError()
             key = secret(self.client.api_key)
             if key and key in payload["id"]:
@@ -265,6 +274,8 @@ class _View:
                     jobs.add(job["job_id"])
                     operations.add(job["operation_id"])
             if self._payload is not None:
+                if self._payload.get("benchmark_suite") != payload.get("benchmark_suite"):
+                    raise ValueError()
                 for name in ("id", "index_kind", "models", "folds", "horizon", "step", "context_length",
                              "seasonal_period", "final_horizon", "primary_metric", "protocol_version", "split_sha256",
                              "frequency", "calendar_anchor", "targets", "series_ids", "quantile_levels",
@@ -295,10 +306,16 @@ class _View:
     def to_dict(self):
         return deepcopy(self._payload)
 
-    def to_frame(self):
-        """Pooled leaderboard, one row per completely backtested model; no remote call."""
-        return pd.DataFrame([dict(model_id=r["model_id"], **r["values"]) for r in
-                             (self.summary or {}).get("leaderboard", [])])
+    def to_frame(self, *, include_benchmarks=False):
+        """Pooled native leaderboard; optionally include already-fetched CPU scores."""
+        rows = list((self.summary or {}).get("leaderboard", []))
+        if include_benchmarks:
+            if self._benchmark_payload is None:
+                raise ValueError("Fetch benchmarks() or wait() before including benchmark scores.")
+            rows += self._benchmark_payload["leaderboard"]
+            metric = self._payload["primary_metric"]
+            rows.sort(key=lambda r: (r["values"].get(metric) is None, r["values"].get(metric) or 0, r["model_id"]))
+        return pd.DataFrame([dict(model_id=r["model_id"], **r["values"]) for r in rows])
 
     def _path(self, suffix=""):
         return f"/v1/backtests/{_id(self.id)}{suffix}"
@@ -395,7 +412,14 @@ class Backtest(_View):
             while True:
                 self._update(self.client.request("GET", self._path(), _deadline=deadline, _job_id=self.id))
                 if self._settled():
-                    return self
+                    if not self._payload.get("benchmark_suite") or self.status == "cancelled":
+                        return self
+                    try:
+                        self.benchmarks(_deadline=deadline)
+                        return self
+                    except WeltError as error:
+                        if error.code not in ("benchmark_busy", "result_not_ready"):
+                            raise
                 time.sleep(poll_interval if deadline is None else _wait(deadline, self.id, poll_interval))
                 poll_interval = min(poll_interval * 1.4, 5)
         except JobTimeoutError:
@@ -412,6 +436,27 @@ class Backtest(_View):
         if payload.get("backtest_id") != self.id:
             raise WeltError("Invalid backtest metrics response.", code="invalid_response")
         return pd.DataFrame(deepcopy(payload["items"]))
+
+    def benchmarks(self, *, _deadline=None):
+        """Compute/reconnect the optional CPU suite; no new native work is submitted."""
+        from .backtest_benchmarks import validate
+        self._benchmark_payload = validate(self.client.request("GET", self._path("/benchmarks"),
+            _deadline=_deadline, _job_id=self.id), self._payload)
+        self._payload["benchmarks"] = deepcopy(self._benchmark_payload["metadata"])
+        if self._benchmark_payload["metadata"]["status"] != "succeeded":
+            warnings.warn("Some CPU benchmarks did not complete; inspect benchmark metadata and unit statuses.",
+                          BacktestWarning, stacklevel=2)
+        return deepcopy(self._benchmark_payload)
+
+    def benchmark_predictions(self, *, final=False):
+        return pd.DataFrame(self.benchmarks()["final" if final else "items"])
+
+    def benchmark_scores(self):
+        return pd.DataFrame([dict(model_id=r["model_id"], **r["values"]) for r in self.benchmarks()["leaderboard"]])
+
+    def feature_selection(self):
+        from .backtest_benchmarks import features
+        return pd.DataFrame(features(self.benchmarks()))
 
     def report_html(self):
         return self.client.request("GET", self._path("/report"), _text=True)
@@ -433,7 +478,14 @@ class AsyncBacktest(_View):
             while True:
                 self._update(await self.client.request("GET", self._path(), _deadline=deadline, _job_id=self.id))
                 if self._settled():
-                    return self
+                    if not self._payload.get("benchmark_suite") or self.status == "cancelled":
+                        return self
+                    try:
+                        await self.benchmarks(_deadline=deadline)
+                        return self
+                    except WeltError as error:
+                        if error.code not in ("benchmark_busy", "result_not_ready"):
+                            raise
                 await asyncio.sleep(poll_interval if deadline is None else _wait(deadline, self.id, poll_interval))
                 poll_interval = min(poll_interval * 1.4, 5)
         except JobTimeoutError:
@@ -450,6 +502,27 @@ class AsyncBacktest(_View):
         if payload.get("backtest_id") != self.id:
             raise WeltError("Invalid backtest metrics response.", code="invalid_response")
         return pd.DataFrame(deepcopy(payload["items"]))
+
+    async def benchmarks(self, *, _deadline=None):
+        """Compute/reconnect the optional CPU suite; no new native work is submitted."""
+        from .backtest_benchmarks import validate
+        self._benchmark_payload = validate(await self.client.request("GET", self._path("/benchmarks"),
+            _deadline=_deadline, _job_id=self.id), self._payload)
+        self._payload["benchmarks"] = deepcopy(self._benchmark_payload["metadata"])
+        if self._benchmark_payload["metadata"]["status"] != "succeeded":
+            warnings.warn("Some CPU benchmarks did not complete; inspect benchmark metadata and unit statuses.",
+                          BacktestWarning, stacklevel=2)
+        return deepcopy(self._benchmark_payload)
+
+    async def benchmark_predictions(self, *, final=False):
+        return pd.DataFrame((await self.benchmarks())["final" if final else "items"])
+
+    async def benchmark_scores(self):
+        return pd.DataFrame([dict(model_id=r["model_id"], **r["values"]) for r in (await self.benchmarks())["leaderboard"]])
+
+    async def feature_selection(self):
+        from .backtest_benchmarks import features
+        return pd.DataFrame(features(await self.benchmarks()))
 
     async def report_html(self):
         return await self.client.request("GET", self._path("/report"), _text=True)
