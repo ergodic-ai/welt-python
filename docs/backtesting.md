@@ -100,11 +100,22 @@ The shared input/fold history is retained; model-specific lookbacks are explicit
 configuration, not adaptive truncation at the time limit. Statistical models require finite observed
 targets and at least two declared seasonal periods; unsupported units are skipped.
 
-The fast Laplace configuration is **Laplace (lookback 64)**, revision
-`single-scale-lookback64-v1` in the `fast-v1:laplace` family. It runs upstream
+The fast Laplace configuration is **Laplace (season-aware, lookback 64)**, revision
+`declared-seasonality-lookback64-v1` in the `fast-v1:laplace` family. It runs upstream
 single-scale Laplace (`scales=[1]`, default CRPS/sticky/GPD-tail settings) on the
 most recent `min(64, available_context_length)` target observations inside each
-fold. Its parameters record `lookback=64`; per-unit details expose
+fold. When the declared seasonal period is greater than one, the publisher’s
+seasonal-difference conjugation is applied and forecasts are inverted to target
+levels. Two complete seasons must fit in the effective 64-point window; otherwise
+that unit is unsupported. Period1 retains the identity transform. This explicit
+seasonal preset can improve or worsen accuracy depending on the series; its
+quantile intervals have not been qualified as calibrated confidence intervals.
+The configured GPD tail splice requires 500 warm-up observations and never
+activates inside this 64-point window. Beyond a seasonal cycle, the publisher
+uses recovered means and independent Gaussian anchor variance as an approximation
+to the joint forecast path.
+Its parameters include `seasonality="declared-period"`; unit details record
+`seasonal_period` and `transform`. Its parameters record `lookback=64`; per-unit details expose
 `available_context_length`, `effective_context_length`, `effective_train_start`
 and exclusive `effective_train_stop`. Event `train_start`/`train_stop` still
 identify the shared available fold, and MASE uses that complete fold's training
@@ -224,3 +235,36 @@ A fitted Forecast exposes `model.backtest(horizon=24, folds=3)` with its copied
 context and pinned versions, without changing that context. Its returned handle
 owns only an estimator-created client: use `with model.backtest(...) as result:`
 or call `result.close()` after reading. A supplied Forecast(client=...) stays open.
+
+## Evaluation entry and shareable reports
+
+The dashboard now lists tabular and time-series runs together under Evaluations.
+Each forecasting entry opens a self-contained interactive report with historical
+observations and date/position zoom. Zoom changes the view, not the held-out
+scores or prediction exports. The Forward walk still scores only historical
+out-of-sample forecasts; final forecasts remain separate and unscored.
+
+The existing SDK `report_html()` continues to return HTML. To create a shareable
+link with the current client’s generic request method:
+
+```python
+link = client.request(
+    "POST", f"/v1/backtests/{backtest.id}/report-links",
+    json={"expires_in_days": 7},
+)
+print(link["url"])  # only returned on creation; treat it as a secret
+```
+
+Anyone holding the link can read this report, including target history and
+forecasts. It does not authorize model execution, other workspace data or raw API
+endpoints. Private input hashes and categorical vocabulary values are excluded.
+Links expire after 1–7 days and cannot outlive retained artifacts or the creating
+key. List them with `GET /v1/backtests/{id}/report-links`; revoke one with
+`DELETE /v1/backtests/{id}/report-links/{link_id}`. Revocation/expiry stops future
+access, and cannot erase a report that somebody already downloaded.
+
+Earlier retained Laplace runs preserve their recorded configuration. The raw
+`single-scale-lookback64-v1` variant did not apply explicit seasonal differencing.
+Inspect the returned manifest instead of assuming old results were recomputed.
+No client method, runtime dependency, native score or charging contract changes
+in this documentation patch.
