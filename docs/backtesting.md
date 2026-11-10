@@ -155,8 +155,7 @@ Partial CPU outcomes emit `BacktestWarning` while native results remain availabl
 `predictions()`, `metrics()` and default `to_frame()` keep their native contracts;
 CPU results use the separate methods above. Async handles expose the same methods
 with `await`; `to_frame()` remains local. Reports include already-retained CPU
-scores without starting computation. Results expire with the parent after seven
-days; cancellation also stops unfinished CPU work, and explicit parent deletion
+scores without starting computation. Results remain until you explicitly delete the parent; cancellation also stops unfinished CPU work, and explicit parent deletion
 removes its CPU artifacts. Reopen the existing ID to recover an uncertain read.
 
 ## Covariates
@@ -222,10 +221,9 @@ Each model/fold/final call contributes to lane load and ordinary forecast pricin
 are ten folds/eight models, 10 MiB plan, 50 MiB combined native inputs and 10,000
 prediction events including references/final outputs, in addition to model limits.
 
-Predictions, metric details and reports expire seven days after the last child
-finishes; summary metadata remains. Partial success emits BacktestWarning;
+Predictions, metric details, reports and summary metadata remain until explicit deletion. Partial success emits BacktestWarning;
 complete failure/cancellation raises a typed error on wait. Metadata still shows
-individual outcomes. There is no new public report-sharing link.
+individual outcomes. Report-sharing links are described below.
 
 AsyncClient has the same submission/reconnect methods: await them and `wait()`,
 `predictions()`, `final_predictions()`, `metrics()`, `report_html()` and mutations.
@@ -250,7 +248,7 @@ link with the current client’s generic request method:
 ```python
 link = client.request(
     "POST", f"/v1/backtests/{result.id}/report-links",
-    json={"expires_in_days": 7},
+    json={"expires_in_days": None},
 )
 print(link["url"])  # only returned on creation; treat it as a secret
 ```
@@ -258,8 +256,8 @@ print(link["url"])  # only returned on creation; treat it as a secret
 Anyone holding the link can read this report, including target history and
 forecasts. It does not authorize model execution, other workspace data or raw API
 endpoints. Private input hashes and categorical vocabulary values are excluded.
-Links expire after 1–7 days and cannot outlive retained artifacts or the creating
-key. List them with `GET /v1/backtests/{id}/report-links`; revoke one with
+Links have no scheduled expiry by default; optionally choose 1–7 days. A link
+cannot outlive a creating key’s access. List them with `GET /v1/backtests/{id}/report-links`; revoke one with
 `DELETE /v1/backtests/{id}/report-links/{link_id}`. Revocation/expiry stops future
 access, and cannot erase a report that somebody already downloaded.
 
