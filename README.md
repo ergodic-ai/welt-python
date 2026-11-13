@@ -275,3 +275,9 @@ inferred. The saved dataset keeps source provenance and both content hashes; sou
 result expiry/revocation does not expire the independent copy. It follows ordinary
 dataset deletion, and a retry cannot recreate a deleted copy. Async clients expose
 the same method. This remains an unreleased candidate.
+
+Submission reads the current dataset description to apply its lower retrieval
+ceilings. Normal client defaults are never increased automatically. Partial explicit
+`limits` override those defaults; values above the dataset ceiling are refused by
+the service. A supplied `schema_revision` remains authoritative and is never
+silently replaced by the current description.

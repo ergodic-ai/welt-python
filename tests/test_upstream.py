@@ -23,6 +23,7 @@ class Service:
         self.status='succeeded'
         self.body_override=None
         self.headers={}
+        self.limits={}
 
     def __call__(self,request):
         assert request.headers['Authorization']=='Bearer synthetic-key'
@@ -31,7 +32,7 @@ class Service:
         if path=='/v1/data/datasets':
             return httpx.Response(200,json=[dict(id='world_bank:SP.POP.TOTL')])
         if path=='/v1/data/datasets/world_bank:SP.POP.TOTL':
-            return httpx.Response(200,json=dict(id='world_bank:SP.POP.TOTL',schema_revision='c'*64))
+            return httpx.Response(200,json=dict(id='world_bank:SP.POP.TOTL',schema_revision='c'*64,limits=self.limits))
         if path=='/v1/data/retrievals' or path=='/v1/data/retrievals/'+JOB_ID:
             return httpx.Response(202 if request.method=='POST' else 200,
                 json=dict(id=JOB_ID,status=self.status,result_id=RESULT_ID if self.status=='succeeded' else None))
@@ -137,3 +138,20 @@ def test_async_invalid_fetch_budget_and_existing_file_do_not_make_requests(tmp_p
                 await c.upstream.download(RESULT_ID,existing)
         assert not service.calls and existing.read_text()=='preserve'
     asyncio.run(run())
+
+
+@pytest.mark.parametrize('asynchronous',[False,True])
+def test_submission_uses_dataset_ceilings_preserves_explicit_limits_and_revision(asynchronous):
+    service=Service()
+    service.limits=dict(max_rows=52,max_bytes=262144,max_pages=3,timeout_seconds=30)
+    async def run():
+        async with AsyncClient(base_url='https://api.test',api_key='synthetic-key',transport=httpx.MockTransport(service)) as c:
+            await c.upstream.submit('world_bank:SP.POP.TOTL',schema_revision='d'*64,limits={'max_rows':1})
+    if asynchronous:asyncio.run(run())
+    else:
+        with client(service) as c:
+            c.upstream.submit('world_bank:SP.POP.TOTL',schema_revision='d'*64,limits={'max_rows':1})
+    posted=next(r for r in service.calls if r.method=='POST')
+    body=json.loads(posted.content)
+    assert body['limits']==dict(service.limits,max_rows=1)
+    assert body['schema_revision']=='d'*64

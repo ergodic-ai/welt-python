@@ -62,6 +62,24 @@ def finished(status):
     return False
 
 
+def bounded_selection(description,selection):
+    """Use advertised lower ceilings without raising normal client defaults."""
+    defaults=dict(max_rows=10000,max_bytes=4194304,max_pages=100,timeout_seconds=30)
+    advertised=description.get('limits',{})
+    if not isinstance(advertised,dict):
+        raise WeltError('Invalid upstream dataset limits.',code='invalid_response')
+    for name,value in advertised.items():
+        if name not in defaults or type(value) is not int or value<=0:
+            raise WeltError('Invalid upstream dataset limits.',code='invalid_response')
+        defaults[name]=min(defaults[name],value)
+    supplied=selection.get('limits')
+    if supplied is not None:
+        if not isinstance(supplied,dict):
+            raise ValueError('limits must be a mapping.')
+        defaults.update(supplied)  # Explicit limits are checked by the service, never silently clamped.
+    return dict(selection,limits=defaults)
+
+
 def payload(dataset_id,schema_revision,*,selections=(),columns=None,as_of=None,limits=None,freshness=None):
     ref(dataset_id)
     if not isinstance(schema_revision,str) or not re.fullmatch('[0-9a-f]{64}',schema_revision):
@@ -206,9 +224,10 @@ class Upstream:
 
     def submit(self,dataset_id,*,schema_revision=None,idempotency_key=None,**selection):
         key=replay_key(idempotency_key)
-        revision=self.describe(dataset_id)['schema_revision'] if schema_revision is None else schema_revision
+        description=self.describe(dataset_id)
+        revision=description['schema_revision'] if schema_revision is None else schema_revision
         return self.client.request('POST','/v1/data/retrievals',
-            json=payload(dataset_id,revision,**selection),headers={'Idempotency-Key':key})
+            json=payload(dataset_id,revision,**bounded_selection(description,selection)),headers={'Idempotency-Key':key})
 
     def status(self,retrieval_id,*,_deadline=None):
         try:
@@ -292,9 +311,10 @@ class AsyncUpstream(Upstream):
 
     async def submit(self,dataset_id,*,schema_revision=None,idempotency_key=None,**selection):
         key=replay_key(idempotency_key)
-        revision=(await self.describe(dataset_id))['schema_revision'] if schema_revision is None else schema_revision
+        description=await self.describe(dataset_id)
+        revision=description['schema_revision'] if schema_revision is None else schema_revision
         return await self.client.request('POST','/v1/data/retrievals',
-            json=payload(dataset_id,revision,**selection),headers={'Idempotency-Key':key})
+            json=payload(dataset_id,revision,**bounded_selection(description,selection)),headers={'Idempotency-Key':key})
 
     async def status(self,retrieval_id,*,_deadline=None):
         try:
