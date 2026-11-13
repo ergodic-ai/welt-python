@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = "https://ergodic-ai.github.io/welt-python"
 REQUIRED = ('Client', 'Job', 'Classifier', 'Regressor', 'AsyncClient', 'AsyncJob',
             'CausalDiscovery', 'CausalResult', 'Forecast', 'ForecastResult', 'ForecastSeries', 'ForecastJob', 'AsyncForecastJob',
-            'Evaluation', 'AsyncEvaluation', 'ReportLink', 'Backtest', 'AsyncBacktest')
+            'Evaluation', 'AsyncEvaluation', 'ReportLink', 'Backtest', 'AsyncBacktest', 'DecisionJob', 'AsyncDecisionJob', 'DecisionResult')
 # DEC-073: top sections and the guide sidebar. Order defines the previous/next pager.
 NAV = [('Get started', 'start'), ('Guides', 'own-data'), ('Reference', 'reference'), ('Models', 'capabilities'), ('CLI', 'cli')]
 GUIDES = [('Get started', [('First prediction', 'start'), ('Connect your workspace', 'connect'), ('Install and accounts', 'onboarding'),
@@ -36,7 +36,7 @@ GUIDES = [('Get started', [('First prediction', 'start'), ('Connect your workspa
                       ('Forecast a time series', 'forecasting'), ('Backtest a time series', 'backtesting'),
                       ('Hidden model runs', 'model-runs'),
                       ('Research datasets', 'research-datasets'), ('Wait and recover', 'async-and-errors'),
-                      ('Discover a graph', 'causal-discovery'), ('Workspace resources', 'usage')]),
+                      ('Discover a graph', 'causal-discovery'), ('Rank interventions', 'decisions'), ('Workspace resources', 'usage')]),
           ('Reference', [('Python reference', 'reference'), ('Models and limits', 'capabilities'), ('Agent CLI', 'cli')]),
           ('Releases', [('Upgrade your client', 'migration')])]
 SECTION = {'index': 'Get started', 'start': 'Get started', 'connect': 'Get started', 'onboarding': 'Get started',
@@ -126,8 +126,13 @@ PARAMS = {
                    'revoked': 'True after revocation.', 'created_by': 'Creating credential, when the server reports it.'},
 }
 
+PARAMS.update({'DecisionJob': PARAMS['Job'], 'AsyncDecisionJob': PARAMS['AsyncJob'], 'DecisionResult': {'_data': 'Internal payload storage; use DecisionResult.from_dict(payload) to validate and copy a wire result.'}})
+
 # Every documented method gets a return contract and an actionable error boundary.
 METHODS = {
+ 'submit_decision': ('Submit a decision request with per-variable interventions and methods. Prefer client.decisions.create for DataFrame inputs.', 'DecisionJob or awaited AsyncDecisionJob. Save its ID; result() returns DecisionResult.', 'Invalid inputs, unsupported model capabilities, capacity, credits or idempotency conflict; mutations never auto-retry.'),
+ 'delete_decision': ('Explicitly purge private input and result blobs of an owned terminal decision.', 'Deletion dictionary; job identity, idempotency and accounting remain.', 'NotFoundError for foreign or missing jobs; ConflictError for active jobs. Datasets remain intact.'),
+ 'from_dict': ('Validate a decision result protocol and ordered finite effects.', 'DecisionResult containing an independent payload copy.', 'ValueError for an unsupported protocol or invalid rankings; no remote call.'),
  'connect': ('Explicitly approve workspace access through browser/device authorization; no constructor login.', 'The same connected Client. Python defaults to process-only origin-bound access; save=True opts into private local persistence.', 'AuthenticationError for denied/expired/consumed/unsafe responses or storage, PermissionDeniedError for an existing insufficient key, TransportError or local KeyboardInterrupt; printed link supports headless/remote notebooks.'),
  'request': ('Advanced raw versioned HTTP resource access; prefer named public methods for validation and contracts.', 'Decoded JSON value, or None for a 204 endpoint (await for AsyncClient).', 'Sanitized typed HTTP/transport errors; authenticated routes require credentials. GET retries are bounded; POST mutations never auto-retry.'),
  'fit': ('Prepare a new immutable predictor; wait for durable remote preparation.', 'The same fitted estimator (self).', 'ValueError for schema/target conflicts before upload; authentication, input, unavailable-model, capacity, execution or JobTimeoutError during remote preparation.'),
@@ -286,7 +291,7 @@ def format_signature(label, signature):
 
 def parameter_table(name, signature):
     described = PARAMS.get(name, {})
-    actual = [parameter for key, parameter in signature.parameters.items() if not key.startswith('_')]
+    actual = [parameter for key, parameter in signature.parameters.items() if not key.startswith('_') or name == 'DecisionResult']
     missing = [parameter.name for parameter in actual if parameter.name not in described]
     stale = set(described) - {parameter.name for parameter in actual}
     if missing or stale:
@@ -322,6 +327,7 @@ def reference():
             if key.startswith('_') or not (method.__module__.startswith('welt') or supported_inherited_score):
                 continue
             overrides = (FORECAST_METHODS if name == 'Forecast' else TYPED_FORECAST_METHODS if name in ('ForecastJob', 'AsyncForecastJob')
+                         else {'result': ('Wait for the durable decision and read its ranked contrasts.', 'DecisionResult with population, individual and skipped actions plus provenance.', 'Timeout preserves the running job; cancellation, failure, ownership and deletion remain typed errors.')} if name in ('DecisionJob', 'AsyncDecisionJob')
                          else EVALUATION_METHODS if name in ('Evaluation', 'AsyncEvaluation')
                          else BACKTEST_METHODS if name in ('Backtest', 'AsyncBacktest') else {})
             if key not in METHODS and key not in overrides:
@@ -725,6 +731,7 @@ def reference_index(link):
     groups = [('Connect', ('Client', 'AsyncClient')), ('Predict', ('Classifier', 'Regressor')),
               ('Discover', ('CausalDiscovery', 'CausalResult')), ('Forecast', ('Forecast', 'ForecastResult', 'ForecastSeries', 'ForecastJob', 'AsyncForecastJob')),
               ('Evaluate', ('Evaluation', 'AsyncEvaluation', 'ReportLink', 'Backtest', 'AsyncBacktest')),
+              ('Decide', ('DecisionJob', 'AsyncDecisionJob', 'DecisionResult')),
               ('Long-running work', ('Job', 'AsyncJob')),
               ('Errors', ())]
     listed = {name for _, names in groups for name in names}

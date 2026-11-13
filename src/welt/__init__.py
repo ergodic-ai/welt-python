@@ -23,6 +23,7 @@ from .evaluation import AsyncEvaluation, Evaluation, EvaluationWarning, ReportLi
 from .backtest import Backtest, AsyncBacktest, BacktestWarning
 
 __all__ = [
+    "DecisionResult", "DecisionJob", "AsyncDecisionJob",
     "AsyncClient", "AsyncJob", "Credential", "ConflictError", "JobCancelledError",
     "JobTimeoutError", "NotFoundError", "PermissionDeniedError", "PredictionPendingError",
     "RateLimitError", "ResultExpiredError", "ResultDeletedError", "TransportError",
@@ -44,3 +45,5 @@ __all__ = [
     "Backtest", "AsyncBacktest", "BacktestWarning",
 ]
 __version__ = "0.16.3"
+
+from .decision import DecisionResult, DecisionJob, AsyncDecisionJob

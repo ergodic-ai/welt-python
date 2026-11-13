@@ -343,6 +343,23 @@ class Client(_HTTP):
             headers=_model_run_headers(idempotency_key, expected_model_version, expected_configuration_version))
         return Job(self, result["id"])
 
+    @property
+    def decisions(self):
+        """Discover, estimate and rank interventions through durable decision jobs."""
+        from .decision import Decisions
+        return Decisions(self)
+
+    def submit_decision(self, request, *, idempotency_key=None):
+        """Submit a raw decision request; use decisions.create for DataFrame convenience."""
+        from .decision import DecisionJob
+        result = self.request("POST", "/v1/decisions", json=request,
+                              headers={"Idempotency-Key": idempotency_key or uuid4().hex})
+        return DecisionJob(self, result['id'])
+
+    def delete_decision(self, job_id):
+        """Explicitly delete a terminal decision's context and result payloads."""
+        return self.request("DELETE", f"/v1/decisions/{_id(job_id)}")
+
     def submit_forecast(self, request, *, idempotency_key=None,
                         expected_model_version=None, expected_configuration_version=None):
         """Submit one raw POST /v1/forecasts request (DEC-085); prefer Forecast for validation.
@@ -701,7 +718,7 @@ class Job:
                 if job["operation"] == "discover":
                     return self.client.causal_result(self.id, _deadline=deadline)
                 return (self.client.request("GET", f"/v1/jobs/{_id(self.id)}/result", _deadline=deadline, _job_id=self.id)
-                        if job["operation"] in ("predict", "batch_predict", "model_run", "forecast") else self.client.predictor(job["predictor_id"], _deadline=deadline, _job_id=self.id))
+                        if job["operation"] in ("predict", "batch_predict", "model_run", "forecast", "decide") else self.client.predictor(job["predictor_id"], _deadline=deadline, _job_id=self.id))
             _failed(job, secret(self.client.api_key))
             time.sleep(_wait(deadline, self.id, poll_interval))
             poll_interval = min(poll_interval * 1.4, 5)
@@ -817,6 +834,23 @@ class AsyncClient(_HTTP):
         result = await self.request("POST", "/v1/model-runs", json=payload,
             headers=_model_run_headers(idempotency_key, expected_model_version, expected_configuration_version))
         return AsyncJob(self, result["id"])
+
+    @property
+    def decisions(self):
+        """Async decision submission and ranked results."""
+        from .decision import AsyncDecisions
+        return AsyncDecisions(self)
+
+    async def submit_decision(self, request, *, idempotency_key=None):
+        """Submit a raw decision request asynchronously."""
+        from .decision import AsyncDecisionJob
+        result = await self.request("POST", "/v1/decisions", json=request,
+                                    headers={"Idempotency-Key": idempotency_key or uuid4().hex})
+        return AsyncDecisionJob(self, result['id'])
+
+    async def delete_decision(self, job_id):
+        """Explicitly delete a terminal decision's payloads."""
+        return await self.request("DELETE", f"/v1/decisions/{_id(job_id)}")
 
     async def submit_forecast(self, request, *, idempotency_key=None,
                               expected_model_version=None, expected_configuration_version=None):
@@ -1109,7 +1143,7 @@ class AsyncJob:
                 if job["operation"] == "discover":
                     return await self.client.causal_result(self.id, _deadline=deadline)
                 return (await self.client.request("GET", f"/v1/jobs/{_id(self.id)}/result", _deadline=deadline, _job_id=self.id)
-                        if job["operation"] in ("predict", "batch_predict", "model_run", "forecast") else await self.client.predictor(job["predictor_id"], _deadline=deadline, _job_id=self.id))
+                        if job["operation"] in ("predict", "batch_predict", "model_run", "forecast", "decide") else await self.client.predictor(job["predictor_id"], _deadline=deadline, _job_id=self.id))
             _failed(job, secret(self.client.api_key))
             await asyncio.sleep(_wait(deadline, self.id, poll_interval))
             poll_interval = min(poll_interval * 1.4, 5)

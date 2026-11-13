@@ -1,3 +1,8 @@
+# Unreleased — decision pipeline
+
+- Add sync/async decision resources, durable handles and ranked result parsing.
+  Requires a server with the decision pipeline; no production availability implied.
+
 # 0.16.3 (2026-10-25) — Share-report example handle
 
 Use the existing `result` handle in the share-report example. Add an executable
