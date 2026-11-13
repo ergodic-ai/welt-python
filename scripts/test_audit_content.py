@@ -34,6 +34,7 @@ def iris_shape():
 
 
 def test_readme_install_and_all_python_examples_use_current_sdk(monkeypatch, tmp_path, capsys):
+    monkeypatch.chdir(tmp_path)
     command = shlex.split(blocks(ROOT / "README.md", "sh")[0])
     assert command == ["python", "-m", "pip", "install", "welt-client[parquet]"]
     readme = (ROOT / "README.md").read_text()
@@ -49,12 +50,26 @@ def test_readme_install_and_all_python_examples_use_current_sdk(monkeypatch, tmp
                   targets=[], splits=[])
     service = SyntheticService()
     requests = []
+    upstream = json.loads((ROOT / 'tests/fixtures/upstream-result.json').read_text())
+    upstream_result_id = upstream['preview']['id']
+    upstream_job_id = 'dret_' + 'b' * 32
 
     def handle(request):
         requests.append(request)
         assert request.url.host == "notebook.invalid"
         if request.url.path == "/v1/workspace":
             return httpx.Response(200, json={"id": "workspace-test"})
+        if request.url.path == '/v1/data/datasets':
+            return httpx.Response(200, json=[{'id': 'world_bank:SP.POP.TOTL'}])
+        if request.url.path == '/v1/data/datasets/world_bank:SP.POP.TOTL':
+            return httpx.Response(200, json={'id': 'world_bank:SP.POP.TOTL', 'schema_revision': 'c' * 64})
+        if request.url.path in ('/v1/data/retrievals', '/v1/data/retrievals/' + upstream_job_id):
+            return httpx.Response(200, json={'id': upstream_job_id, 'status': 'succeeded', 'result_id': upstream_result_id})
+        if request.url.path == '/v1/data/results/' + upstream_result_id:
+            return httpx.Response(200, json=upstream['preview'])
+        if request.url.path == '/v1/data/results/' + upstream_result_id + '/download':
+            return httpx.Response(200, headers={'Content-Type': 'application/json'},
+                                  stream=httpx.ByteStream(json.dumps(upstream['result']).encode()))
         if request.url.path.startswith("/v1/research-datasets/"):
             if request.url.path.endswith("/content"):
                 assert request.url.params["version"] == digest
@@ -90,6 +105,7 @@ def test_readme_install_and_all_python_examples_use_current_sdk(monkeypatch, tmp
     assert namespace["saved"].metadata_path.exists()
     assert namespace["meta"].name == "Test table"
     assert any(request.url.path == "/v1/model-runs" for request in requests)
+    assert json.loads((tmp_path / 'population-result.json').read_text()) == upstream['result']
     capsys.readouterr()  # Fixture scores are not model-quality evidence.
 
 

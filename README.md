@@ -215,3 +215,63 @@ with `unsupported_capability`, so fit and forecast each series separately. Times
 [tutorial notebook](https://ergodic-ai.github.io/welt-python/notebook-forecasting-with-covariates.html) ·
 Use Chronos-2 inside ergodic's backtest and reconcile:
 https://docs.ergodic.dev/forecast-with-welt.html
+
+### Upstream data (unreleased API-224 candidate)
+
+The candidate `client.upstream` namespace works with deployments that explicitly
+expose qualified upstream datasets. The production service and released SDK do not
+have this feature enabled yet. Dataset policies and capabilities are authoritative;
+being listed does not mean a source is available for retrieval.
+
+```python
+from welt import Client
+
+client = Client()  # Uses your existing Welt connection; no provider key in code.
+catalogue = client.upstream.search(source="world_bank")
+description = client.upstream.describe("world_bank:SP.POP.TOTL")
+
+# Run only where this dataset's retrieval/export/retention policies are qualified.
+result = client.upstream.fetch(
+    description["id"],
+    selections=[
+        {"column": "economy", "operator": "eq", "values": ["USA"]},
+        {"column": "year", "operator": "eq", "values": ["2020"]},
+    ],
+    idempotency_key="population-usa-2020-v1",
+)
+frame = result.to_pandas()
+print(result.receipt, result.provenance)
+result.save("population-result.json")  # Refuses an existing destination.
+```
+
+`fetch` describes the dataset, submits a durable retrieval, waits, and downloads a
+complete JSON result. It validates the result's content and snapshot hashes against
+metadata; it never treats a preview as a full dataset. Decimal columns become exact
+Python `Decimal` objects in `to_pandas()`, and native period/date labels remain
+strings. The frame's `attrs["welt_upstream"]` retains schema and provenance. Numeric
+conversion or period-to-date conversion is an explicit caller choice.
+
+Use `submit(...)` and `wait(retrieval_id)` separately to reconnect after interruption.
+The wait timeout stops polling, not the server job; use `cancel(retrieval_id)` to
+cancel publication. The `timeout` argument bounds polling; describe/submit/download
+use the client's configured HTTP transport timeouts. Reuse an explicit idempotency
+key to retry an uncertain submission. `preview(result_id, limit=20)` is explicitly
+bounded; `result(result_id)` and `download(result_id, path)` retrieve complete data,
+up to a configurable ceiling of 10 MiB, and refuse corruption or partial transfer.
+Downloads do not follow redirects. Export requires original and current source rights.
+
+`AsyncClient().upstream` provides the same operations with `await` (including
+`fetch`, `wait`, `result`, and `download`). Result conversion with `to_pandas()` stays
+local and synchronous. Source credentials are not accepted as query arguments;
+account-owned source connections and production activation remain service gates.
+
+The candidate also provides `client.upstream.materialize(result.id, name="Population",
+decimal_encoding="float64", target="value", idempotency_key="population-copy-v1")`
+to save an ordinary workspace dataset. Use `decimal_encoding="string"` to preserve
+exact decimals as categorical text; `float64` explicitly permits numeric rounding.
+The dataset description must record `materialization_evidence` qualifying ongoing
+retention/modelling, and export/retention rights must permit the copy. No target is
+inferred. The saved dataset keeps source provenance and both content hashes; source
+result expiry/revocation does not expire the independent copy. It follows ordinary
+dataset deletion, and a retry cannot recreate a deleted copy. Async clients expose
+the same method. This remains an unreleased candidate.

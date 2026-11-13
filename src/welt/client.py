@@ -232,6 +232,12 @@ class _HTTP:
 
 
 class Client(_HTTP):
+    @property
+    def upstream(self):
+        """Unified upstream datasets, retrievals and verified results."""
+        from .upstream import Upstream
+        return Upstream(self)
+
     def __init__(self, base_url=None, api_key=None, *, timeout=60, transport=None,
                  max_retries=2, max_retry_delay=5, workspace=None):
         headers = self._configure(base_url, api_key, max_retries, max_retry_delay, workspace)
@@ -725,6 +731,12 @@ class Job:
 
 
 class AsyncClient(_HTTP):
+    @property
+    def upstream(self):
+        """Async unified upstream datasets, retrievals and verified results."""
+        from .upstream import AsyncUpstream
+        return AsyncUpstream(self)
+
     def __init__(self, base_url=None, api_key=None, *, timeout=60, transport=None,
                  max_retries=2, max_retry_delay=5, workspace=None):
         headers = self._configure(base_url, api_key, max_retries, max_retry_delay, workspace)
