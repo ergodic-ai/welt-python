@@ -163,7 +163,7 @@ def connection(source='fred',revoked=False):
 
 
 @pytest.mark.parametrize('asynchronous',[False,True])
-@pytest.mark.parametrize('source,token',[('fred','b'*32),('census','c'*40),('open_meteo','s'*128)])
+@pytest.mark.parametrize('source,token',[('fred','b'*32),('census','c'*40),('open_meteo','s'*128),('eia','e'*128)])
 def test_source_connection_management_and_no_key_retention(asynchronous,source,token):
     from welt.credentials import Credential
     requests=[]
@@ -192,9 +192,9 @@ def test_source_connection_management_and_no_key_retention(asynchronous,source,t
 def test_bad_connection_inputs_fail_before_requests():
     def service(request):pytest.fail('Invalid secret/source sent to server')
     with client(service) as c:
-        for source,key in [('fred','private-invalid-secret'),('census','b'*32),('../fred','b'*32),('other','b'*32),('open_meteo','bad key'),('open_meteo','x'*129),('open_meteo','\n')]:
+        for source,key in [('fred','private-invalid-secret'),('census','b'*32),('../fred','b'*32),('other','b'*32),('eia','bad key'),('eia','x'*129),('eia',''),('open_meteo','bad key'),('open_meteo','x'*129),('open_meteo','\n')]:
             with pytest.raises(ValueError) as exc:c.upstream.connect(source,api_key=key)
-            assert key not in str(exc.value)
+            assert not key or key not in str(exc.value)
         with pytest.raises(ValueError):c.upstream.revoke_connection('../fred')
 
 
@@ -207,15 +207,15 @@ def test_source_secret_reflection_is_sanitized_in_errors_and_metadata(asynchrono
     async def run():
         async with AsyncClient(base_url='https://api.test',api_key='platform-key',transport=httpx.MockTransport(service)) as c:
             with pytest.raises(WeltError) as exc:await c.upstream.connect('fred',api_key=key)
-            assert key not in str(exc.value)+repr(exc.value.__dict__)
+            assert not key or key not in str(exc.value)+repr(exc.value.__dict__)
     if asynchronous:asyncio.run(run())
     else:
         with client(service) as c:
             with pytest.raises(WeltError) as exc:c.upstream.connect('fred',api_key=key)
-            assert key not in str(exc.value)+repr(exc.value.__dict__)
+            assert not key or key not in str(exc.value)+repr(exc.value.__dict__)
     with client(lambda r:httpx.Response(200,json=dict(connection(),api_key=key))) as c:
         with pytest.raises(WeltError) as exc:c.upstream.connect('fred',api_key=key)
-        assert key not in str(exc.value)
+        assert not key or key not in str(exc.value)
 
 
 @pytest.mark.parametrize('asynchronous',[False,True])
@@ -240,8 +240,8 @@ def test_connection_methods_refuse_redirect_even_when_client_follows(asynchronou
 
 
 @pytest.mark.parametrize('asynchronous',[False,True])
-def test_lists_all_three_supported_connections(asynchronous):
-    expected=[connection(source) for source in ('fred','census','open_meteo')]
+def test_lists_all_supported_connections(asynchronous):
+    expected=[connection(source) for source in ('fred','census','open_meteo','eia')]
     def service(request):
         assert request.method=='GET' and request.url.path=='/v1/data/connections'
         return httpx.Response(200,json=expected)
