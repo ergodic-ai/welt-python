@@ -720,3 +720,33 @@ def test_evaluation_state_is_an_owned_copy(service):
     evaluation.to_dict()["models"][0]["status"] = "tampered"
     assert evaluation.models[0]["status"] == "queued"
     assert repr(evaluation) == "Evaluation(id='ev_1', status='queued', task='classification')"
+
+
+def test_report_links_default_to_no_expiry_and_accept_explicit_none(service):
+    service.polls = 1
+    with client_for(service) as client:
+        evaluation = client.evaluate("ds_existing", task="classification")
+        evaluation.report_link()
+        evaluation.report_link(days=None)
+    posts = [r for r in service.requests if r.method == "POST" and r.url.path.endswith("/report-links")]
+    assert len(posts) == 2
+    assert all(json.loads(r.content) == {"expires_in_days": None} for r in posts)
+
+
+def test_report_link_parser_accepts_non_expiring_response():
+    from welt.evaluation import report_link
+    link = report_link(dict(id="rl_1", evaluation_id="ev_1", url=None, created_at="2026-11-10",
+                            expires_at=None, revoked=False), "ev_1")
+    assert link.expires_at is None
+
+
+def test_async_report_link_defaults_to_no_expiry(service):
+    import asyncio
+    service.polls = 1
+    async def run():
+        async with AsyncClient(api_key="fixture-only", transport=httpx.MockTransport(service)) as client:
+            evaluation = await client.evaluate("ds_existing", task="classification")
+            await evaluation.report_link()
+    asyncio.run(run())
+    post = next(r for r in service.requests if r.method == 'POST' and r.url.path.endswith('/report-links'))
+    assert json.loads(post.content) == {'expires_in_days': None}

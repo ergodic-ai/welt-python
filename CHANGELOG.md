@@ -1,3 +1,8 @@
+# Unreleased — decision pipeline
+
+- Add sync/async decision resources, durable handles and ranked result parsing.
+  Requires a server with the decision pipeline; no production availability implied.
+
 # 0.16.3 (2026-10-25) — Share-report example handle
 
 Use the existing `result` handle in the share-report example. Add an executable
@@ -487,3 +492,9 @@ Existing in-memory CSV/Parquet estimator input behavior is retained.
 - Sync/async resumable upload and batch manifest/payload methods; partial batch wait support.
 - Workspace verification before private input and cross-origin request rejection.
 - Login diagnostics move to stderr; successful CLI commands emit JSON on stdout.
+
+## 0.16.4 — API-224 (release candidate)
+
+Results remain until explicit deletion. Evaluation report links default to no
+scheduled expiry (`days=None`); explicit durations and revocation remain supported.
+API tracking: ergodic-ai/welt-api API-224 / DEC-129.
