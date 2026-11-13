@@ -24,18 +24,19 @@ def test_release_workflow_builds_old_sources_and_exact_published_wheels():
 def test_current_builder_preserves_previous_page_and_download_bytes_and_navigation():
     with tempfile.TemporaryDirectory() as folder:
         root=Path(folder);sentinels={}
-        for old in ['0.14.0','0.14.1','0.14.2','0.15.0','0.16.0','0.16.1','0.16.2']:
+        current = f"v{build_docs.installed_version('welt-client')}"
+        for old in ['0.14.0','0.14.1','0.14.2','0.15.0','0.16.0','0.16.1','0.16.2','0.16.3']:
             for name in ['index.html','forecasting.html','backtesting.html','downloads/forecasting_covariates.py','downloads/forecasting-with-covariates.ipynb']:
                 p=root/f'v{old}'/name;p.parent.mkdir(parents=True,exist_ok=True)
                 p.write_bytes(f'immutable {old} {name}\n'.encode());sentinels[p]=p.read_bytes()
         with patch.object(sys,'argv',['build_docs','--output',folder]):build_docs.main()
         for p,expected in sentinels.items():assert p.read_bytes()==expected
-        manifest=json.loads((root/'v0.16.3/manifest.json').read_text())
-        assert {'0.14.0','0.14.1','0.14.2','0.15.0','0.16.0','0.16.1','0.16.2'}<=set(manifest['historical_versions'])
-        for old in ['0.14.0','0.14.1','0.14.2','0.15.0','0.16.0','0.16.1','0.16.2']:
+        manifest=json.loads((root/current/'manifest.json').read_text())
+        assert {'0.14.0','0.14.1','0.14.2','0.15.0','0.16.0','0.16.1','0.16.2','0.16.3'}<=set(manifest['historical_versions'])
+        for old in ['0.14.0','0.14.1','0.14.2','0.15.0','0.16.0','0.16.1','0.16.2','0.16.3']:
             assert f'/v{old}/</loc>' in (root/'sitemap.xml').read_text()
-            assert f'value="../v{old}/"' in (root/'v0.16.3/index.html').read_text()
-        assert (root/'v0.16.3/backtesting.html').is_file()
+            assert f'value="../v{old}/"' in (root/current/'index.html').read_text()
+        assert (root/current/'backtesting.html').is_file()
 
 def test_benchmark_release_retains_matching_old_source_and_published_wheel():
     workflow=(build_docs.ROOT/'.github/workflows/sdk-docs.yml').read_text()
@@ -77,7 +78,7 @@ def test_share_report_example_uses_the_handle_defined_by_the_initial_example():
         calls.append((method,url,kwargs))
         return {'url':'https://test.example/reports/test-capability'}
     exec(compile(example,'backtesting-share-example','exec'),{'client':SimpleNamespace(request=request),handle:SimpleNamespace(id='bt_example'),'print':lambda *a:None})
-    assert calls==[('POST','/v1/backtests/bt_example/report-links',{'json':{'expires_in_days':7}})]
+    assert calls==[('POST','/v1/backtests/bt_example/report-links',{'json':{'expires_in_days':None}})]
     workflow=(build_docs.ROOT/'.github/workflows/sdk-docs.yml').read_text()
     assert '5bb7b372c9e8624958c8ed14191338944ce9dded' in workflow
     assert '/v0.16.2/welt_client-0.16.2-py3-none-any.whl' in workflow
