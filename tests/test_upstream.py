@@ -155,3 +155,84 @@ def test_submission_uses_dataset_ceilings_preserves_explicit_limits_and_revision
     body=json.loads(posted.content)
     assert body['limits']==dict(service.limits,max_rows=1)
     assert body['schema_revision']=='d'*64
+
+
+def connection(source='fred',revoked=False):
+    return dict(id='cred_'+'a'*32,source_id=source,version=1,created_at='2026-11-13T00:00:00Z',
+        updated_at='2026-11-13T00:00:00Z',revoked_at='2026-11-13T00:01:00Z' if revoked else None)
+
+
+@pytest.mark.parametrize('asynchronous',[False,True])
+def test_source_connection_management_and_no_key_retention(asynchronous):
+    from welt.credentials import Credential
+    requests=[]
+    def service(request):
+        requests.append(request)
+        if request.method=='GET':return httpx.Response(200,json=[connection()])
+        if request.method=='PUT':assert json.loads(request.content)=={'api_key':'b'*32}
+        return httpx.Response(200,json=connection(revoked=request.method=='POST'))
+    async def run():
+        async with AsyncClient(base_url='https://api.test',api_key='platform-key',transport=httpx.MockTransport(service)) as c:
+            assert await c.upstream.connections()==[connection()]
+            assert await c.upstream.connect('fred',api_key=Credential('b'*32))==connection()
+            assert (await c.upstream.revoke_connection('fred'))['revoked_at']
+            assert 'b'*32 not in repr(c.upstream.__dict__)
+    if asynchronous:asyncio.run(run())
+    else:
+        with Client(base_url='https://api.test',api_key='platform-key',transport=httpx.MockTransport(service)) as c:
+            assert c.upstream.connections()==[connection()]
+            assert c.upstream.connect('fred',api_key=Credential('b'*32))==connection()
+            assert c.upstream.revoke_connection('fred')['revoked_at']
+            assert 'b'*32 not in repr(c.upstream.__dict__)
+    assert [(r.method,r.url.path) for r in requests]==[
+        ('GET','/v1/data/connections'),('PUT','/v1/data/connections/fred'),('POST','/v1/data/connections/fred/revoke')]
+
+
+def test_bad_connection_inputs_fail_before_requests():
+    def service(request):pytest.fail('Invalid secret/source sent to server')
+    with client(service) as c:
+        for source,key in [('fred','private-invalid-secret'),('census','b'*32),('../fred','b'*32),('other','b'*32)]:
+            with pytest.raises(ValueError) as exc:c.upstream.connect(source,api_key=key)
+            assert key not in str(exc.value)
+        with pytest.raises(ValueError):c.upstream.revoke_connection('../fred')
+
+
+@pytest.mark.parametrize('asynchronous',[False,True])
+def test_source_secret_reflection_is_sanitized_in_errors_and_metadata(asynchronous):
+    key='b'*32
+    def service(request):
+        return httpx.Response(422,json={'error':{'message':'bad '+key,'code':key,'request_id':key,
+            'details':{'reflected':key}}})
+    async def run():
+        async with AsyncClient(base_url='https://api.test',api_key='platform-key',transport=httpx.MockTransport(service)) as c:
+            with pytest.raises(WeltError) as exc:await c.upstream.connect('fred',api_key=key)
+            assert key not in str(exc.value)+repr(exc.value.__dict__)
+    if asynchronous:asyncio.run(run())
+    else:
+        with client(service) as c:
+            with pytest.raises(WeltError) as exc:c.upstream.connect('fred',api_key=key)
+            assert key not in str(exc.value)+repr(exc.value.__dict__)
+    with client(lambda r:httpx.Response(200,json=dict(connection(),api_key=key))) as c:
+        with pytest.raises(WeltError) as exc:c.upstream.connect('fred',api_key=key)
+        assert key not in str(exc.value)
+
+
+@pytest.mark.parametrize('asynchronous',[False,True])
+@pytest.mark.parametrize('operation',['connections','connect','revoke_connection'])
+def test_connection_methods_refuse_redirect_even_when_client_follows(asynchronous,operation):
+    requests=[]
+    def service(request):
+        requests.append(request)
+        return httpx.Response(307,headers={'Location':'https://foreign.test/capture'},json=connection())
+    args=() if operation=='connections' else ('fred',)
+    kwargs={'api_key':'b'*32} if operation=='connect' else {}
+    async def run():
+        async with AsyncClient(base_url='https://api.test',api_key='platform-key',transport=httpx.MockTransport(service)) as c:
+            c.http.follow_redirects=True
+            with pytest.raises(WeltError):await getattr(c.upstream,operation)(*args,**kwargs)
+    if asynchronous:asyncio.run(run())
+    else:
+        with client(service) as c:
+            c.http.follow_redirects=True
+            with pytest.raises(WeltError):getattr(c.upstream,operation)(*args,**kwargs)
+    assert len(requests)==1 and requests[0].url.host=='api.test'

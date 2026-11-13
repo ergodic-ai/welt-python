@@ -15,6 +15,9 @@ from uuid import uuid4
 
 import httpx
 
+from .credentials import secret
+from datetime import datetime
+
 from .errors import ExecutionError, JobCancelledError, JobTimeoutError, TransportError, WeltError
 
 MAX_BYTES=10*1024*1024
@@ -212,9 +215,77 @@ def decode(chunks,expected):
         raise invalid() from None
 
 
+def connection_source(source):
+    if source not in ('fred','census'):
+        raise ValueError('Expected a supported credential source: fred or census.')
+    return source
+
+
+def connection_key(source,value):
+    connection_source(source)
+    value=secret(value)
+    pattern=r'[a-z0-9]{32}' if source=='fred' else r'[a-fA-F0-9]{40}'
+    if not isinstance(value,str) or not re.fullmatch(pattern,value):
+        raise ValueError('The credential format is invalid for this source.')
+    return value
+
+
+def connection_metadata(value,source=None,key=None):
+    try:
+        if type(value) is not dict or set(value)!={'id','source_id','version','created_at','updated_at','revoked_at'}:
+            raise ValueError()
+        if (type(value['id']) is not str or not re.fullmatch(r'cred_[0-9a-f]{32}',value['id'])
+                or value['source_id'] not in ('fred','census')
+                or source is not None and value['source_id']!=source
+                or type(value['version']) is not int or not 1<=value['version']<=9999999999):
+            raise ValueError()
+        for name in ('created_at','updated_at','revoked_at'):
+            stamp=value[name]
+            if name=='revoked_at' and stamp is None:continue
+            if type(stamp) is not str or len(stamp)>40 or datetime.fromisoformat(stamp.replace('Z','+00:00')).tzinfo is None:
+                raise ValueError()
+        if key and any(isinstance(v,str) and key in v for v in value.values()):raise ValueError()
+        return dict(value)
+    except (ValueError,TypeError,KeyError):
+        raise WeltError('Source connection metadata is invalid.',code='invalid_source_connection_response') from None
+
+
+def connection_list(value):
+    if not isinstance(value,list) or len(value)>2:
+        raise WeltError('Source connection metadata is invalid.',code='invalid_source_connection_response')
+    rows=[connection_metadata(row) for row in value]
+    if len({row['source_id'] for row in rows})!=len(rows):
+        raise WeltError('Source connection metadata is invalid.',code='invalid_source_connection_response')
+    return rows
+
+
+def connection_error(error,key):
+    # Provider credentials are separate from the platform key redacted by Client.
+    # Do not retain arbitrary server messages/details that might reflect this input.
+    return type(error)('Source connection could not be updated.',
+        code=error.code if key not in str(error.code) else 'source_connection_failed',
+        request_id=error.request_id if key not in str(error.request_id) else None,
+        retryable=error.retryable,status_code=error.status_code,retry_after=error.retry_after)
+
+
 class Upstream:
     def __init__(self,client):
         self.client=client
+
+    def connections(self):
+        return connection_list(self.client.request('GET','/v1/data/connections',follow_redirects=False,_expected_status=200))
+
+    def connect(self,source_id,*,api_key):
+        value=connection_key(source_id,api_key)
+        try:
+            result=self.client.request('PUT','/v1/data/connections/'+source_id,json={'api_key':value},follow_redirects=False,_expected_status=200)
+        except WeltError as error:
+            raise connection_error(error,value) from None
+        return connection_metadata(result,source_id,value)
+
+    def revoke_connection(self,source_id):
+        source_id=connection_source(source_id)
+        return connection_metadata(self.client.request('POST','/v1/data/connections/'+source_id+'/revoke',follow_redirects=False,_expected_status=200),source_id)
 
     def search(self,*,q='',source='',limit=20):
         return self.client.request('GET','/v1/data/datasets',params=dict(q=q,source=source,limit=limit))
@@ -303,6 +374,21 @@ class Upstream:
 
 
 class AsyncUpstream(Upstream):
+    async def connections(self):
+        return connection_list(await self.client.request('GET','/v1/data/connections',follow_redirects=False,_expected_status=200))
+
+    async def connect(self,source_id,*,api_key):
+        value=connection_key(source_id,api_key)
+        try:
+            result=await self.client.request('PUT','/v1/data/connections/'+source_id,json={'api_key':value},follow_redirects=False,_expected_status=200)
+        except WeltError as error:
+            raise connection_error(error,value) from None
+        return connection_metadata(result,source_id,value)
+
+    async def revoke_connection(self,source_id):
+        source_id=connection_source(source_id)
+        return connection_metadata(await self.client.request('POST','/v1/data/connections/'+source_id+'/revoke',follow_redirects=False,_expected_status=200),source_id)
+
     async def search(self,*,q='',source='',limit=20):
         return await self.client.request('GET','/v1/data/datasets',params=dict(q=q,source=source,limit=limit))
 

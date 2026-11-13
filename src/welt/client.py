@@ -262,7 +262,7 @@ class Client(_HTTP):
     def __exit__(self, *args):
         self.close()
 
-    def request(self, method, path, *, _deadline=None, _job_id=None, _workspace_probe=False, _text=False, **kwargs):
+    def request(self, method, path, *, _deadline=None, _job_id=None, _workspace_probe=False, _text=False, _expected_status=None, **kwargs):
         self._authenticate(method, path, kwargs.get("headers"), kwargs.get("auth"))
         if not _workspace_probe and self.workspace_selector and (not self._workspace_verified or self._verified_key != self.api_key or self._verified_workspace != self.workspace_selector) and not (method.upper() == "GET" and (httpx.URL(path).path in ("/v1/models", "/v1/billing/pricing", "/v1/research-datasets") or (httpx.URL(path).path.startswith("/v1/research-datasets/") and httpx.URL(path).path.count("/") == 3))):
             current = self.request("GET", "/v1/workspace", _workspace_probe=True, _deadline=_deadline, _job_id=_job_id)
@@ -290,6 +290,8 @@ class Client(_HTTP):
                     _wait(_deadline, _job_id, float("inf"))
                 delay = self._delay(method, attempt, response)
                 if delay is None:
+                    if _expected_status is not None and response.status_code != _expected_status and not response.is_error:
+                        raise WeltError('Unexpected HTTP status from Welt API.',code='invalid_response',status_code=response.status_code)
                     result = _response(response, api_key=secret(self.api_key), text=_text)
                     if _deadline is not None:
                         _wait(_deadline, _job_id, float("inf"))
@@ -752,7 +754,7 @@ class AsyncClient(_HTTP):
     async def __aexit__(self, *args):
         await self.aclose()
 
-    async def request(self, method, path, *, _deadline=None, _job_id=None, _workspace_probe=False, _text=False, **kwargs):
+    async def request(self, method, path, *, _deadline=None, _job_id=None, _workspace_probe=False, _text=False, _expected_status=None, **kwargs):
         self._authenticate(method, path, kwargs.get("headers"), kwargs.get("auth"))
         if not _workspace_probe and self.workspace_selector and (not self._workspace_verified or self._verified_key != self.api_key or self._verified_workspace != self.workspace_selector) and not (method.upper() == "GET" and (httpx.URL(path).path in ("/v1/models", "/v1/billing/pricing", "/v1/research-datasets") or (httpx.URL(path).path.startswith("/v1/research-datasets/") and httpx.URL(path).path.count("/") == 3))):
             current = await self.request("GET", "/v1/workspace", _workspace_probe=True, _deadline=_deadline, _job_id=_job_id)
@@ -788,6 +790,8 @@ class AsyncClient(_HTTP):
                     _wait(_deadline, _job_id, float("inf"))
                 delay = self._delay(method, attempt, response)
                 if delay is None:
+                    if _expected_status is not None and response.status_code != _expected_status and not response.is_error:
+                        raise WeltError('Unexpected HTTP status from Welt API.',code='invalid_response',status_code=response.status_code)
                     result = _response(response, api_key=secret(self.api_key), text=_text)
                     if _deadline is not None:
                         _wait(_deadline, _job_id, float("inf"))

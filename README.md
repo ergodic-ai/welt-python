@@ -281,3 +281,20 @@ ceilings. Normal client defaults are never increased automatically. Partial expl
 `limits` override those defaults; values above the dataset ceiling are refused by
 the service. A supplied `schema_revision` remains authoritative and is never
 silently replaced by the current description.
+
+The candidate also supports account-owned source connections through
+`client.upstream.connections()`, `client.upstream.connect("fred", api_key=source_key)`
+and `client.upstream.revoke_connection("fred")`; use `"census"` for Census.
+The async client exposes the same methods with `await`. Load `source_key` from your
+secret store or a local prompt; the SDK does not infer provider keys from environment
+variables, query arguments or the Welt API key. SDK `Credential` wrappers are accepted.
+Only connection metadata is returned. The service must have its encrypted vault
+configured, and your Welt key must represent an account with write access.
+
+Repeating the same active key is a no-op. Changing it rotates the version; revoking
+or rotating prevents queued retrievals from using the old version. Reconnecting a
+revoked connection creates a new version. Each connection belongs to your account
+within the current workspace, not to every workspace member. Existing completed
+snapshots remain subject to their own access and expiry policies. A connection does
+not activate an unqualified dataset or establish upstream usage rights. These methods
+remain part of the unreleased candidate.
