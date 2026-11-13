@@ -246,7 +246,7 @@ class ReportLink:
     evaluation_id: str
     url: str | None = field(repr=False)
     created_at: str
-    expires_at: str
+    expires_at: str | None
     revoked: bool
     created_by: str | None = None
 
@@ -266,7 +266,7 @@ def report_link(payload, evaluation_id):
 
 
 def _days(days):
-    return _integer(days, 1, 7, "days", optional=False)
+    return _integer(days, 1, 7, "days", optional=True)
 
 
 def _link_id(link):
@@ -526,7 +526,7 @@ class Evaluation(_EvaluationView):
             self._report = self.client.request("GET", self._path("/report"), _text=True)
         return self._report
 
-    def report_link(self, days=7):
+    def report_link(self, days=None):
         payload = self.client.request("POST", self._path("/report-links"), json=dict(expires_in_days=_days(days)))
         return report_link(payload, self.id)
 
@@ -595,7 +595,7 @@ class AsyncEvaluation(_EvaluationView):
             self._report = await self.client.request("GET", self._path("/report"), _text=True)
         return self._report
 
-    async def report_link(self, days=7):
+    async def report_link(self, days=None):
         payload = await self.client.request("POST", self._path("/report-links"),
                                             json=dict(expires_in_days=_days(days)))
         return report_link(payload, self.id)

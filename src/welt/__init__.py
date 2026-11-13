@@ -43,7 +43,8 @@ __all__ = [
     "ResearchDownload", "ResearchMetadata", "ResearchNoticeWarning",
     "Evaluation", "AsyncEvaluation", "EvaluationWarning", "ReportLink",
     "Backtest", "AsyncBacktest", "BacktestWarning",
+    "DecisionResult", "DecisionJob", "AsyncDecisionJob",
 ]
-__version__ = "0.16.3"
+__version__ = "0.16.4"
 
 from .decision import DecisionResult, DecisionJob, AsyncDecisionJob

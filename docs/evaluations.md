@@ -116,9 +116,9 @@ default is the second class in sorted order.
   types print alike (for example `1` and `"1"`), these columns use `repr()`:
   `p(1)` and `p('1')`.
 
-!!! note "Predictions expire after seven days"
-    After seven days `predictions()` raises `ResultExpiredError`. The summary, fold
-    metrics and report stay until you delete the evaluation.
+!!! note "Results stay until you delete them"
+    Predictions, summary, fold metrics and reports have no automatic expiry.
+    Delete the evaluation explicitly when you no longer want to keep its data.
 
 ## Display the report in a notebook
 
@@ -148,12 +148,13 @@ print(link.url, link.expires_at)  # the URL is shown once; store it safely
     never opens the predictions, folds or other API data. The report itself includes
     the leaderboard, fold metrics and charts; for regression, the charts plot the
     actual and predicted values of up to 1,500 rows, which a reader can make out
-    approximately. Unlike `predictions()`, the report is kept until you delete the
+    approximately. Predictions and the report are kept until you delete the
     evaluation.
 
-A link lasts the chosen 1–7 days (default 7). A link created from the SDK with an API
+A link has no scheduled expiry by default (`report_link()` or `days=None`).
+You may explicitly choose 1–7 days. A link created from the SDK with an API
 key, or through an OAuth connection, never outlives that key and stops if the key is
-revoked. A link created in the console lasts the chosen days, even after an ordinary sign-out; "sign out everywhere", a password reset or account disablement revoke every link you created in the console.
+revoked. A link created in the console has no scheduled expiry unless you choose a duration, even after an ordinary sign-out; "sign out everywhere", a password reset or account disablement revoke every link you created in the console.
 Every link stops working when it expires, when it is revoked, or when its creator is
 no longer a verified member of the workspace. Deleting the evaluation removes the
 report and its links.
