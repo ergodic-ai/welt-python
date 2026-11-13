@@ -163,35 +163,36 @@ def connection(source='fred',revoked=False):
 
 
 @pytest.mark.parametrize('asynchronous',[False,True])
-def test_source_connection_management_and_no_key_retention(asynchronous):
+@pytest.mark.parametrize('source,token',[('fred','b'*32),('census','c'*40),('open_meteo','s'*128)])
+def test_source_connection_management_and_no_key_retention(asynchronous,source,token):
     from welt.credentials import Credential
     requests=[]
     def service(request):
         requests.append(request)
-        if request.method=='GET':return httpx.Response(200,json=[connection()])
-        if request.method=='PUT':assert json.loads(request.content)=={'api_key':'b'*32}
-        return httpx.Response(200,json=connection(revoked=request.method=='POST'))
+        if request.method=='GET':return httpx.Response(200,json=[connection(source)])
+        if request.method=='PUT':assert json.loads(request.content)=={'api_key':token}
+        return httpx.Response(200,json=connection(source,revoked=request.method=='POST'))
     async def run():
         async with AsyncClient(base_url='https://api.test',api_key='platform-key',transport=httpx.MockTransport(service)) as c:
-            assert await c.upstream.connections()==[connection()]
-            assert await c.upstream.connect('fred',api_key=Credential('b'*32))==connection()
-            assert (await c.upstream.revoke_connection('fred'))['revoked_at']
-            assert 'b'*32 not in repr(c.upstream.__dict__)
+            assert await c.upstream.connections()==[connection(source)]
+            assert await c.upstream.connect(source,api_key=Credential(token))==connection(source)
+            assert (await c.upstream.revoke_connection(source))['revoked_at']
+            assert token not in repr(c.upstream.__dict__)
     if asynchronous:asyncio.run(run())
     else:
         with Client(base_url='https://api.test',api_key='platform-key',transport=httpx.MockTransport(service)) as c:
-            assert c.upstream.connections()==[connection()]
-            assert c.upstream.connect('fred',api_key=Credential('b'*32))==connection()
-            assert c.upstream.revoke_connection('fred')['revoked_at']
-            assert 'b'*32 not in repr(c.upstream.__dict__)
+            assert c.upstream.connections()==[connection(source)]
+            assert c.upstream.connect(source,api_key=Credential(token))==connection(source)
+            assert c.upstream.revoke_connection(source)['revoked_at']
+            assert token not in repr(c.upstream.__dict__)
     assert [(r.method,r.url.path) for r in requests]==[
-        ('GET','/v1/data/connections'),('PUT','/v1/data/connections/fred'),('POST','/v1/data/connections/fred/revoke')]
+        ('GET','/v1/data/connections'),('PUT','/v1/data/connections/'+source),('POST','/v1/data/connections/'+source+'/revoke')]
 
 
 def test_bad_connection_inputs_fail_before_requests():
     def service(request):pytest.fail('Invalid secret/source sent to server')
     with client(service) as c:
-        for source,key in [('fred','private-invalid-secret'),('census','b'*32),('../fred','b'*32),('other','b'*32)]:
+        for source,key in [('fred','private-invalid-secret'),('census','b'*32),('../fred','b'*32),('other','b'*32),('open_meteo','bad key'),('open_meteo','x'*129),('open_meteo','\n')]:
             with pytest.raises(ValueError) as exc:c.upstream.connect(source,api_key=key)
             assert key not in str(exc.value)
         with pytest.raises(ValueError):c.upstream.revoke_connection('../fred')
@@ -236,3 +237,48 @@ def test_connection_methods_refuse_redirect_even_when_client_follows(asynchronou
             c.http.follow_redirects=True
             with pytest.raises(WeltError):getattr(c.upstream,operation)(*args,**kwargs)
     assert len(requests)==1 and requests[0].url.host=='api.test'
+
+
+@pytest.mark.parametrize('asynchronous',[False,True])
+def test_lists_all_three_supported_connections(asynchronous):
+    expected=[connection(source) for source in ('fred','census','open_meteo')]
+    def service(request):
+        assert request.method=='GET' and request.url.path=='/v1/data/connections'
+        return httpx.Response(200,json=expected)
+    async def run():
+        async with AsyncClient(base_url='https://api.test',api_key='platform-key',transport=httpx.MockTransport(service)) as c:
+            assert await c.upstream.connections()==expected
+    if asynchronous:asyncio.run(run())
+    else:
+        with Client(base_url='https://api.test',api_key='platform-key',transport=httpx.MockTransport(service)) as c:
+            assert c.upstream.connections()==expected
+
+
+@pytest.mark.parametrize('asynchronous',[False,True])
+@pytest.mark.parametrize('key',['o','0','a','2026','open_meteo'])
+def test_short_open_meteo_key_can_overlap_valid_metadata(asynchronous,key):
+    def service(request):
+        assert json.loads(request.content)=={'api_key':key}
+        return httpx.Response(200,json=connection('open_meteo'))
+    async def run():
+        async with AsyncClient(base_url='https://api.test',api_key='platform-key',transport=httpx.MockTransport(service)) as c:
+            assert await c.upstream.connect('open_meteo',api_key=key)==connection('open_meteo')
+    if asynchronous:asyncio.run(run())
+    else:
+        with Client(base_url='https://api.test',api_key='platform-key',transport=httpx.MockTransport(service)) as c:
+            assert c.upstream.connect('open_meteo',api_key=key)==connection('open_meteo')
+
+
+def test_credential_reflected_as_entire_opaque_id_is_refused():
+    key='b'*32
+    metadata=dict(connection('open_meteo'),id='cred_'+key)
+    with client(lambda r:httpx.Response(200,json=metadata)) as c:
+        with pytest.raises(WeltError) as error:c.upstream.connect('open_meteo',api_key=key)
+        assert key not in str(error.value)
+
+
+@pytest.mark.parametrize('stamp',['2026-11-13o00:00:00Z','2026-W46-500:00:00Z','2026-11-13T00:00:00+99:00','2026-11-13T00:00:00+00:99'])
+def test_connection_metadata_refuses_noncanonical_timestamp_text(stamp):
+    metadata=dict(connection('open_meteo'),created_at=stamp)
+    with client(lambda r:httpx.Response(200,json=metadata)) as c:
+        with pytest.raises(WeltError):c.upstream.connect('open_meteo',api_key='short')

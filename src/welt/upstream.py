@@ -215,16 +215,19 @@ def decode(chunks,expected):
         raise invalid() from None
 
 
+_CONNECTION_SOURCES = ('fred', 'census', 'open_meteo')
+
+
 def connection_source(source):
-    if source not in ('fred','census'):
-        raise ValueError('Expected a supported credential source: fred or census.')
+    if source not in _CONNECTION_SOURCES:
+        raise ValueError('Expected a supported credential source: fred, census or open_meteo.')
     return source
 
 
 def connection_key(source,value):
     connection_source(source)
     value=secret(value)
-    pattern=r'[a-z0-9]{32}' if source=='fred' else r'[a-fA-F0-9]{40}'
+    pattern={'fred':r'[a-z0-9]{32}','census':r'[a-fA-F0-9]{40}','open_meteo':r'[!-~]{1,128}'}[source]
     if not isinstance(value,str) or not re.fullmatch(pattern,value):
         raise ValueError('The credential format is invalid for this source.')
     return value
@@ -235,23 +238,29 @@ def connection_metadata(value,source=None,key=None):
         if type(value) is not dict or set(value)!={'id','source_id','version','created_at','updated_at','revoked_at'}:
             raise ValueError()
         if (type(value['id']) is not str or not re.fullmatch(r'cred_[0-9a-f]{32}',value['id'])
-                or value['source_id'] not in ('fred','census')
+                or value['source_id'] not in _CONNECTION_SOURCES
                 or source is not None and value['source_id']!=source
                 or type(value['version']) is not int or not 1<=value['version']<=9999999999):
             raise ValueError()
         for name in ('created_at','updated_at','revoked_at'):
             stamp=value[name]
             if name=='revoked_at' and stamp is None:continue
-            if type(stamp) is not str or len(stamp)>40 or datetime.fromisoformat(stamp.replace('Z','+00:00')).tzinfo is None:
+            if (type(stamp) is not str or not re.fullmatch(
+                    r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])',stamp)
+                    or datetime.fromisoformat(stamp.replace('Z','+00:00')).tzinfo is None):
                 raise ValueError()
-        if key and any(isinstance(v,str) and key in v for v in value.values()):raise ValueError()
+        # Metadata has only a closed source enum, typed timestamps/version and a
+        # fixed-format opaque ID. Short credentials can legitimately occur in
+        # these fields; substring matching is not evidence of reflection.
+        # Still refuse an opaque ID whose entire payload is the submitted key.
+        if key and value['id'][5:]==key:raise ValueError()
         return dict(value)
     except (ValueError,TypeError,KeyError):
         raise WeltError('Source connection metadata is invalid.',code='invalid_source_connection_response') from None
 
 
 def connection_list(value):
-    if not isinstance(value,list) or len(value)>2:
+    if not isinstance(value,list) or len(value)>len(_CONNECTION_SOURCES):
         raise WeltError('Source connection metadata is invalid.',code='invalid_source_connection_response')
     rows=[connection_metadata(row) for row in value]
     if len({row['source_id'] for row in rows})!=len(rows):

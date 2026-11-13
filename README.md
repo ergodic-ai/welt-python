@@ -284,7 +284,9 @@ silently replaced by the current description.
 
 The candidate also supports account-owned source connections through
 `client.upstream.connections()`, `client.upstream.connect("fred", api_key=source_key)`
-and `client.upstream.revoke_connection("fred")`; use `"census"` for Census.
+and `client.upstream.revoke_connection("fred")`; use `"census"` for Census or `"open_meteo"` for a qualified Open-Meteo commercial account.
+Historical weather requires an appropriate archive-enabled subscription. A stored
+key does not qualify source rights or enable a pending dataset.
 The async client exposes the same methods with `await`. Load `source_key` from your
 secret store or a local prompt; the SDK does not infer provider keys from environment
 variables, query arguments or the Welt API key. SDK `Credential` wrappers are accepted.
