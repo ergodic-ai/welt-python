@@ -43,7 +43,6 @@ __all__ = [
     "ResearchDownload", "ResearchMetadata", "ResearchNoticeWarning",
     "Evaluation", "AsyncEvaluation", "EvaluationWarning", "ReportLink",
     "Backtest", "AsyncBacktest", "BacktestWarning",
-    "DecisionResult", "DecisionJob", "AsyncDecisionJob",
 ]
 __version__ = "0.16.4"
 
