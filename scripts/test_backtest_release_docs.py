@@ -9,7 +9,7 @@ from scripts import build_docs
 
 def test_release_workflow_builds_old_sources_and_exact_published_wheels():
     workflow=(build_docs.ROOT/'.github/workflows/sdk-docs.yml').read_text()
-    assert 'default: v0.16.4' in workflow
+    assert 'default: v0.16.5' in workflow
     for line in workflow.splitlines():
         if line.lstrip().startswith('if:') and "'v0.14.2'" in line:
             assert "github.event.release.tag_name == 'v0.15.0'" in line
@@ -25,15 +25,15 @@ def test_current_builder_preserves_previous_page_and_download_bytes_and_navigati
     with tempfile.TemporaryDirectory() as folder:
         root=Path(folder);sentinels={}
         current = f"v{build_docs.installed_version('welt-client')}"
-        for old in ['0.14.0','0.14.1','0.14.2','0.15.0','0.16.0','0.16.1','0.16.2','0.16.3']:
-            for name in ['index.html','forecasting.html','backtesting.html','downloads/forecasting_covariates.py','downloads/forecasting-with-covariates.ipynb']:
+        for old in ['0.14.0','0.14.1','0.14.2','0.15.0','0.16.0','0.16.1','0.16.2','0.16.3','0.16.4']:
+            for name in ['index.html','upstream-data.html','forecasting.html','backtesting.html','downloads/forecasting_covariates.py','downloads/forecasting-with-covariates.ipynb']:
                 p=root/f'v{old}'/name;p.parent.mkdir(parents=True,exist_ok=True)
                 p.write_bytes(f'immutable {old} {name}\n'.encode());sentinels[p]=p.read_bytes()
         with patch.object(sys,'argv',['build_docs','--output',folder]):build_docs.main()
         for p,expected in sentinels.items():assert p.read_bytes()==expected
         manifest=json.loads((root/current/'manifest.json').read_text())
-        assert {'0.14.0','0.14.1','0.14.2','0.15.0','0.16.0','0.16.1','0.16.2','0.16.3'}<=set(manifest['historical_versions'])
-        for old in ['0.14.0','0.14.1','0.14.2','0.15.0','0.16.0','0.16.1','0.16.2','0.16.3']:
+        assert {'0.14.0','0.14.1','0.14.2','0.15.0','0.16.0','0.16.1','0.16.2','0.16.3','0.16.4'}<=set(manifest['historical_versions'])
+        for old in ['0.14.0','0.14.1','0.14.2','0.15.0','0.16.0','0.16.1','0.16.2','0.16.3','0.16.4']:
             assert f'/v{old}/</loc>' in (root/'sitemap.xml').read_text()
             assert f'value="../v{old}/"' in (root/current/'index.html').read_text()
         assert (root/current/'backtesting.html').is_file()
@@ -93,3 +93,14 @@ def test_upstream_release_retains_all_preceding_guides():
     assert '4c3e2432374229514da95adce9bcf46525041b5c' in workflow
     assert '/v0.16.3/welt_client-0.16.3-py3-none-any.whl' in workflow
     assert 'site/v0.16.4/upstream-data.html' in workflow
+
+
+def test_retention_release_preserves_immutable_upstream_guide():
+    workflow=(build_docs.ROOT/'.github/workflows/sdk-docs.yml').read_text()
+    for line in workflow.splitlines():
+        if line.lstrip().startswith('if:') and "'v0.16.4'" in line:
+            assert "github.event.release.tag_name == 'v0.16.5'" in line
+            assert "inputs.release_tag == 'v0.16.5'" in line
+    assert '622eb8a4acd24827d9265737266b132c8d9beb13' in workflow
+    assert '/v0.16.4/welt_client-0.16.4-py3-none-any.whl' in workflow
+    assert 'site/v0.16.5/upstream-data.html' in workflow
