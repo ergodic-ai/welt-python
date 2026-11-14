@@ -9,7 +9,7 @@ from scripts import build_docs
 
 def test_release_workflow_builds_old_sources_and_exact_published_wheels():
     workflow=(build_docs.ROOT/'.github/workflows/sdk-docs.yml').read_text()
-    assert 'default: v0.16.3' in workflow
+    assert 'default: v0.16.4' in workflow
     for line in workflow.splitlines():
         if line.lstrip().startswith('if:') and "'v0.14.2'" in line:
             assert "github.event.release.tag_name == 'v0.15.0'" in line
@@ -82,3 +82,14 @@ def test_share_report_example_uses_the_handle_defined_by_the_initial_example():
     workflow=(build_docs.ROOT/'.github/workflows/sdk-docs.yml').read_text()
     assert '5bb7b372c9e8624958c8ed14191338944ce9dded' in workflow
     assert '/v0.16.2/welt_client-0.16.2-py3-none-any.whl' in workflow
+
+
+def test_upstream_release_retains_all_preceding_guides():
+    workflow = (build_docs.ROOT / '.github/workflows/sdk-docs.yml').read_text()
+    for line in workflow.splitlines():
+        if line.lstrip().startswith('if:') and "'v0.16.3'" in line:
+            assert "github.event.release.tag_name == 'v0.16.4'" in line
+            assert "inputs.release_tag == 'v0.16.4'" in line
+    assert '4c3e2432374229514da95adce9bcf46525041b5c' in workflow
+    assert '/v0.16.3/welt_client-0.16.3-py3-none-any.whl' in workflow
+    assert 'site/v0.16.4/upstream-data.html' in workflow
