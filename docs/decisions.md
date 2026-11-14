@@ -1,9 +1,9 @@
 # Rank causal interventions
 
 Submit context observations, name a target and the variables you can change, then
-receive ranked single-variable actions. This feature requires the unreleased
-decision SDK and a server running the decision pipeline. It is not yet a claim
-of production availability.
+receive ranked single-variable actions. This feature requires SDK 0.16.4 or later and a server running the decision
+pipeline. Installing this client does not enable server capabilities or establish
+production availability.
 
 ## Submit and wait
 
