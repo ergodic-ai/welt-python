@@ -284,7 +284,8 @@ silently replaced by the current description.
 
 The candidate also supports account-owned source connections through
 `client.upstream.connections()`, `client.upstream.connect("fred", api_key=source_key)`
-and `client.upstream.revoke_connection("fred")`; use `"census"` for Census or `"open_meteo"` for a qualified Open-Meteo commercial account; use `"eia"` for an EIA API key.
+and `client.upstream.revoke_connection("fred")`; use `"census"` for Census or `"open_meteo"` for a qualified Open-Meteo commercial account; use `"eia"` for an EIA API key or `"comtrade"` for a UN Comtrade subscription key.
+A Comtrade key does not establish commercial redistribution permission.
 Historical weather requires an appropriate archive-enabled subscription. A stored
 key does not qualify source rights or enable a pending dataset.
 The async client exposes the same methods with `await`. Load `source_key` from your

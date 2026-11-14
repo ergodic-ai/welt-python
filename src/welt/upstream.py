@@ -215,19 +215,19 @@ def decode(chunks,expected):
         raise invalid() from None
 
 
-_CONNECTION_SOURCES = ('fred', 'census', 'open_meteo', 'eia')
+_CONNECTION_SOURCES = ('fred', 'census', 'open_meteo', 'eia', 'comtrade')
 
 
 def connection_source(source):
     if source not in _CONNECTION_SOURCES:
-        raise ValueError('Expected a supported credential source: fred, census, open_meteo or eia.')
+        raise ValueError('Expected a supported credential source: fred, census, open_meteo, eia or comtrade.')
     return source
 
 
 def connection_key(source,value):
     connection_source(source)
     value=secret(value)
-    pattern={'fred':r'[a-z0-9]{32}','census':r'[a-fA-F0-9]{40}','open_meteo':r'[!-~]{1,128}','eia':r'[!-~]{1,128}'}[source]
+    pattern={'fred':r'[a-z0-9]{32}','census':r'[a-fA-F0-9]{40}','open_meteo':r'[!-~]{1,128}','eia':r'[!-~]{1,128}','comtrade':r'[a-fA-F0-9]{32}'}[source]
     if not isinstance(value,str) or not re.fullmatch(pattern,value):
         raise ValueError('The credential format is invalid for this source.')
     return value
