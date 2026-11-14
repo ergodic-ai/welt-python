@@ -1,5 +1,9 @@
-# Unreleased — decision pipeline
+# Unreleased — upstream data and decision pipeline
 
+- Add sync/async upstream discovery, durable retrievals, verified JSON downloads,
+  exact-decimal/native-period DataFrames, explicit modelling copies and account-owned
+  source connections. Requires a compatible, enabled server and qualified datasets;
+  no source access or production availability is implied.
 - Add sync/async decision resources, durable handles and ranked result parsing.
   Requires a server with the decision pipeline; no production availability implied.
 
