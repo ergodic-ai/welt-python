@@ -54,7 +54,7 @@ exact decimals as categorical text; `float64` explicitly permits numeric roundin
 The dataset description must record `materialization_evidence` qualifying ongoing
 retention/modelling, and export/retention rights must permit the copy. No target is
 inferred. The saved dataset keeps source provenance and both content hashes; source
-result expiry/revocation does not expire the independent copy. It follows ordinary
+result deletion/revocation does not delete the independent copy. It follows ordinary
 dataset deletion, and a retry cannot recreate a deleted copy. Async clients expose
 the same method.
 
@@ -80,7 +80,7 @@ Repeating the same active key is a no-op. Changing it rotates the version; revok
 or rotating prevents queued retrievals from using the old version. Reconnecting a
 revoked connection creates a new version. Each connection belongs to your account
 within the current workspace, not to every workspace member. Existing completed
-snapshots remain subject to their own access and expiry policies. A connection does
+snapshots remain subject to their original and current source-access policies. A connection does
 not activate an unqualified dataset or establish upstream usage rights. Server access and source qualification remain required.
 
 
@@ -89,3 +89,21 @@ Use `required` and `requires_bounds` to build selections, and display native val
 choices without substituting labels for codes. `choices_complete` describes the
 supported profile domain, not guaranteed observations. Examples are incomplete;
 World Bank reference-data links identify ordinary datasets to retrieve explicitly.
+
+## Result retention and explicit deletion
+
+On servers implementing persistent upstream retention, results remain until explicitly
+deleted. New receipts have null `expires_at`; old receipt timestamps remain unchanged
+for reproducibility and do not impose an access cutoff. Preview lifecycle metadata
+reports `retention="until_deleted"` and null expiry. Retention does not make a snapshot
+current or override source rights and revocation. SDK0.16.4 reads both receipt forms.
+
+SDK 0.16.5 adds `client.upstream.delete(result.id)` and the corresponding
+async method. Use it only when you intend to delete that specific server result.
+Independent materialized datasets and previously downloaded local files remain.
+A `result_delete_incomplete` error means result access was removed but storage cleanup
+failed: retry deletion of the same result ID. Repeated deletion does not restore data.
+SDK0.16.4 can invoke the endpoint using
+`client.request("DELETE", f"/v1/data/results/{result.id}")`.
+This endpoint requires an enabled server supporting explicit upstream-result deletion;
+the client method does not enable it or qualify source rights.

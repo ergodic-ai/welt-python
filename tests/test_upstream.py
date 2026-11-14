@@ -282,3 +282,34 @@ def test_connection_metadata_refuses_noncanonical_timestamp_text(stamp):
     metadata=dict(connection('open_meteo'),created_at=stamp)
     with client(lambda r:httpx.Response(200,json=metadata)) as c:
         with pytest.raises(WeltError):c.upstream.connect('open_meteo',api_key='short')
+
+@pytest.mark.parametrize('asynchronous',[False,True])
+def test_explicit_result_deletion_validates_id_and_never_follows_redirects(asynchronous):
+    calls=[]
+    def transport(request):
+        calls.append(request)
+        assert request.method=='DELETE'
+        assert request.url.path=='/v1/data/results/'+RESULT_ID
+        if len(calls)==1:
+            return httpx.Response(503,json={'error':{'code':'result_delete_incomplete','message':'Retry cleanup','retryable':True}})
+        if len(calls)==2:
+            return httpx.Response(200,json={'id':RESULT_ID,'deleted_at':'2026-01-01T00:00:00Z'})
+        return httpx.Response(307,headers={'Location':'https://other.test/secret'})
+    async def run_async():
+        async with AsyncClient(base_url='https://api.test',api_key='synthetic-key',transport=httpx.MockTransport(transport),max_retries=0) as c:
+            with pytest.raises(ValueError): await c.upstream.delete(RESULT_ID+'/download')
+            with pytest.raises(WeltError) as error: await c.upstream.delete(RESULT_ID)
+            assert error.value.code=='result_delete_incomplete' and error.value.retryable
+            assert (await c.upstream.delete(RESULT_ID))['deleted_at']
+            with pytest.raises(WeltError): await c.upstream.delete(RESULT_ID)
+    if asynchronous:
+        asyncio.run(run_async())
+    else:
+        with client(transport) as c:
+            with pytest.raises(ValueError): c.upstream.delete(RESULT_ID+'/download')
+            with pytest.raises(WeltError) as error: c.upstream.delete(RESULT_ID)
+            assert error.value.code=='result_delete_incomplete' and error.value.retryable
+            assert c.upstream.delete(RESULT_ID)['deleted_at']
+            with pytest.raises(WeltError): c.upstream.delete(RESULT_ID)
+    assert len(calls)==3
+    assert all(request.url.host=='api.test' for request in calls)

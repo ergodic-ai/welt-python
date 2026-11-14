@@ -322,6 +322,11 @@ class Upstream:
     def preview(self,result_id,*,limit=20):
         return self.client.request('GET','/v1/data/results/'+ref(result_id,'dres'),params={'limit':limit})
 
+    def delete(self,result_id):
+        """Explicitly delete a retained result; independent workspace copies remain."""
+        return self.client.request('DELETE','/v1/data/results/'+ref(result_id,'dres'),
+                                   follow_redirects=False,_expected_status=200)
+
     def materialize(self,result_id,*,name,decimal_encoding,target=None,idempotency_key=None):
         """Save an independent modelling dataset; float64 explicitly permits rounding."""
         if decimal_encoding not in ('string','float64'):
@@ -423,6 +428,11 @@ class AsyncUpstream(Upstream):
 
     async def preview(self,result_id,*,limit=20):
         return await self.client.request('GET','/v1/data/results/'+ref(result_id,'dres'),params={'limit':limit})
+
+    async def delete(self,result_id):
+        """Explicitly delete a retained result; independent workspace copies remain."""
+        return await self.client.request('DELETE','/v1/data/results/'+ref(result_id,'dres'),
+                                         follow_redirects=False,_expected_status=200)
 
     async def materialize(self,result_id,*,name,decimal_encoding,target=None,idempotency_key=None):
         """Save an independent modelling dataset; float64 explicitly permits rounding."""

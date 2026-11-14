@@ -1,3 +1,12 @@
+# 0.16.5 — Explicit upstream-result deletion
+
+- Add sync/async `client.upstream.delete(result_id)` for compatible servers, with
+  canonical result-ID validation and redirect refusal. Independent workspace copies
+  remain; retryable cleanup errors retain their server code and retry guidance.
+- Document persistent upstream retention and immutable legacy receipts. SDK0.16.4
+  can already read both null and legacy expiry metadata. No source activation,
+  commercial rights or server rollout is implied by this client release.
+
 # 0.16.4 (2026-11-14) — Upstream data and decision pipeline
 
 - Add sync/async upstream discovery, durable retrievals, verified JSON downloads,

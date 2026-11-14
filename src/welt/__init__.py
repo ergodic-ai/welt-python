@@ -44,6 +44,6 @@ __all__ = [
     "Evaluation", "AsyncEvaluation", "EvaluationWarning", "ReportLink",
     "Backtest", "AsyncBacktest", "BacktestWarning",
 ]
-__version__ = "0.16.4"
+__version__ = "0.16.5"
 
 from .decision import DecisionResult, DecisionJob, AsyncDecisionJob
