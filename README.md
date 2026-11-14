@@ -184,7 +184,9 @@ results. API errors, cancellation and timeouts retain existing typed semantics.
 eligible model (or up to 8 you name with `models=[...]`) on the same seeded folds and
 returns an `Evaluation`: `summary()` is the leaderboard against a baseline, `folds()`
 and `predictions()` are DataFrames, `show()` displays the HTML report in Jupyter and
-`report_link()` creates a signed link anyone holding it can open for up to seven days.
+`report_link()` creates a signed link with no expiry by default on a compatible
+server; anyone holding it can read the report until it is revoked. Pass `days=1`
+through `days=7` for an expiring link.
 `evaluation.fit()` then fits the chosen model on the full dataset. It requires SDK 0.12
 or later and a server release with evaluations; an older server raises `NotFoundError` with
 `code="evaluations_unavailable"`. [Evaluations guide](https://ergodic-ai.github.io/welt-python/evaluations.html).
@@ -216,11 +218,11 @@ with `unsupported_capability`, so fit and forecast each series separately. Times
 Use Chronos-2 inside ergodic's backtest and reconcile:
 https://docs.ergodic.dev/forecast-with-welt.html
 
-### Upstream data (unreleased API-224 candidate)
+### Upstream data
 
-The candidate `client.upstream` namespace works with deployments that explicitly
-expose qualified upstream datasets. The production service and released SDK do not
-have this feature enabled yet. Dataset policies and capabilities are authoritative;
+SDK 0.16.4 provides `client.upstream` for deployments that explicitly expose
+qualified upstream datasets. This client release does not itself enable the server
+feature or qualify any source. Dataset policies and capabilities are authoritative;
 being listed does not mean a source is available for retrieval.
 
 ```python
@@ -265,7 +267,7 @@ Downloads do not follow redirects. Export requires original and current source r
 local and synchronous. Source credentials are not accepted as query arguments;
 account-owned source connections and production activation remain service gates.
 
-The candidate also provides `client.upstream.materialize(result.id, name="Population",
+The namespace also provides `client.upstream.materialize(result.id, name="Population",
 decimal_encoding="float64", target="value", idempotency_key="population-copy-v1")`
 to save an ordinary workspace dataset. Use `decimal_encoding="string"` to preserve
 exact decimals as categorical text; `float64` explicitly permits numeric rounding.
@@ -274,7 +276,7 @@ retention/modelling, and export/retention rights must permit the copy. No target
 inferred. The saved dataset keeps source provenance and both content hashes; source
 result expiry/revocation does not expire the independent copy. It follows ordinary
 dataset deletion, and a retry cannot recreate a deleted copy. Async clients expose
-the same method. This remains an unreleased candidate.
+the same method.
 
 Submission reads the current dataset description to apply its lower retrieval
 ceilings. Normal client defaults are never increased automatically. Partial explicit
@@ -282,7 +284,7 @@ ceilings. Normal client defaults are never increased automatically. Partial expl
 the service. A supplied `schema_revision` remains authoritative and is never
 silently replaced by the current description.
 
-The candidate also supports account-owned source connections through
+The namespace also supports account-owned source connections through
 `client.upstream.connections()`, `client.upstream.connect("fred", api_key=source_key)`
 and `client.upstream.revoke_connection("fred")`; use `"census"` for Census or `"open_meteo"` for a qualified Open-Meteo commercial account; use `"eia"` for an EIA API key or `"comtrade"` for a UN Comtrade subscription key.
 A Comtrade key does not establish commercial redistribution permission.
@@ -299,5 +301,4 @@ or rotating prevents queued retrievals from using the old version. Reconnecting 
 revoked connection creates a new version. Each connection belongs to your account
 within the current workspace, not to every workspace member. Existing completed
 snapshots remain subject to their own access and expiry policies. A connection does
-not activate an unqualified dataset or establish upstream usage rights. These methods
-remain part of the unreleased candidate.
+not activate an unqualified dataset or establish upstream usage rights. Server access and source qualification remain required.

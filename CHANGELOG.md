@@ -1,4 +1,4 @@
-# Unreleased — upstream data and decision pipeline
+# 0.16.4 (2026-11-14) — Upstream data and decision pipeline
 
 - Add sync/async upstream discovery, durable retrievals, verified JSON downloads,
   exact-decimal/native-period DataFrames, explicit modelling copies and account-owned
@@ -6,6 +6,9 @@
   no source access or production availability is implied.
 - Add sync/async decision resources, durable handles and ranked result parsing.
   Requires a server with the decision pipeline; no production availability implied.
+- Evaluation report links default to no expiry on compatible servers; explicit one-to-seven-day
+  expiry and revocation remain supported. Persistent evaluation results require
+  compatible server behavior; upstream result expiry remains governed by each receipt.
 
 # 0.16.3 (2026-10-25) — Share-report example handle
 
@@ -489,16 +492,10 @@ No new large-file, resumable-upload or Parquet batch API is included in this rel
 Existing in-memory CSV/Parquet estimator input behavior is retained.
 
 
-## Unreleased — workspace and agent CLI source candidate
+## Historical development notes — workspace and agent CLI
 
 - Exact workspace login/selection, multiple origin-bound saved credentials and local logout.
 - JSON CLI for existing modelling/resource/job/research operations; browser entry points for account controls.
 - Sync/async resumable upload and batch manifest/payload methods; partial batch wait support.
 - Workspace verification before private input and cross-origin request rejection.
 - Login diagnostics move to stderr; successful CLI commands emit JSON on stdout.
-
-## 0.16.4 — API-224 (release candidate)
-
-Results remain until explicit deletion. Evaluation report links default to no
-scheduled expiry (`days=None`); explicit durations and revocation remain supported.
-API tracking: ergodic-ai/welt-api API-224 / DEC-129.

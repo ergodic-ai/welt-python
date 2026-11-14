@@ -55,7 +55,10 @@ def test_rendered_site_in_a_real_browser():
                                  capture_output=True, text=True, timeout=240)
         finally:
             server.shutdown()
-    results = json.loads(run.stdout.strip().splitlines()[-1])
+    assert run.returncode == 0, f'Browser check exited {run.returncode}: {run.stderr[-8000:]}'
+    lines = run.stdout.strip().splitlines()
+    assert lines, f'Browser check emitted no results: {run.stderr[-8000:]}'
+    results = json.loads(lines[-1])
     assert results.pop('errors') == []
     assert results.pop('overflow') == {}
     assert results.pop('searchResults') > 0
