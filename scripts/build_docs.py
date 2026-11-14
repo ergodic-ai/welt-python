@@ -35,7 +35,7 @@ GUIDES = [('Get started', [('First prediction', 'start'), ('Connect your workspa
                       ('Select a model', 'model-selection'), ('Compare models', 'evaluations'),
                       ('Forecast a time series', 'forecasting'), ('Backtest a time series', 'backtesting'),
                       ('Hidden model runs', 'model-runs'),
-                      ('Research datasets', 'research-datasets'), ('Wait and recover', 'async-and-errors'),
+                      ('Research datasets', 'research-datasets'), ('Upstream data', 'upstream-data'), ('Wait and recover', 'async-and-errors'),
                       ('Discover a graph', 'causal-discovery'), ('Rank interventions', 'decisions'), ('Workspace resources', 'usage')]),
           ('Reference', [('Python reference', 'reference'), ('Models and limits', 'capabilities'), ('Agent CLI', 'cli')]),
           ('Releases', [('Upgrade your client', 'migration')])]

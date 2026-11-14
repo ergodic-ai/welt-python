@@ -1,0 +1,255 @@
+{
+  "result": {
+    "snapshot": {
+      "plan": {
+        "contract_version": "upstream-contract-v1",
+        "request": {
+          "dataset_id": "world_bank:SP.POP.TOTL",
+          "schema_revision": "e7df11a72445e366aabd3409239a999ea0e59c46a2e6cf1eeb31de0b1f95746f",
+          "selections": [],
+          "columns": null,
+          "as_of": null,
+          "freshness": {
+            "mode": "latest",
+            "max_age_seconds": null
+          },
+          "limits": {
+            "max_rows": 10000,
+            "max_bytes": 4194304,
+            "max_pages": 100,
+            "timeout_seconds": 30
+          }
+        },
+        "spec": {
+          "contract_version": "upstream-contract-v1",
+          "id": "world_bank:SP.POP.TOTL",
+          "source_id": "world_bank",
+          "native_id": "SP.POP.TOTL",
+          "title": "Population, total (World Development Indicators)",
+          "adapter_version": "world-bank-v1",
+          "normalizer_version": "world-bank-exact-v1",
+          "data_schema": {
+            "representation": "table",
+            "observation_grain": "One World Bank economy and calendar year",
+            "structures": [
+              "panel"
+            ],
+            "columns": [
+              {
+                "name": "economy",
+                "logical_type": "string",
+                "roles": [
+                  "entity"
+                ],
+                "nullable": false,
+                "unit": null,
+                "period_frequency": null
+              },
+              {
+                "name": "economy_name",
+                "logical_type": "string",
+                "roles": [
+                  "attribute"
+                ],
+                "nullable": false,
+                "unit": null,
+                "period_frequency": null
+              },
+              {
+                "name": "year",
+                "logical_type": "period",
+                "roles": [
+                  "time"
+                ],
+                "nullable": false,
+                "unit": null,
+                "period_frequency": "year"
+              },
+              {
+                "name": "value",
+                "logical_type": "decimal",
+                "roles": [
+                  "measure"
+                ],
+                "nullable": true,
+                "unit": "people",
+                "period_frequency": null
+              },
+              {
+                "name": "status",
+                "logical_type": "string",
+                "roles": [
+                  "quality"
+                ],
+                "nullable": false,
+                "unit": null,
+                "period_frequency": null
+              },
+              {
+                "name": "observation_status",
+                "logical_type": "string",
+                "roles": [
+                  "quality"
+                ],
+                "nullable": false,
+                "unit": null,
+                "period_frequency": null
+              }
+            ],
+            "primary_key": [
+              "economy",
+              "year"
+            ]
+          },
+          "filters": [
+            {
+              "column": "economy",
+              "operators": [
+                "eq",
+                "in"
+              ]
+            },
+            {
+              "column": "year",
+              "operators": [
+                "eq",
+                "gte",
+                "lte"
+              ]
+            }
+          ],
+          "supports_projection": true,
+          "supports_as_of": false,
+          "temporal_behaviour": "revisable",
+          "policy": {
+            "status": "qualified",
+            "evidence": "synthetic-only",
+            "allow_retrieve": true,
+            "allow_export": true,
+            "allow_retain": true
+          },
+          "limits": {
+            "max_rows": 10000,
+            "max_bytes": 4194304,
+            "max_pages": 100,
+            "timeout_seconds": 30
+          }
+        },
+        "scope_partition": "ws-synthetic",
+        "columns": [
+          {
+            "name": "economy",
+            "logical_type": "string",
+            "roles": [
+              "entity"
+            ],
+            "nullable": false,
+            "unit": null,
+            "period_frequency": null
+          },
+          {
+            "name": "economy_name",
+            "logical_type": "string",
+            "roles": [
+              "attribute"
+            ],
+            "nullable": false,
+            "unit": null,
+            "period_frequency": null
+          },
+          {
+            "name": "year",
+            "logical_type": "period",
+            "roles": [
+              "time"
+            ],
+            "nullable": false,
+            "unit": null,
+            "period_frequency": "year"
+          },
+          {
+            "name": "value",
+            "logical_type": "decimal",
+            "roles": [
+              "measure"
+            ],
+            "nullable": true,
+            "unit": "people",
+            "period_frequency": null
+          },
+          {
+            "name": "status",
+            "logical_type": "string",
+            "roles": [
+              "quality"
+            ],
+            "nullable": false,
+            "unit": null,
+            "period_frequency": null
+          },
+          {
+            "name": "observation_status",
+            "logical_type": "string",
+            "roles": [
+              "quality"
+            ],
+            "nullable": false,
+            "unit": null,
+            "period_frequency": null
+          }
+        ],
+        "fingerprint": "572432de91823d036a6c88b91011ae97d31a402376c400b5399c177954093186"
+      },
+      "receipt": {
+        "started_at": "2026-11-13T20:52:05.844386Z",
+        "fetched_at": "2026-11-13T20:52:05.844589Z",
+        "checked_at": "2026-11-13T20:52:05.844589Z",
+        "expires_at": "2026-11-13T21:52:05.844589Z",
+        "publication_time": null,
+        "upstream_version": "2026-10-01",
+        "as_of": null,
+        "consistency": "best_effort",
+        "consistency_evidence": null,
+        "historical_evidence": null,
+        "complete": true,
+        "pages": 3,
+        "elapsed_seconds": 0.00013333297101780772
+      },
+      "rows": [
+        [
+          "USA",
+          "United States",
+          "2020",
+          "123.000000000000001",
+          "observed",
+          ""
+        ]
+      ],
+      "content_sha256": "7072094e0ae7e15f58f59272fd4d86dd1b5cfe57d72d45c2d66e12f553ef08e6",
+      "content_bytes": 833
+    },
+    "source_url": "https://api.worldbank.org/v2/country/all/indicator/SP.POP.TOTL",
+    "attribution": "The World Bank: World Development Indicators: Population, total (SP.POP.TOTL)",
+    "source_database": "2",
+    "upstream_last_updated": "2026-10-01",
+    "includes_aggregate_economies": true,
+    "source_note": "Midyear estimate",
+    "source_organization": "Synthetic source",
+    "metadata_sha256": "cd2f9f03ed7401730c1a15840ed6e0e62777cda340eef63b01f52862dea2a6cb"
+  },
+  "preview": {
+    "id": "dres_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "snapshot_id": "snap_4bcacc08dcaa8c0ed95e2d569c0e511c854168c652c36c9f61fe1f58c9fc0b70",
+    "row_count": 1,
+    "provenance": {
+      "source_url": "https://api.worldbank.org/v2/country/all/indicator/SP.POP.TOTL",
+      "attribution": "The World Bank: World Development Indicators: Population, total (SP.POP.TOTL)",
+      "source_database": "2",
+      "upstream_last_updated": "2026-10-01",
+      "includes_aggregate_economies": true,
+      "source_note": "Midyear estimate",
+      "source_organization": "Synthetic source",
+      "metadata_sha256": "cd2f9f03ed7401730c1a15840ed6e0e62777cda340eef63b01f52862dea2a6cb"
+    }
+  }
+}
