@@ -54,3 +54,14 @@ def test_invalid_result_and_request_fail():
     with pytest.raises(ValueError):
         decision_request('ds_x',target='Y',target_kind='continuous',discovery_model='arrow',
                          estimation_model='kumo-medium',interventions={'Y':{}})
+
+
+def test_v2_validation_request_and_legacy_wire():
+    from welt.decision import decision_request
+    table={'columns':['id','A','Y'],'rows':[[1,0,0],[2,1,1]]}
+    kwargs=dict(target='Y',target_kind='binary',discovery_model='graph',estimation_model='model',interventions={'A':{'kind':'binary'}})
+    legacy=decision_request(table,**kwargs)
+    assert 'protocol' not in legacy and 'validation' not in legacy and 'unit_id' not in legacy
+    new=decision_request(table,**kwargs,protocol='decision-contrasts_v2',validation='data_validation',validation_design='independent_bernoulli',unit_id='id')
+    assert new['validation']=={'dataset_id':'data_validation'}
+    assert new['protocol']=='decision-contrasts_v2' and new['unit_id']=='id'

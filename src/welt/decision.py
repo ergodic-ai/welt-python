@@ -27,7 +27,8 @@ def _source(value):
 
 def decision_request(context, *, target, target_kind, discovery_model, estimation_model,
                      interventions, rows=None, objective='maximize', target_class=None,
-                     knowledge=None, types=None, n_folds=5, seed=0, min_propensity=.01, max_fits=500):
+                     knowledge=None, types=None, n_folds=5, seed=0, min_propensity=.01, max_fits=500,
+                     protocol='decision-contrasts_v1', validation=None, validation_design=None, unit_id=None):
     """Create the wire request; methods and explicit/default contrasts belong to each variable."""
     if objective not in ('maximize','minimize'):
         raise ValueError('objective must be maximize or minimize')
@@ -35,12 +36,21 @@ def decision_request(context, *, target, target_kind, discovery_model, estimatio
         raise ValueError('target_kind must be continuous, binary or categorical')
     if not interventions or target in interventions:
         raise ValueError('List actionable variables other than the target.')
-    return dict(context=_source(context), rows=None if rows is None else _source(rows), target=target,
+    if protocol not in ('decision-contrasts_v1', 'decision-contrasts_v2'):
+        raise ValueError('Unsupported decision protocol.')
+    body = dict(protocol=protocol, validation=None if validation is None else _source(validation),
+                validation_design=validation_design, unit_id=unit_id, context=_source(context), rows=None if rows is None else _source(rows), target=target,
                 target_kind=target_kind, target_class=target_class, objective=objective,
                 discovery_model=discovery_model, estimation_model=estimation_model,
                 interventions=deepcopy(interventions), knowledge=deepcopy(knowledge or {}),
                 types=dict(types or {}), n_folds=n_folds, seed=seed,
                 min_propensity=min_propensity, max_fits=max_fits)
+    if protocol == 'decision-contrasts_v1':
+        if validation is not None or validation_design is not None or unit_id is not None:
+            raise ValueError('Validation options require decision-contrasts_v2.')
+        for field in ('protocol', 'validation', 'validation_design', 'unit_id'):
+            body.pop(field)
+    return body
 
 
 @dataclass(frozen=True)
@@ -55,7 +65,7 @@ class DecisionResult:
     @classmethod
     def from_dict(cls, data):
         if (not isinstance(data, dict) or data.get('task') != 'decision'
-                or data.get('protocol') != 'decision-contrasts_v1'):
+                or data.get('protocol') not in ('decision-contrasts_v1', 'decision-contrasts_v2')):
             raise ValueError('Unsupported decision result contract.')
         for name in ('population','individual','skipped'):
             if not isinstance(data.get(name), list):

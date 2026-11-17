@@ -94,3 +94,29 @@ nuisance fits use existing fit/predict rates; cross-fitting makes multiple calls
 A conservative plan reserves credits and success settles actual calls. `max_fits`
 caps fits; failure/cancellation releases the parent reservation. No deployment or
 new model entitlement follows from installing this SDK.
+
+## Candidate v2 rankings
+
+Pass `protocol="decision-contrasts_v2"` explicitly. Omitting it preserves the v1
+wire request and result semantics. For binary treatments the new protocol uses
+S/treatment toggling for query rankings and DR for population ATE. Set `method`
+per intervention to choose S or DR; `outcome_model`, `outcome_task` and `final_model`
+configure separate server-side learners. Binary event complements are derived,
+not fitted independently. Other treatment defaults are unchanged.
+
+Optional `validation`, `validation_design="independent_bernoulli"` and `unit_id`
+provide a separate randomized validation cohort. IDs must be unique/disjoint and
+are excluded from learning; the caller asserts truthful IDs, independent units,
+no interference and no reuse/tuning. Binary treatment/outcome `method="auto"`
+also requires `validation_probability`: the known assignment probability of the
+requested intervention value, not an estimated context propensity. This initial
+gate uses conservative finite-cohort bounds for top-20% targeting versus random
+selection, including fractional score ties and multiple-comparison correction.
+It selects DR only with positive evidence over both S and random; otherwise S's
+own status remains visible. `supported` does not mean trustworthy individual
+causal effects or future performance. `inconclusive`, `evidence_against` and
+`not_assessed` are explicit, and no failed gate silently sets effects to zero.
+
+Population and query methods may differ and their averages need not agree. Read
+`result.to_dict()` for graph, model pins, stage summaries and targeting diagnostics.
+The SDK does no local fitting and does not grant compute or activate a server rollout.
