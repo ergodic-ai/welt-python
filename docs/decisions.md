@@ -98,7 +98,7 @@ new model entitlement follows from installing this SDK.
 ## Candidate v2 rankings
 
 Pass `protocol="decision-contrasts_v2"` explicitly. Omitting it preserves the v1
-wire request and result semantics. For binary treatments the new protocol uses
+wire request and result semantics. For binary treatments with binary targets the new protocol uses
 S/treatment toggling for query rankings and DR for population ATE. Set `method`
 per intervention to choose S or DR; `outcome_model`, `outcome_task` and `final_model`
 configure separate server-side learners. Binary event complements are derived,
