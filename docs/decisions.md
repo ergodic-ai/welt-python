@@ -72,7 +72,7 @@ per-row ranking changes:
   arms, averaged over folds. The default for a binary treatment and a binary target.
 - `s`: one outcome model with the treatment toggled. Never a default.
 - `dr`: a regression on the paired doubly robust scores, as without v2. The default
-  for every other treatment and target combination.
+  for every other binary or multicategory treatment.
 
 Choose a method per variable, for example
 `interventions={"sms": {"kind": "binary", "method": "s"}}`. `plugin` and `s` need
