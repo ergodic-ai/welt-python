@@ -1,3 +1,12 @@
+# 0.16.6 — Decision protocol v2
+
+- `decision_request(..., protocol=...)` and the sync/async `client.decisions` resources
+  accept `protocol="decision-contrasts_v2"`, sent only when given, so existing requests
+  are unchanged. `DecisionResult` reads both v1 and v2 results and exposes `.protocol`.
+- v2 ranks query rows per intervention method (`plugin` by default for a binary
+  treatment and binary target, or `s`/`dr`). Requires a server that offers v2; no
+  server rollout is implied by this client release.
+
 # 0.16.5 — Explicit upstream-result deletion
 
 - Add sync/async `client.upstream.delete(result_id)` for compatible servers, with

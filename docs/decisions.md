@@ -2,7 +2,7 @@
 
 Submit context observations, name a target and the variables you can change, then
 receive ranked single-variable actions. This feature requires SDK 0.16.4 or later and a server running the decision
-pipeline. Installing this client does not enable server capabilities or establish
+pipeline; decision protocol v2 requires SDK 0.16.6 or later. Installing this client does not enable server capabilities or establish
 production availability.
 
 ## Submit and wait
@@ -59,6 +59,40 @@ with `client.decisions.delete(job_id)`; metadata and usage remain.
 
 - Binary and multicategory treatment: `dr`.
 - Continuous treatment: `partially_linear` by default, or `continuous_dr`.
+
+### Decision protocol v2
+
+Pass `protocol="decision-contrasts_v2"` (SDK 0.16.6 or later, on a server that
+offers it) to choose how query rows are ranked for each binary or multicategory
+treatment. The population effect stays a doubly robust estimate; only the
+per-row ranking changes:
+
+- `plugin`: the difference between the cross-fitted outcome models of the two
+  arms, averaged over folds. The default for a binary treatment and a binary target.
+- `s`: one outcome model with the treatment toggled.
+- `dr`: a regression on the paired doubly robust scores, as without v2.
+
+```python
+job = client.decisions.submit(
+    context,
+    target="came_back",
+    target_kind="binary",
+    discovery_model="welt-r",
+    estimation_model="tabicl-v2",
+    interventions={"sms": {"kind": "binary"}},  # v2 ranks with plugin
+    rows=customers,
+    protocol="decision-contrasts_v2",
+)
+result = job.result()
+print(result.protocol)                                    # decision-contrasts_v2
+print(result.individual[0]["interventions"][0]["method"])  # plugin
+```
+
+Without `protocol` the server default (`decision-contrasts_v1`) applies and the
+request is unchanged. For a binary target, v2 fits the target event once and the
+other class is its exact negative, and the outcome models are the estimation
+model's classifier, so v2 population values can differ from v1 for the same table.
+The ranking is benchmark evidence, not a guarantee for a particular table.
 
 Methods are configured inside each variable entry. Without explicit `baseline`
 and `values`, boolean treatment uses false→true, categories use the most frequent

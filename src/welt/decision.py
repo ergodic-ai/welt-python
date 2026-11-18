@@ -5,6 +5,11 @@ import math
 
 from .client import Job, AsyncJob
 
+#: Decision protocols this client reads. ``decision-contrasts_v1`` is the server default;
+#: ``decision-contrasts_v2`` ranks query rows per intervention method (``plugin`` by default
+#: for a binary treatment and binary target, or ``s``/``dr``).
+PROTOCOLS = ('decision-contrasts_v1', 'decision-contrasts_v2')
+
 
 def _source(value):
     if isinstance(value, str):
@@ -27,20 +32,29 @@ def _source(value):
 
 def decision_request(context, *, target, target_kind, discovery_model, estimation_model,
                      interventions, rows=None, objective='maximize', target_class=None,
-                     knowledge=None, types=None, n_folds=5, seed=0, min_propensity=.01, max_fits=500):
-    """Create the wire request; methods and explicit/default contrasts belong to each variable."""
+                     knowledge=None, types=None, n_folds=5, seed=0, min_propensity=.01, max_fits=500,
+                     protocol=None):
+    """Create the wire request; methods and explicit/default contrasts belong to each variable.
+
+    ``protocol`` is sent only when given, so requests without it stay unchanged; omitting it
+    uses the server default (``decision-contrasts_v1``)."""
+    if protocol is not None and protocol not in PROTOCOLS:
+        raise ValueError(f'protocol must be one of {", ".join(PROTOCOLS)}')
     if objective not in ('maximize','minimize'):
         raise ValueError('objective must be maximize or minimize')
     if target_kind not in ('continuous','binary','categorical'):
         raise ValueError('target_kind must be continuous, binary or categorical')
     if not interventions or target in interventions:
         raise ValueError('List actionable variables other than the target.')
-    return dict(context=_source(context), rows=None if rows is None else _source(rows), target=target,
-                target_kind=target_kind, target_class=target_class, objective=objective,
-                discovery_model=discovery_model, estimation_model=estimation_model,
-                interventions=deepcopy(interventions), knowledge=deepcopy(knowledge or {}),
-                types=dict(types or {}), n_folds=n_folds, seed=seed,
-                min_propensity=min_propensity, max_fits=max_fits)
+    request = dict(context=_source(context), rows=None if rows is None else _source(rows), target=target,
+                   target_kind=target_kind, target_class=target_class, objective=objective,
+                   discovery_model=discovery_model, estimation_model=estimation_model,
+                   interventions=deepcopy(interventions), knowledge=deepcopy(knowledge or {}),
+                   types=dict(types or {}), n_folds=n_folds, seed=seed,
+                   min_propensity=min_propensity, max_fits=max_fits)
+    if protocol is not None:
+        request['protocol'] = protocol
+    return request
 
 
 @dataclass(frozen=True)
@@ -55,7 +69,7 @@ class DecisionResult:
     @classmethod
     def from_dict(cls, data):
         if (not isinstance(data, dict) or data.get('task') != 'decision'
-                or data.get('protocol') != 'decision-contrasts_v1'):
+                or data.get('protocol') not in PROTOCOLS):
             raise ValueError('Unsupported decision result contract.')
         for name in ('population','individual','skipped'):
             if not isinstance(data.get(name), list):
@@ -66,6 +80,11 @@ class DecisionResult:
                 if item.get('rank') != rank or not math.isfinite(item['effect']):
                     raise ValueError('Decision ranking or effect is invalid.')
         return cls(deepcopy(data))
+
+    @property
+    def protocol(self):
+        """The decision protocol the server used."""
+        return self._data['protocol']
 
     @property
     def population(self):
