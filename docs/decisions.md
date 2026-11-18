@@ -57,7 +57,8 @@ with `client.decisions.delete(job_id)`; metadata and usage remain.
 
 ## Choose each variable's method
 
-- Binary and multicategory treatment: `dr`.
+- Binary and multicategory treatment: `dr` (with decision protocol v2 also
+  `plugin` or `s`, below).
 - Continuous treatment: `partially_linear` by default, or `continuous_dr`.
 
 ### Decision protocol v2
@@ -69,8 +70,14 @@ per-row ranking changes:
 
 - `plugin`: the difference between the cross-fitted outcome models of the two
   arms, averaged over folds. The default for a binary treatment and a binary target.
-- `s`: one outcome model with the treatment toggled.
-- `dr`: a regression on the paired doubly robust scores, as without v2.
+- `s`: one outcome model with the treatment toggled. Never a default.
+- `dr`: a regression on the paired doubly robust scores, as without v2. The default
+  for every other treatment and target combination.
+
+Choose a method per variable, for example
+`interventions={"sms": {"kind": "binary", "method": "s"}}`. `plugin` and `s` need
+`protocol="decision-contrasts_v2"`; without it the server refuses them before
+creating a job.
 
 ```python
 job = client.decisions.submit(
@@ -89,10 +96,16 @@ print(result.individual[0]["interventions"][0]["method"])  # plugin
 ```
 
 Without `protocol` the server default (`decision-contrasts_v1`) applies and the
-request is unchanged. For a binary target, v2 fits the target event once and the
-other class is its exact negative, and the outcome models are the estimation
-model's classifier, so v2 population values can differ from v1 for the same table.
-The ranking is benchmark evidence, not a guarantee for a particular table.
+request is unchanged. For a binary target and a discrete treatment, v2 fits the
+target event once and the other class is its exact negative, and the outcome models
+are the estimation model's classifier, so v2 population values can differ from v1
+for the same table. The ranking is benchmark evidence, not a guarantee for a
+particular table.
+
+A server without v2 refuses the request with `422 unsupported_capability`. If a
+worker without v2 picks the job up, the job fails with error code
+`unsupported_capability` and its reservation is released. The client accepts only
+the protocols it knows; a later protocol needs a newer SDK.
 
 Methods are configured inside each variable entry. Without explicit `baseline`
 and `values`, boolean treatment uses false→true, categories use the most frequent

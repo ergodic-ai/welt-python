@@ -7,7 +7,7 @@ from .client import Job, AsyncJob
 
 #: Decision protocols this client reads. ``decision-contrasts_v1`` is the server default;
 #: ``decision-contrasts_v2`` ranks query rows per intervention method (``plugin`` by default
-#: for a binary treatment and binary target, or ``s``/``dr``).
+#: for a binary treatment and binary target, ``dr`` otherwise, ``s`` on request).
 PROTOCOLS = ('decision-contrasts_v1', 'decision-contrasts_v2')
 
 
