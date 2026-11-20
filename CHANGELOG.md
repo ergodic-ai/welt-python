@@ -1,3 +1,29 @@
+# 0.16.7 — Forecast capabilities and non-negative forecasts
+
+- `Forecast.fit` reads each model's `forecast_capabilities` (API-266) when the server
+  publishes it, preferring the forecasting task profile's, and exposes a copy as
+  `Forecast.capabilities_` (`None` on older servers, and on a `Forecast` fitted and pickled
+  by an earlier SDK). The native quantile levels come from it; older servers keep the
+  entry's `quantile_levels`.
+- The local refusals for panels, cross-learning and categorical covariates with several
+  targets still read the model's resolved `configuration`, the same flags the server
+  refuses on, so their error codes are unchanged. A panel or covariate ruled out only by the
+  published corners is still `workload_limit`, as the server reports it.
+- Past, future and categorical covariates are refused locally (`InvalidInputError`, code
+  `unsupported_capability`) for a model whose configuration says `false`, such as ci-proto
+  and the Simons models. Before, they reached the server and came back as the same
+  `422 unsupported_capability`.
+- `non_negative=False` on `Forecast.forecast`/`submit_forecast`, the `predict` family,
+  sync/async `Client.submit_forecast` and `welt forecast --non-negative` (API-267). The field
+  is sent only when true, so default requests and their idempotency fingerprint are
+  unchanged. `True` is refused locally unless `supports_non_negative` was true when the
+  `Forecast` was fitted; fit again after upgrading the SDK or the server.
+- Results parse the optional record: `ForecastResult.non_negative`, `.clipped_values`,
+  `.non_negative_skipped` and `ForecastSeries.clipped_values`, checked for consistency, and
+  a typed job checks that the result's `non_negative` matches the request. Results without
+  the record still parse. Backtests are unchanged. Requires a server with API-266/267 for
+  the new behaviour; no server rollout is implied by this client release.
+
 # 0.16.6 — Decision protocol v2
 
 - `decision_request(..., protocol=...)` and the sync/async `client.decisions` resources

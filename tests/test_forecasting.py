@@ -48,12 +48,17 @@ class Service:
         self.fail_post = False
         self.model_id = 'chronos-2'
         self.panels = None          # the server's supports_panels refusal (API-166 Timestral) when False
+        self.capabilities = None    # API-266 forecast_capabilities; None is a server that predates it
+        self.shift = 0.0            # subtracted from every returned value, to produce negative forecasts
 
     def metadata(self):
-        return dict(id=self.model_id, version=self.version, configuration={'version': self.configuration},
+        meta = dict(id=self.model_id, version=self.version, configuration={'version': self.configuration},
                     operations=self.operations, tasks=self.tasks, supports_version_expectations=True,
                     limits={'min_context': 16, 'max_context': 512, 'max_horizon': 64},
                     forecast_envelopes=self.envelopes, min_context=self.min_context, quantile_levels=LEVELS)
+        if self.capabilities is not None:
+            meta['forecast_capabilities'] = deepcopy(self.capabilities)
+        return meta
 
     def table(self, reference):
         if 'dataset_id' in reference:
@@ -65,7 +70,7 @@ class Service:
         columns, rows = history['columns'], history['rows']
         t, i = columns.index(request['time_column']), (columns.index(request['id_column'])
                                                      if 'id_column' in request else None)
-        order, last, length = [], {}, {}
+        order, last, length, signed = [], {}, {}, set()
         for row in rows:
             key = None if i is None else str(row[i])
             if key not in length:
@@ -73,17 +78,36 @@ class Service:
             stamp = pd.Timestamp(row[t]).tz_convert('UTC')
             last[key] = max(last.get(key, stamp), stamp)
             length[key] = length.get(key, 0) + 1
+            for target in request['targets']:
+                value = row[columns.index(target)]
+                if value is not None and value < 0:
+                    signed.add((key, target))
         frequency = request.get('frequency', self.inferred)
         levels, horizon = request['quantile_levels'], request['horizon']
         series = []
         for n, key in enumerate(order):
             for target in request['targets']:
-                points = [float(n * 100 + k + 1) for k in range(horizon)]
+                points = [float(n * 100 + k + 1) - self.shift for k in range(horizon)]
                 series.append(dict(id=key, target=target, context_length=length[key],
                                    timestamps=[s.isoformat().replace('+00:00', 'Z')
                                                for s in _steps(last[key], frequency, horizon)],
                                    predictions=points,
                                    quantiles=[[p + level - 0.5 for level in levels] for p in points]))
+        extra = {}
+        if request.get('non_negative'):
+            # API-267 (DEC-166): clip each entry whose history is non-negative; leave the others signed.
+            skipped, total = [], 0
+            for entry in series:
+                if (entry['id'], entry['target']) in signed:
+                    entry['clipped_values'] = None
+                    skipped.append(dict(id=entry['id'], target=entry['target']))
+                    continue
+                count = sum(v < 0 for v in entry['predictions']) + sum(v < 0 for r in entry['quantiles'] for v in r)
+                entry['predictions'] = [max(v, 0.0) for v in entry['predictions']]
+                entry['quantiles'] = [[max(v, 0.0) for v in r] for r in entry['quantiles']]
+                entry['clipped_values'] = count
+                total += count
+            extra = dict(non_negative=True, clipped_values=total, non_negative_skipped=skipped)
         return dict(task='forecasting', model_id=request['model_id'], model_version=self.version,
                     configuration=self.configuration, horizon=horizon, frequency=frequency,
                     quantile_levels=levels, point_semantics='median', calibrated_intervals=False,
@@ -92,7 +116,7 @@ class Service:
                                  targets=request['targets'], past_covariates=request['past_covariates'],
                                  future_covariates=request['future_covariates'],
                                  categorical_covariates=request['categorical_covariates']),
-                    series=series)
+                    series=series, **extra)
 
     def handle(self, request):
         self.requests.append(request)
@@ -1032,3 +1056,301 @@ def test_cli_forecast_surfaces_the_server_panel_refusal(tmp_path):
     with Client(api_key='fixture', transport=httpx.MockTransport(svc.handle)) as client:
         assert _run(_parser().parse_args(['forecast', '--input', str(path), '--idempotency-key', 'cli-one']),
                     client)['job_id'] == 'fc-1'
+
+
+# --- API-266 forecast_capabilities and API-267 non_negative ---------------------------------
+
+DECILES = [v / 10 for v in range(1, 10)]
+
+
+def capabilities(**changes):
+    """A forecast_capabilities object shaped as GET /v1/models publishes it (API-266)."""
+    value = dict(quantile_levels=LEVELS, default_quantile_levels=[.1, .5, .9], supports_panels=True,
+                 supports_past_covariates=True, supports_future_covariates=True,
+                 supports_categorical_covariates=True, supports_categorical_with_multiple_targets=True,
+                 supports_cross_learning=True, min_context=16, max_context=2000, max_horizon=256,
+                 max_series=20, max_variates=10, native_context_length=8192, native_prediction_length=1024,
+                 forecast_envelopes=[dict(max_context=2000, max_variates=10, max_series=20, max_horizon=256)],
+                 supports_non_negative=True)
+    value.update(changes)
+    return value
+
+
+def one_series(values=None):
+    frame = panel().query("store == 'a'").reset_index(drop=True)
+    if values is not None:
+        frame['sales'] = values
+    return frame
+
+
+def test_forecast_capabilities_are_exposed_and_owned(service):
+    service.capabilities = capabilities()
+    model = Forecast().fit(one_series(), time='date', target=['sales'])
+    assert model.capabilities_ == capabilities()
+    model.capabilities_['supports_non_negative'] = False        # an owned copy: the route is unchanged
+    assert model.forecast(2, non_negative=True).non_negative is True
+    # The forecasting task profile's object takes precedence over the entry's.
+    meta = service.metadata()
+    profile = dict(task='forecasting', operations=['forecast'], configuration={'version': 'profile-config'},
+                   forecast_capabilities=capabilities(supports_cross_learning=False))
+    service.metadata = lambda: dict(meta, task_profiles=[profile])
+    assert Forecast().fit(one_series(), time='date', target=['sales']).capabilities_[
+        'supports_cross_learning'] is False
+    # Servers that predate API-266 publish none; the legacy univariate route has none either.
+    plain = Service()
+    plain.tasks = ['univariate_forecasting']
+    with Client(api_key='fixture', transport=httpx.MockTransport(plain.handle)) as client:
+        assert Forecast(client=client).fit(one_series()['sales'].set_axis(one_series()['date'])).capabilities_ is None
+    del service.metadata
+    service.capabilities = None
+    assert Forecast().fit(one_series(), time='date', target=['sales']).capabilities_ is None
+
+
+def test_quantile_levels_come_from_forecast_capabilities(service):
+    # The entry still lists the 21 levels; forecast_capabilities says this model serves the deciles.
+    service.capabilities = capabilities(quantile_levels=DECILES)
+    model = Forecast(model='chronos-2').fit(one_series(), time='date', target=['sales'])
+    with pytest.raises(ValueError, match='native levels from: 0.1, 0.2'):
+        model.forecast(2, quantile_levels=[0.05, 0.5, 0.95])
+    assert not service.posts
+    assert model.forecast(2, quantile_levels=[0.1, 0.5, 0.9]).quantile_levels == (0.1, 0.5, 0.9)
+    # Without the object, the entry's levels still apply (0.16.6 behaviour).
+    service.capabilities = None
+    assert Forecast().fit(one_series(), time='date', target=['sales']).forecast(
+        2, quantile_levels=[0.05, 0.5, 0.95]).quantile_levels == (0.05, 0.5, 0.95)
+
+
+@pytest.mark.parametrize('flag, kwargs', [
+    ('supports_past_covariates', dict(past_covariates=['temperature'])),
+    ('supports_future_covariates', dict(future_covariates=['promo'])),
+    ('supports_categorical_covariates', dict(past_covariates=['holiday'], categorical=['holiday'])),
+])
+@pytest.mark.parametrize('published', [False, True])
+def test_unsupported_covariates_are_refused_before_any_job(service, monkeypatch, flag, kwargs, published):
+    # ci-proto and the Simons models refuse every covariate; the server answers 422 after upload.
+    # The flag is the resolved configuration's recipe flag, which the server's refuse_unsupported
+    # reads, whether or not the server also publishes forecast_capabilities (which says false too).
+    if published:
+        service.capabilities = capabilities(**{flag: False})
+    meta = dict(service.metadata(), configuration={'version': service.configuration, flag: False})
+    monkeypatch.setattr(service, 'metadata', lambda: meta)
+    with pytest.raises(InvalidInputError, match=f'{flag} is false in its configuration') as error:
+        Forecast().fit(one_series(), time='date', target=['sales'], **kwargs)
+    assert error.value.code == 'unsupported_capability' and isinstance(error.value, ValueError)
+    assert 'forecast_capabilities' not in str(error.value)
+    assert not service.posts
+    # The same history without that role is admitted.
+    assert Forecast().fit(one_series(), time='date', target=['sales']).forecast(2).series[0].target == 'sales'
+
+
+@pytest.mark.parametrize('flag, kwargs', [
+    ('supports_past_covariates', dict(past_covariates=['temperature'])),
+    ('supports_future_covariates', dict(future_covariates=['promo'])),
+    ('supports_categorical_covariates', dict(past_covariates=['holiday'], categorical=['holiday'])),
+])
+def test_covariates_ruled_out_only_by_the_corners_are_a_workload_limit(service, flag, kwargs):
+    # The recipe allows covariates; forecast_capabilities says false only because every corner has
+    # max_variates 1. The server refuses that with workload_limit at corner admission, not with
+    # unsupported_capability, so the SDK must do the same.
+    service.envelopes = [dict(max_context=512, max_variates=1, max_series=1, max_horizon=64)]
+    service.capabilities = capabilities(**{flag: False}, supports_categorical_with_multiple_targets=False,
+                                        max_variates=1, forecast_envelopes=service.envelopes)
+    with pytest.raises(InvalidInputError, match='No published chronos-2 forecasting envelope') as error:
+        Forecast().fit(one_series(), time='date', target=['sales'], **kwargs)
+    assert error.value.code == 'workload_limit' and not service.posts
+
+
+def test_panels_ruled_out_only_by_the_corners_are_a_workload_limit(service):
+    # A deployment serving Chronos-2 (no supports_panels key in its recipe) with only single-series
+    # corners publishes supports_panels false. The server answers a panel with workload_limit, as
+    # SDK 0.16.6 did; it is not unsupported_capability.
+    service.envelopes = [dict(max_context=2000, max_variates=10, max_series=1, max_horizon=256)]
+    service.capabilities = capabilities(supports_panels=False, max_series=1, forecast_envelopes=service.envelopes)
+    with pytest.raises(InvalidInputError, match='No published chronos-2 forecasting envelope') as error:
+        Forecast().fit(panel(), time='date', id='store', target=['sales'])
+    assert error.value.code == 'workload_limit' and not service.posts
+    # The recipe flag still refuses, with the server's code, before the corners are read.
+    meta = dict(service.metadata(), configuration={'version': service.configuration, 'supports_panels': False})
+    service.metadata = lambda: meta
+    with pytest.raises(InvalidInputError, match='supports_panels is false') as error:
+        Forecast().fit(panel(), time='date', id='store', target=['sales'])
+    assert error.value.code == 'unsupported_capability' and not service.posts
+
+
+def test_covariates_absent_flags_keep_server_validation(service):
+    service.capabilities = {k: v for k, v in capabilities().items() if not k.startswith('supports_')
+                            or k == 'supports_non_negative'}
+    model = Forecast().fit(one_series(), time='date', target=['sales'], past_covariates=['temperature'])
+    assert len(model.forecast(2).series) == 1
+
+
+def test_non_negative_is_sent_only_when_true_and_recorded_per_series(service):
+    service.capabilities = capabilities()
+    service.shift = 2.0                     # store b forecasts -1, 0, ...: negative medians and quantiles
+    frame = panel()
+    frame.loc[frame['store'] == 'a', 'sales'] = -frame.loc[frame['store'] == 'a', 'sales']   # a signed history
+    model = Forecast().fit(frame, time='date', id='store', target=['sales', 'visits'])
+    default = model.forecast(2, idempotency_key='plain')
+    assert 'non_negative' not in service.posts[-1][0]
+    assert default.non_negative is False and default.clipped_values is None
+    assert default.non_negative_skipped == () and all(s.clipped_values is None for s in default.series)
+    assert 'non_negative' not in default.to_dict()
+    result = model.forecast(2, non_negative=True, idempotency_key='clipped')
+    body = service.posts[-1][0]
+    assert body['non_negative'] is True
+    assert {k: v for k, v in body.items() if k != 'non_negative'} == service.posts[0][0]
+    assert result.non_negative is True
+    assert [(s.id, s.target, s.clipped_values) for s in result.series] == [
+        ('b', 'sales', 5), ('b', 'visits', 5), ('a', 'sales', None), ('a', 'visits', 0)]
+    assert result.clipped_values == 10 and result.non_negative_skipped == (('a', 'sales'),)
+    assert result.series[0].predictions.tolist() == [0.0, 0.0]
+    assert result.series[2].predictions.tolist() == [99.0, 100.0]      # left signed, as the server sent it
+    assert result.to_dict()['non_negative_skipped'] == [{'id': 'a', 'target': 'sales'}]
+    assert result.to_dict()['series'][0]['clipped_values'] == 5 and result.to_dict()['clipped_values'] == 10
+
+
+def test_non_negative_univariate_view_keeps_the_record(service):
+    service.capabilities, service.shift = capabilities(), 2.0
+    model = Forecast().fit(one_series()['sales'].set_axis(one_series()['date']))
+    result = model.predict_details(3, non_negative=True)
+    assert service.posts[-1][0]['non_negative'] is True
+    assert result.task == 'univariate_forecasting' and result.predictions.tolist() == [0.0, 0.0, 1.0]
+    assert result.non_negative is True and result.clipped_values == 5
+    assert result.series[0].clipped_values == 5 and result.non_negative_skipped == ()
+    assert 'non_negative' not in result.to_dict()          # the 0.13 schema is unchanged
+    assert model.predict(3, non_negative=True).tolist() == [0.0, 0.0, 1.0]
+    assert model.predict(3).tolist() == [-1.0, 0.0, 1.0]
+
+
+@pytest.mark.parametrize('caps', [None, capabilities(supports_non_negative=False),
+                                  {k: v for k, v in capabilities().items() if k != 'supports_non_negative'}])
+def test_non_negative_is_refused_where_the_server_does_not_offer_it(service, caps):
+    service.capabilities = caps
+    model = Forecast().fit(one_series(), time='date', target=['sales'])
+    requests = len(service.requests)
+    with pytest.raises(InvalidInputError, match='supports_non_negative') as error:
+        model.forecast(2, non_negative=True)
+    assert error.value.code == 'unsupported_capability'
+    assert len(service.requests) == requests and not service.posts
+    assert model.forecast(2).non_negative is False          # a default request still works
+
+
+def test_non_negative_must_be_a_boolean_and_needs_the_forecasting_route(service):
+    service.capabilities = capabilities()
+    model = Forecast().fit(one_series(), time='date', target=['sales'])
+    for value in (1, 'yes', None):
+        with pytest.raises(ValueError, match='non_negative must be True or False'):
+            model.forecast(2, non_negative=value)
+    legacy = Service()
+    legacy.tasks = ['univariate_forecasting']
+    with Client(api_key='fixture', transport=httpx.MockTransport(legacy.handle)) as client:
+        old = Forecast(client=client).fit(one_series()['sales'].set_axis(one_series()['date']))
+        with pytest.raises(InvalidInputError, match='supports_non_negative'):
+            old.predict(2, non_negative=True)
+    assert not service.posts and not legacy.posts
+
+
+def test_a_forecast_pickled_by_an_earlier_sdk_has_no_capabilities(service):
+    service.capabilities = capabilities()
+    state = Forecast().fit(one_series(), time='date', target=['sales']).__getstate__()
+    state.pop('capabilities_')                       # what SDK 0.16.6 pickled
+    old = Forecast.__new__(Forecast)
+    old.__setstate__(state)
+    assert old.capabilities_ is None
+    assert not hasattr(pickle.loads(pickle.dumps(Forecast())), 'capabilities_')   # unfitted stays unfitted
+
+
+def test_non_negative_route_saved_by_an_earlier_sdk_is_refused(service):
+    service.capabilities = capabilities()
+    model = Forecast().fit(one_series(), time='date', target=['sales'])
+    route = forecast_module._thaw(model._route_)
+    route.pop('non_negative')
+    model._route_ = forecast_module._freeze(route)
+    with pytest.raises(InvalidInputError, match=r'fitted by an SDK before 0\.16\.7\)\. Fit again'):
+        model.forecast(2, non_negative=True)
+    assert len(model.forecast(2).series) == 1
+
+
+@pytest.mark.parametrize('sent', [False, True])
+def test_result_non_negative_must_match_the_request(service, sent):
+    service.capabilities = capabilities()
+
+    def flip(value):
+        if sent:
+            for key in ('non_negative', 'clipped_values', 'non_negative_skipped'):
+                value.pop(key)
+            for s in value['series']:
+                s.pop('clipped_values')
+        else:
+            value.update(non_negative=True, clipped_values=0, non_negative_skipped=[])
+            for s in value['series']:
+                s['clipped_values'] = 0
+    service.result_change = flip
+    model = Forecast().fit(one_series(), time='date', target=['sales'])
+    with pytest.raises(InvalidForecastResultError, match='differs from its submitted request'):
+        model.forecast(2, non_negative=sent)
+
+
+def _skip_all(value):
+    value['non_negative_skipped'] = [dict(id=s['id'], target=s['target']) for s in value['series']]
+
+
+@pytest.mark.parametrize('change', [
+    lambda v: v.update(non_negative=False),
+    lambda v: v.update(non_negative='true'),
+    lambda v: v.update(clipped_values=v['clipped_values'] + 1),
+    lambda v: v.update(clipped_values=-1),
+    lambda v: v.update(non_negative_skipped=[{'id': 'a', 'target': 'sales'}]),
+    lambda v: v.update(non_negative_skipped=None),
+    lambda v: v.pop('non_negative_skipped'),
+    lambda v: v.pop('clipped_values'),
+    lambda v: v['series'][0].pop('clipped_values'),
+    lambda v: v['series'][0].update(clipped_values=1.5),
+    lambda v: v['series'][0].update(clipped_values=True),
+    lambda v: v['series'][0].update(clipped_values=None),        # null but not listed as skipped
+    _skip_all,                                                   # listed as skipped but clipped
+])
+def test_malformed_non_negative_records_fail_without_repair(service, change):
+    service.capabilities, service.shift = capabilities(), 2.0
+    service.result_change = change
+    model = Forecast().fit(panel(), time='date', id='store', target=['sales'])
+    with pytest.raises(InvalidForecastResultError):
+        model.forecast(2, non_negative=True)
+
+
+GUARDS = dict(expected_model_version='chronos-2-v1', expected_configuration_version='chronos-2-forecast-v1')
+
+
+def test_raw_and_async_submissions_and_cli_send_non_negative_only_when_asked(tmp_path, capsys):
+    svc = Service()
+    svc.version = svc.configuration = None
+    request = dict(model_id='chronos-2', time_column='t', targets=['y'], past_covariates=[], future_covariates=[],
+                   categorical_covariates=[], horizon=1, quantile_levels=[.5], cross_learning=False,
+                   history={'table': {'columns': ['t', 'y'], 'rows': [['2026-01-01T00:00:00Z', 1.0]]}})
+    original = deepcopy(request)
+    path = tmp_path / 'request.json'
+    path.write_text(json.dumps(request))
+    with Client(api_key='fixture', transport=httpx.MockTransport(svc.handle)) as client:
+        _run(_parser().parse_args(['forecast', '--input', str(path), '--idempotency-key', 'cli-plain']), client)
+        _run(_parser().parse_args(['forecast', '--input', str(path), '--idempotency-key', 'cli-clip',
+                                   '--non-negative']), client)
+        svc.version, svc.configuration = 'chronos-2-v1', 'chronos-2-forecast-v1'
+        client.submit_forecast(request, idempotency_key='sync-clip', non_negative=True, **GUARDS)
+        with pytest.raises(ValueError, match='non_negative must be True or False'):
+            client.submit_forecast(request, non_negative='true')
+        reopened = client.forecast_job('fc-3').result()            # an untyped reconnect reads the record
+        assert reopened.non_negative is True and reopened.clipped_values == 0
+    capsys.readouterr()
+
+    async def run():
+        async with AsyncClient(api_key='fixture', transport=httpx.MockTransport(svc.handle)) as client:
+            await client.submit_forecast(request, idempotency_key='async-plain', **GUARDS)
+            job = await client.submit_forecast(request, idempotency_key='async-clip', non_negative=True, **GUARDS)
+            return await client.forecast_job(job.id).result()
+    result = asyncio.run(run())
+    assert result.non_negative is True and result.series[0].clipped_values == 0
+    assert request == original                                       # the caller's request is not modified
+    bodies = [body for body, _ in svc.posts]
+    assert bodies[0] == original and bodies[3] == original
+    for body in (bodies[1], bodies[2], bodies[4]):
+        assert body == dict(original, non_negative=True)

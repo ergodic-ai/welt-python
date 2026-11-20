@@ -119,7 +119,10 @@ envelopes. Timestral accepts one series per request and needs one target when an
 covariate is categorical. From SDK 0.14.2, `fit` checks the model's categorical/
 multiple-target restriction locally, and `forecast(cross_learning=True)` checks
 its cross-learning restriction before submitting a job. SDK 0.14.0 and 0.14.1
-receive the same `unsupported_capability` error from the server.
+receive the same `unsupported_capability` error from the server. ci-proto and the
+Simons models accept no covariates at all: from SDK 0.16.7, `fit` refuses past,
+future or categorical covariates locally, with `unsupported_capability`, for a model
+whose [`forecast_capabilities`](#capabilities) say it doesn't support them.
 
 The downloadable [covariate script](downloads/forecasting_covariates.py) accepts
 the same model choices. To run one simulated store with Timestral:
@@ -228,6 +231,47 @@ print(shared.cross_learning)  # True
   results.
 - It's priced the same. This call is a second request.
 
+## Keep forecasts at or above zero {#non-negative}
+
+Bookings, units and other counts can't be negative, but a model can forecast below 0.
+Pass `non_negative=True` (SDK 0.16.7 or later, on a server whose
+`forecast_capabilities` set `supports_non_negative`) and the server clips the returned
+medians and quantiles at 0:
+
+```python file="forecast_sales.py"
+clipped = model.forecast(14, future=future, non_negative=True)
+print(clipped.non_negative)            # True
+print(clipped.clipped_values)          # values set to 0, summed over clipped entries
+print(clipped.non_negative_skipped)    # (id, target) pairs left signed
+for series in clipped.series:
+    print(series.id, series.target, series.clipped_values)  # None when left signed
+```
+
+- **Per series and target.** Each entry whose observed history is entirely
+  non-negative is clipped. An entry with a negative observation (bookings carry
+  negative months from returns and credits) is left as the model returned it, listed
+  in `non_negative_skipped`, and its `clipped_values` is `None`. Nothing is refused for
+  negativity.
+- **The model is unchanged.** Clipping is the API's own post-processing after the
+  quantiles are assembled: the model, its version and its input are the same bytes as
+  without the flag. Clipping at a constant keeps quantiles in order and the median
+  equal to the 0.5 level.
+- **Timestral already clamps** non-negative histories itself, so on Timestral
+  `clipped_values` is 0. That 0 says nothing about the model beyond its own clamp.
+- **Sent only when true.** `non_negative=False`, the default, sends no field, so
+  default requests are byte-identical to earlier SDKs' and work on older servers. A
+  server that doesn't offer it is refused locally with `unsupported_capability`. The
+  check reads what `fit` saw, so `fit` again (a metadata read; nothing is uploaded or
+  charged) when the `Forecast` was fitted by an SDK before 0.16.7, or before the
+  server offered `non_negative`.
+- `predict`, `predict_details` and `predict_quantiles` take the same argument, and
+  `Client.submit_forecast(request, non_negative=True)` (sync and async) and
+  `welt forecast --non-negative` add the field to a raw request. Backtests don't take it:
+  their metrics are on unclipped forecasts.
+- The SDK checks the result: `non_negative` must match what you sent, the total must
+  equal the per-entry counts, and `non_negative_skipped` must name exactly the
+  unclipped entries. A mismatch raises `InvalidForecastResultError`.
+
 ## Check the limits {#limits}
 
 Limits come from the model's published metadata. Read them before you send a large
@@ -276,6 +320,40 @@ Step 4's panel (365 rows × 5 variates × 3 series × 14 steps) fits the 2,000 �
   before anything is sent. Histories are never truncated.
 - The corners can change. Your code should read them from
   `client.model("chronos-2")`, as above, rather than copy this table.
+
+### What each model supports {#capabilities}
+
+Current servers publish one `forecast_capabilities` object per forecasting model,
+with the native `quantile_levels`, `supports_panels`, `supports_past_covariates`,
+`supports_future_covariates`, `supports_categorical_covariates`,
+`supports_categorical_with_multiple_targets`, `supports_cross_learning`,
+`supports_non_negative`, the per-axis maxima and the `forecast_envelopes`:
+
+```python file="forecast_sales.py"
+caps = chronos["forecast_capabilities"]
+print(caps["quantile_levels"])           # the levels a request may ask for
+print(caps["supports_past_covariates"])  # True; False for ci-proto and the Simons models
+print(caps["supports_non_negative"])     # True on a server with API-267
+```
+
+After `fit`, the same object is `model.capabilities_` (`None` on a server that
+predates it, and on a `Forecast` fitted by an earlier SDK). From SDK 0.16.7 the local
+checks, all made before a job is created, read:
+
+- **From `forecast_capabilities`:** quantile levels outside `quantile_levels` raise
+  `ValueError`, and `non_negative=True` without `supports_non_negative` raises
+  `InvalidInputError` with code `unsupported_capability`. Older servers keep the
+  entry's `quantile_levels`.
+- **From the model's configuration:** covariates, panels, cross-learning and
+  categorical covariates with several targets that the model's recipe doesn't
+  support raise `InvalidInputError` with code `unsupported_capability`. These are the
+  flags the server itself refuses on, so the local code is the server's code.
+
+A `supports_panels` or `supports_*_covariates` of `false` in `forecast_capabilities`
+can also mean that no published corner admits a panel or a covariate. That is a size
+limit, not a missing feature: `fit` reports it with `workload_limit`, naming the
+corners, as the server does. Only an explicit `false` refuses locally; anything else
+is left to the server.
 
 ## What a forecast costs {#pricing}
 
@@ -381,7 +459,7 @@ except InvalidInputError as error:
 | `ValueError` | A local check failed: a gap, a repeated time, a missing future value, wrong future rows. | Fix the table. Nothing was sent. |
 | `InvalidInputError`, code `workload_limit` | No published corner admits the request, a series is shorter than `min_context`, or the request body is above 10 MiB. | Shorten the history, use fewer variates or series, or ask for a shorter horizon. For a large table, upload it and pass its dataset ID. |
 | `InvalidInputError`, code `invalid_input` | The server refused the request. | Read the message. It never repeats your cell values. |
-| `InvalidInputError`, code `unsupported_capability` | The server has no `forecasting` task, but you asked for a panel, covariates, a dataset history, a calendar frequency or `forecast()`. Or the model doesn't offer what you asked for: a panel, `cross_learning=True`, or categorical covariates with several targets on [Timestral](#timestral). | Use the [univariate API](#forecast-a-univariate-time-series), or a current server. For Timestral, send one request per series, with `cross_learning=False`, and one target when you use categorical covariates. |
+| `InvalidInputError`, code `unsupported_capability` | The server has no `forecasting` task, but you asked for a panel, covariates, a dataset history, a calendar frequency or `forecast()`. Or the model doesn't offer what you asked for: a panel, `cross_learning=True`, or categorical covariates with several targets on [Timestral](#timestral), any covariate on ci-proto or the Simons models, or `non_negative=True` on a server that doesn't offer it ([capabilities](#capabilities)). | Use the [univariate API](#forecast-a-univariate-time-series), or a current server. For Timestral, send one request per series, with `cross_learning=False`, and one target when you use categorical covariates. For covariates, choose a model whose `forecast_capabilities` support them. |
 | `ConflictError`, code `model_version_mismatch` or `configuration_version_mismatch` | The model changed after your `fit`. | Fit again. |
 | `ConflictError`, code `idempotency_conflict` | You reused a replay key with a different request. | Use a new key. |
 | `JobTimeoutError` | Your local wait ended. | [Reconnect](#submit-now-collect-later). The forecast keeps running. |

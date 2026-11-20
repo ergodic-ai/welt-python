@@ -227,6 +227,7 @@ returns explicit expiry errors. Use the server's `expires_at` and version fields
 welt models get chronos-2
 welt run --input forecast.json --idempotency-key forecast-00000001
 welt forecast --input request.json --idempotency-key forecast-00000002  # servers with the forecasting task
+welt forecast --input request.json --non-negative  # clip at 0 (API-267, SDK 0.16.7)
 welt jobs wait job_returned --timeout 600
 welt model-runs delete job_returned --yes
 welt forecasts delete forecast_job_returned --yes
@@ -238,6 +239,9 @@ dataset IDs or inline tables, column roles, horizon) and returns its job ID and
 idempotency key the same way. It sends the body as written: for `timestral-209m` and
 `timestral-28m`, which forecast one series per request, the server refuses a history
 with more than one series with `unsupported_capability` (JSON on stderr, exit status 1).
+`--non-negative` adds `"non_negative": true` to the body, so the server clips the
+forecast at 0 for each series and target whose history is non-negative; without it the
+body is sent unchanged. See [forecasting](forecasting.md#non-negative).
 `models list` stays curated; inspect a hidden model by its exact ID. The server
 enforces workspace access.
 

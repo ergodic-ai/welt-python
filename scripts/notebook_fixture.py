@@ -237,6 +237,27 @@ class ForecastSyntheticService:
             return f'synthetic-{model}-v1', f'synthetic-{model}-forecast-v2'
         return self.version, self.configuration
 
+    @staticmethod
+    def capabilities(configuration, corners):
+        """API-266 forecast_capabilities, built as the server builds them: recipe flag AND corner."""
+        def recipe(name):
+            return configuration.get(name) is not False
+        axes = [max(c[k] for c in corners) for k in ('max_context', 'max_variates', 'max_series', 'max_horizon')]
+        covariates = axes[1] > 1
+        categorical = covariates and recipe('supports_categorical_covariates') and (
+            recipe('supports_past_covariates') or recipe('supports_future_covariates'))
+        return dict(quantile_levels=FORECAST_LEVELS, default_quantile_levels=[0.1, 0.5, 0.9],
+                    supports_panels=recipe('supports_panels') and axes[2] > 1,
+                    supports_past_covariates=recipe('supports_past_covariates') and covariates,
+                    supports_future_covariates=recipe('supports_future_covariates') and covariates,
+                    supports_categorical_covariates=categorical,
+                    supports_categorical_with_multiple_targets=categorical and recipe(
+                        'supports_categorical_with_multiple_targets'),
+                    supports_cross_learning=recipe('supports_cross_learning'), min_context=16,
+                    max_context=axes[0], max_horizon=axes[3], max_series=axes[2], max_variates=axes[1],
+                    native_context_length=8192, native_prediction_length=1024,
+                    forecast_envelopes=[dict(c) for c in corners], supports_non_negative=True)
+
     def metadata(self, model='chronos-2'):
         if model in self.timestral_licences:
             version, configuration = self.versions(model)
@@ -247,12 +268,14 @@ class ForecastSyntheticService:
                         operations=['forecast'], version=version, configuration=config,
                         supports_version_expectations=True, forecast_envelopes=self.timestral_envelopes,
                         min_context=16, quantile_levels=FORECAST_LEVELS, limits=dict(min_context=16),
+                        forecast_capabilities=self.capabilities(config, self.timestral_envelopes),
                         attribution=dict(notice='2026 - Mistral AI', licence='Modified MIT', licence_url=licence_url))
         return dict(id='chronos-2', name='Chronos-2', family='forecasting', status='available', tasks=['forecasting'],
                     operations=['forecast'], version=self.version,
                     configuration={'version': self.configuration}, supports_version_expectations=True,
                     forecast_envelopes=self.envelopes, min_context=16, quantile_levels=FORECAST_LEVELS,
                     default_quantile_levels=[0.1, 0.5, 0.9],
+                    forecast_capabilities=self.capabilities({'version': self.configuration}, self.envelopes),
                     limits=dict(min_context=16, **self.envelopes[0]))
 
     @staticmethod
@@ -298,6 +321,22 @@ class ForecastSyntheticService:
                 series.append(dict(id=key, target=target, context_length=len(members),
                                    timestamps=[s.isoformat().replace('+00:00', 'Z') for s in future],
                                    predictions=points, quantiles=quantiles))
+        extra = {}
+        if request.get('non_negative'):
+            # API-267: clip each entry whose observed history is non-negative; leave the others signed.
+            skipped, total = [], 0
+            for entry, members in zip(series, [m for m in groups.values() for _ in request['targets']]):
+                target = columns.index(entry['target'])
+                if any(row[target] is not None and float(row[target]) < 0 for row in members):
+                    entry['clipped_values'] = None
+                    skipped.append(dict(id=entry['id'], target=entry['target']))
+                    continue
+                count = sum(v < 0 for v in entry['predictions']) + sum(v < 0 for r in entry['quantiles'] for v in r)
+                entry['predictions'] = [max(v, 0.0) for v in entry['predictions']]
+                entry['quantiles'] = [[max(v, 0.0) for v in r] for r in entry['quantiles']]
+                entry['clipped_values'] = count
+                total += count
+            extra = dict(non_negative=True, clipped_values=total, non_negative_skipped=skipped)
         version, configuration = self.versions(request['model_id'])
         return dict(task='forecasting', model_id=request['model_id'], model_version=version,
                     configuration=configuration, horizon=request['horizon'], frequency=frequency,
@@ -307,7 +346,7 @@ class ForecastSyntheticService:
                                  targets=request['targets'], past_covariates=request['past_covariates'],
                                  future_covariates=request['future_covariates'],
                                  categorical_covariates=request['categorical_covariates']),
-                    series=series)
+                    series=series, **extra)
 
     def __call__(self, request):
         assert request.url.host == 'notebook.invalid', 'Fixture must not make live requests.'

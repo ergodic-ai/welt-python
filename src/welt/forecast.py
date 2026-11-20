@@ -582,7 +582,7 @@ def _versions(view, value):
     return model_version, config
 
 
-def _envelopes(view):
+def _envelopes(view, capabilities=None):
     limits = view.get("limits") if isinstance(view.get("limits"), dict) else {}
     corners = view.get("forecast_envelopes", limits.get("forecast_envelopes"))
     minimum = view.get("min_context", limits.get("min_context"))
@@ -590,11 +590,30 @@ def _envelopes(view):
         raise ValueError()
     keys = ("max_context", "max_variates", "max_series", "max_horizon")
     checked = [{k: _integer(c[k], 1, None, k) for k in keys} for c in corners]
-    levels = view.get("quantile_levels")
+    # API-266: forecast_capabilities.quantile_levels names the levels a request may ask for;
+    # servers that predate it publish the same list as the entry's quantile_levels.
+    levels = (capabilities["quantile_levels"] if capabilities and "quantile_levels" in capabilities
+              else view.get("quantile_levels"))
     levels = _numbers(list(NATIVE_QUANTILE_LEVELS) if levels is None else levels)
     if not levels or levels != sorted(set(levels)) or any(not 0 < v < 1 for v in levels):
         raise ValueError()
     return checked, _integer(minimum, 1, None, "Minimum context"), levels
+
+
+def _forecast_capabilities(meta, view):
+    """API-266 forecast_capabilities (the task profile's first, then the entry's), or None on
+    servers that predate it. A copy; the catalogue entry is never modified."""
+    for source in (view, meta):
+        value = source.get("forecast_capabilities")
+        if isinstance(value, dict):
+            return deepcopy(value)
+    return None
+
+
+#: Refusable covariate roles: (plan key, request field, resolved configuration flag).
+_ROLES = (("past", "past_covariates", "supports_past_covariates"),
+          ("future", "future_covariates", "supports_future_covariates"),
+          ("categorical", "categorical", "supports_categorical_covariates"))
 
 
 def _capabilities(meta, model, value):
@@ -606,20 +625,34 @@ def _capabilities(meta, model, value):
         view = _view(meta, "forecasting")
         operations = view.get("operations") if isinstance(view.get("operations"), list) else []
         if "forecast" in operations and view.get("supports_version_expectations") is True:
+            caps = _forecast_capabilities(meta, view)
             try:
                 model_version, config = _versions(view, value)
-                corners, minimum, levels = _envelopes(view)
+                corners, minimum, levels = _envelopes(view, caps)
             except (KeyError, TypeError, ValueError):
                 raise WeltError("Invalid forecasting metadata: version, configuration, forecast_envelopes "
                                 "and min_context are required.", code="invalid_response") from None
-            # API-174: a forecasting configuration may declare supports_panels false (Timestral):
-            # one series per request. An absent field, or any other value, keeps panels (Chronos-2).
-            panels = view["configuration"].get("supports_panels") is not False
-            return dict(task="forecasting", model_version=model_version, configuration=config,
-                        envelopes=corners, min_context=minimum, levels=levels, panels=panels,
-                        cross_learning=view["configuration"].get("supports_cross_learning") is not False,
-                        categorical_multiple_targets=view["configuration"].get(
-                            "supports_categorical_with_multiple_targets") is not False)
+            # Refusal flags come from the resolved configuration on every server, because that is
+            # what the server's refuse_unsupported reads, so a local refusal carries the server's
+            # code. forecast_capabilities (API-266) is not used here: it also folds in the corners
+            # (supports_panels is false when no corner has max_series > 1), and a request ruled out
+            # only by the corners is the server's workload_limit, which _admit reports. Only an
+            # explicit false refuses: an absent field, or any other value, keeps server validation
+            # (API-174: supports_panels false is Timestral's one series per request).
+            flags = view["configuration"]
+
+            def supported(name):
+                return flags.get(name) is not False
+            route = dict(task="forecasting", model_version=model_version, configuration=config,
+                         envelopes=corners, min_context=minimum, levels=levels,
+                         panels=supported("supports_panels"),
+                         cross_learning=supported("supports_cross_learning"),
+                         categorical_multiple_targets=supported("supports_categorical_with_multiple_targets"),
+                         # API-267: non_negative is offered only where the server says so.
+                         non_negative=caps is not None and caps.get("supports_non_negative") is True,
+                         capabilities=caps)
+            route.update({role: supported(flag) for role, _, flag in _ROLES})
+            return route
     view = _view(meta, "univariate_forecasting")
     operations = view.get("operations") if isinstance(view.get("operations"), list) else []
     if ("univariate_forecasting" in tasks and "model_run" in operations
@@ -648,6 +681,12 @@ def _covariate_capabilities(route, plan, model, cross_learning=False):
     Absent flags (including routes saved by earlier SDKs) retain server validation.
     Column roles are known even when the history itself is a dataset reference.
     """
+    for role, name, flag in _ROLES:
+        if plan[role] and route.get(role, True) is False:
+            kind = "categorical covariates" if role == "categorical" else name.replace("_", " ")
+            raise InvalidInputError(f"{model} does not support {kind} ({flag} is false in its "
+                                    f"configuration). Fit without {name}=..., or choose a model "
+                                    "that supports them.", code="unsupported_capability")
     if cross_learning and route.get("cross_learning", True) is False:
         raise InvalidInputError(f"{model} does not support cross-learning; use cross_learning=False.",
                                 code="unsupported_capability")
@@ -655,6 +694,24 @@ def _covariate_capabilities(route, plan, model, cross_learning=False):
             and route.get("categorical_multiple_targets", True) is False):
         raise InvalidInputError(f"{model} supports categorical covariates with one target only. "
                                 "Forecast each target separately.", code="unsupported_capability")
+
+
+def _non_negative(value, supported, model):
+    """API-267: non_negative is a strict boolean, offered where forecast_capabilities says so.
+
+    Unlike the covariate flags, an absent route flag (a Forecast fitted by SDK <= 0.16.6) refuses
+    rather than deferring to the server: the SDK cannot tell whether that server reads the field
+    at all, a server before API-267 answers only invalid_input (extra field) after the history
+    is sent, and fitting again is a free metadata read that settles it."""
+    if type(value) is not bool:
+        raise ValueError("non_negative must be True or False.")
+    if value and not supported:
+        raise InvalidInputError(
+            f"{model} was not offered non_negative when this Forecast was fitted "
+            "(forecast_capabilities.supports_non_negative was not true, or the Forecast was fitted by an SDK "
+            "before 0.16.7). Fit again to read the server's current capabilities (a metadata read: nothing "
+            "is uploaded or charged); if the server still does not offer it, it predates API-267. Or submit "
+            "non_negative=False.", code="unsupported_capability")
 
 
 def _admit(envelopes, model, context, variates, series, horizon, panels=True):
@@ -716,8 +773,35 @@ def _known(value, keys):
     return {k: value[k] for k in keys}
 
 
+def _clip_record(raw, series):
+    """API-267: the optional non_negative record of a forecasting result, or None without one.
+
+    A result with "non_negative" must say true and carry the whole record: a top-level
+    clipped_values equal to the sum over clipped entries, non_negative_skipped naming exactly the
+    entries whose clipped_values is null, in series order, and one clipped_values per entry. A
+    result without it is a default result; its other record fields are ignored.
+    """
+    if "non_negative" not in raw:
+        return None
+    if raw["non_negative"] is not True or not isinstance(raw["non_negative_skipped"], list):
+        raise ValueError()
+    entries = raw["series"]
+    counts = [None if s["clipped_values"] is None else _integer(s["clipped_values"], 0, None, "Clipped values")
+              for s in entries]
+    skipped = []
+    for k in raw["non_negative_skipped"]:
+        if not isinstance(k, dict) or "id" not in k or "target" not in k:   # extra keys are ignored
+            raise ValueError()
+        skipped.append([k["id"], k["target"]])
+    if (skipped != [[s["id"], s["target"]] for s, n in zip(series, counts) if n is None]
+            or _integer(raw["clipped_values"], 0, None, "Clipped values") != sum(n for n in counts if n is not None)):
+        raise ValueError()
+    return dict(non_negative=True, clipped_values=raw["clipped_values"],
+                non_negative_skipped=[dict(id=i, target=t) for i, t in skipped], series=counts)
+
+
 def _forecasting_payload(p):
-    p = _known(p, _RESULT_KEYS)
+    raw, p = p, _known(p, _RESULT_KEYS)
     if any(safe_id(p[k]) is None for k in ("model_id", "model_version", "configuration")):
         raise ValueError()
     h = _integer(p["horizon"], 1, None, "Horizon")
@@ -768,6 +852,12 @@ def _forecasting_payload(p):
             or len({b[0][0] for b in blocks}) != len(blocks)):
         raise ValueError()
     steps = _integer(p["rearranged_steps"], 0, len(series) * h, "Rearranged steps")
+    clip = _clip_record(raw, series)
+    if clip is not None:
+        for s, n in zip(series, clip["series"]):
+            s["clipped_values"] = n
+        p.update(non_negative=True, clipped_values=clip["clipped_values"],
+                 non_negative_skipped=clip["non_negative_skipped"])
     p.update(horizon=h, quantile_levels=levels, series=series, rearranged_steps=steps,
              columns={k: (list(v) if isinstance(v, list) else v) for k, v in c.items()})
     return p
@@ -814,7 +904,10 @@ class ForecastSeries:
     """One (series ID, target) forecast of a result; arrays are owned copies.
 
     id is the series ID rendered as a string (None without an id column); target is the
-    target column (None for legacy univariate results).
+    target column (None for legacy univariate results). clipped_values (API-267) is how many of
+    this entry's medians and quantiles the server set to 0 under non_negative=True; None when the
+    request did not ask for it or when the entry was left signed (see
+    ForecastResult.non_negative_skipped).
     """
     id: object
     target: object
@@ -823,12 +916,15 @@ class ForecastSeries:
     _timestamps: tuple = field(repr=False)
     _predictions: tuple = field(repr=False)
     _quantiles: tuple = field(repr=False)
+    clipped_values: object = None
 
-    def __init__(self, *, id, target, context_length, quantile_levels, timestamps, predictions, quantiles):
+    def __init__(self, *, id, target, context_length, quantile_levels, timestamps, predictions, quantiles,
+                 clipped_values=None):
         for name, value in (("id", id), ("target", target), ("context_length", context_length),
                             ("quantile_levels", tuple(quantile_levels)), ("_timestamps", tuple(timestamps)),
                             ("_predictions", tuple(predictions)),
-                            ("_quantiles", tuple(tuple(row) for row in quantiles))):
+                            ("_quantiles", tuple(tuple(row) for row in quantiles)),
+                            ("clipped_values", clipped_values)):
             object.__setattr__(self, name, value)
 
     @property
@@ -858,12 +954,14 @@ class ForecastResult:
     to_frame() keeps the 0.11–0.13 UTC-indexed layout and to_dict() the 0.13 schema. On the
     forecasting route that view reports frequency_seconds=None for calendar frequencies and
     keeps the server's rearranged_steps on the property. Unknown additional fields in a
-    forecasting result are ignored; every documented field is required.
+    forecasting result are ignored; every documented field is required. The non_negative record
+    (API-267) is optional: non_negative, clipped_values and non_negative_skipped report it, on
+    the univariate view too (whose to_dict() keeps the 0.13 schema without it).
     """
     _payload: object = field(repr=False)
     job_id: str
 
-    def __init__(self, payload, *, job_id, _mapped=False, _rearranged=0):
+    def __init__(self, payload, *, job_id, _mapped=False, _rearranged=0, _clip=None):
         try:
             p = deepcopy(payload)
             if not isinstance(p, dict) or safe_id(job_id) is None:
@@ -879,6 +977,7 @@ class ForecastResult:
         object.__setattr__(self, "_payload", _freeze(p))
         object.__setattr__(self, "job_id", job_id)
         object.__setattr__(self, "_rearranged", _rearranged)
+        object.__setattr__(self, "_clip", _freeze(_clip))
 
     def _univariate(self):
         """The legacy-shaped view of a single-series, single-target forecasting result."""
@@ -889,7 +988,11 @@ class ForecastResult:
                        timestamps=list(s._timestamps), predictions=list(s._predictions),
                        point_semantics="median", quantile_levels=list(self.quantile_levels),
                        quantiles=[list(r) for r in s._quantiles], calibrated_intervals=False)
-        return ForecastResult(payload, job_id=self.job_id, _mapped=True, _rearranged=self.rearranged_steps)
+        clip = (dict(non_negative=True, clipped_values=self.clipped_values,
+                     non_negative_skipped=[dict(id=i, target=t) for i, t in self.non_negative_skipped],
+                     series=s.clipped_values) if self.non_negative else None)
+        return ForecastResult(payload, job_id=self.job_id, _mapped=True, _rearranged=self.rearranged_steps,
+                              _clip=clip)
 
     def to_dict(self):
         """Return an independent JSON-compatible payload; job_id is a separate attribute.
@@ -911,10 +1014,12 @@ class ForecastResult:
         if self.task == "univariate_forecasting":
             return (ForecastSeries(id=None, target=None, context_length=p["context_length"],
                                    quantile_levels=p["quantile_levels"], timestamps=p["timestamps"],
-                                   predictions=p["predictions"], quantiles=p["quantiles"]),)
+                                   predictions=p["predictions"], quantiles=p["quantiles"],
+                                   clipped_values=self._clip["series"] if self._clip else None),)
         return tuple(ForecastSeries(id=s["id"], target=s["target"], context_length=s["context_length"],
                                     quantile_levels=p["quantile_levels"], timestamps=s["timestamps"],
-                                    predictions=s["predictions"], quantiles=s["quantiles"])
+                                    predictions=s["predictions"], quantiles=s["quantiles"],
+                                    clipped_values=s.get("clipped_values"))
                      for s in p["series"])
 
     def _single(self):
@@ -961,6 +1066,27 @@ class ForecastResult:
     @property
     def cross_learning(self):
         return self._payload.get("cross_learning", False)
+
+    def _record(self):
+        return self._clip if self._clip is not None else self._payload
+
+    @property
+    def non_negative(self):
+        """True when the server clipped this result at 0 (API-267, forecast(non_negative=True))."""
+        return self._record().get("non_negative", False)
+
+    @property
+    def clipped_values(self):
+        """Medians and quantiles set to 0, summed over clipped entries; None without non_negative.
+
+        On Timestral this is 0 by construction: its recipe already clamps non-negative histories."""
+        return self._record().get("clipped_values")
+
+    @property
+    def non_negative_skipped(self):
+        """(id, target) pairs left signed because their history has a negative observation; ()
+        when every entry was clipped or non_negative was not requested."""
+        return tuple((k["id"], k["target"]) for k in self._record().get("non_negative_skipped", ()))
 
     @property
     def columns(self):
@@ -1096,6 +1222,7 @@ class ForecastJob:
         want = e["columns"]
         if (result.horizon != e["horizon"] or list(result.quantile_levels) != e["quantile_levels"]
                 or result.cross_learning != e["cross_learning"]
+                or result.non_negative != e.get("non_negative", False)
                 or (e["canon"] is not None and _frequency(result.frequency) != tuple(e["canon"]))
                 or any(got[k] != want[k] for k in ("time", "id", "targets", "past_covariates", "future_covariates"))
                 or sorted(got["categorical_covariates"]) != sorted(want["categorical_covariates"])):
@@ -1207,6 +1334,9 @@ class Forecast(BaseEstimator):
     def __setstate__(self, state):
         super().__setstate__({k: _freeze(v[1]) if isinstance(v, tuple) and len(v) == 2
                               and v[0] == "__welt_frozen__" else v for k, v in state.items()})
+        # A Forecast fitted and pickled by SDK <= 0.16.6 has no capabilities_; it read none.
+        if "_route_" in state and "capabilities_" not in state:
+            self.capabilities_ = None
 
     def _clear_fitted(self):
         for name in list(vars(self)):
@@ -1307,6 +1437,9 @@ class Forecast(BaseEstimator):
         if route["task"] != "forecasting":
             self._context_ = _freeze(plan["legacy"])
         self.task_ = route["task"]
+        # API-266: the model's published forecast_capabilities; None on servers that predate it
+        # and on the legacy univariate route. An owned copy: editing it changes nothing.
+        self.capabilities_ = deepcopy(route.get("capabilities"))
         self.model_version_, self.configuration_version_ = route["model_version"], route["configuration"]
         # A dataset history is known only by reference: its sizes and times stay None.
         canon = plan["canon"]
@@ -1364,12 +1497,13 @@ class Forecast(BaseEstimator):
                 client.close()
             raise
 
-    def _submit(self, horizon, future, quantile_levels, cross_learning, idempotency_key):
+    def _submit(self, horizon, future, quantile_levels, cross_learning, idempotency_key, non_negative=False):
         route, plan = _thaw(self._route_), _thaw(self._plan_)
         horizon = _integer(horizon, 1, None, "Horizon")
         levels = _levels(quantile_levels, route["levels"])
         if type(cross_learning) is not bool:
             raise ValueError("cross_learning must be True or False.")
+        _non_negative(non_negative, route.get("non_negative", False), self.model)
         _covariate_capabilities(route, plan, self.model, cross_learning)
         if idempotency_key is not None and safe_id(idempotency_key) is None:
             raise ValueError("idempotency_key must be a bounded opaque identifier.")
@@ -1390,6 +1524,10 @@ class Forecast(BaseEstimator):
                     time_column=plan["time"], targets=plan["targets"], past_covariates=plan["past"],
                     future_covariates=plan["future"], categorical_covariates=plan["categorical"],
                     horizon=horizon, quantile_levels=levels, cross_learning=cross_learning)
+        if non_negative:
+            # API-267: sent only when true, so a default request (and its idempotency
+            # fingerprint) is byte-identical to earlier SDKs' and older servers accept it.
+            body["non_negative"] = True
         if future_source is not None:
             body["future"] = future_source
         if plan["id"] is not None:
@@ -1407,6 +1545,7 @@ class Forecast(BaseEstimator):
                         configuration=self.configuration_version_, univariate=plan["form"] == "univariate",
                         request=dict(
                             horizon=horizon, quantile_levels=levels, cross_learning=cross_learning, canon=canon,
+                            non_negative=non_negative,
                             columns=dict(time=plan["time"], id=plan["id"], targets=plan["targets"],
                                          past_covariates=plan["past"], future_covariates=plan["future"],
                                          categorical_covariates=plan["categorical"]),
@@ -1458,7 +1597,7 @@ class Forecast(BaseEstimator):
             raise
 
     def submit_forecast(self, horizon, *, future=None, quantile_levels=(0.1, 0.5, 0.9),
-                        cross_learning=False, idempotency_key=None):
+                        cross_learning=False, idempotency_key=None, non_negative=False):
         """Submit one guarded POST /v1/forecasts request without waiting; retain job.id.
 
         future is required exactly when the fit named future_covariates: a DataFrame with
@@ -1468,7 +1607,11 @@ class Forecast(BaseEstimator):
         levels 0.01, 0.05, 0.10, …, 0.95, 0.99); the request default is (0.1, 0.5, 0.9).
         cross_learning=True lets series share information. A configuration with
         supports_cross_learning false refuses True locally before submission. The
-        server also validates model-specific restrictions. DataFrame tables travel inline;
+        server also validates model-specific restrictions. non_negative=True (API-267) asks the
+        server to clip returned quantiles and medians at 0 for each (series, target) whose observed
+        history is entirely non-negative; an entry with a negative observation is published signed
+        and listed in ForecastResult.non_negative_skipped. It is sent only when True, and refused
+        locally unless forecast_capabilities.supports_non_negative is true. DataFrame tables travel inline;
         a request body above MAX_REQUEST_BYTES (the API's default 10 MiB body limit; a
         server override is not reflected) is refused before any request. The job owns
         its new client, or borrows Forecast(client=...).
@@ -1477,24 +1620,28 @@ class Forecast(BaseEstimator):
         if self.task_ != "forecasting":
             raise InvalidInputError("forecast() needs a server with the forecasting task (POST /v1/forecasts); "
                                     "this server offers only univariate predict().", code="unsupported_capability")
-        return self._submit(horizon, future, quantile_levels, cross_learning, idempotency_key)
+        return self._submit(horizon, future, quantile_levels, cross_learning, idempotency_key, non_negative)
 
     def forecast(self, horizon, *, future=None, quantile_levels=(0.1, 0.5, 0.9), cross_learning=False,
-                 idempotency_key=None):
+                 idempotency_key=None, non_negative=False):
         """Submit one forecast, wait within timeout and return an owned ForecastResult.
 
         Long-format and dataset fits get the long result (series, to_frame() with id, target,
         timestamp, median, q_<level>); univariate fits get the 0.13-shaped result.
+        non_negative is as for submit_forecast().
         """
         with self.submit_forecast(horizon, future=future, quantile_levels=quantile_levels,
-                                  cross_learning=cross_learning, idempotency_key=idempotency_key) as job:
+                                  cross_learning=cross_learning, idempotency_key=idempotency_key,
+                                  non_negative=non_negative) as job:
             return job.result(timeout=self.timeout)
 
-    def submit_predict(self, horizon, *, future=None, quantile_levels=(0.1, 0.5, 0.9), idempotency_key=None):
+    def submit_predict(self, horizon, *, future=None, quantile_levels=(0.1, 0.5, 0.9), idempotency_key=None,
+                       non_negative=False):
         """Submit one single-series, single-target run without waiting; retain job.id.
 
         Univariate fits keep the 0.13 result shape on either route. The job owns its new
-        client, or borrows Forecast(client=...).
+        client, or borrows Forecast(client=...). non_negative is as for submit_forecast() and
+        needs the forecasting route.
         """
         self._ready()
         if self.n_series_ is None:
@@ -1505,20 +1652,24 @@ class Forecast(BaseEstimator):
         if self.task_ != "forecasting":
             if future is not None:
                 raise ValueError("future applies only when the fit named future_covariates.")
+            _non_negative(non_negative, False, self.model)
             return self._submit_legacy(horizon, quantile_levels, idempotency_key)
-        return self._submit(horizon, future, quantile_levels, False, idempotency_key)
+        return self._submit(horizon, future, quantile_levels, False, idempotency_key, non_negative)
 
-    def predict_details(self, horizon, *, future=None, quantile_levels=(0.1, 0.5, 0.9), idempotency_key=None):
+    def predict_details(self, horizon, *, future=None, quantile_levels=(0.1, 0.5, 0.9), idempotency_key=None,
+                        non_negative=False):
         """Submit one single-output run, wait within timeout and return an owned ForecastResult."""
         with self.submit_predict(horizon, future=future, quantile_levels=quantile_levels,
-                                 idempotency_key=idempotency_key) as job:
+                                 idempotency_key=idempotency_key, non_negative=non_negative) as job:
             return job.result(timeout=self.timeout)
 
-    def predict(self, horizon, future=None, *, idempotency_key=None):
+    def predict(self, horizon, future=None, *, idempotency_key=None, non_negative=False):
         """Return native median predictions as an array, shape (horizon,), for one series and target."""
-        return self.predict_details(horizon, future=future, idempotency_key=idempotency_key).predictions
+        return self.predict_details(horizon, future=future, idempotency_key=idempotency_key,
+                                    non_negative=non_negative).predictions
 
-    def predict_quantiles(self, horizon, *, future=None, quantile_levels=(0.1, 0.5, 0.9), idempotency_key=None):
+    def predict_quantiles(self, horizon, *, future=None, quantile_levels=(0.1, 0.5, 0.9), idempotency_key=None,
+                          non_negative=False):
         """Return native quantiles as an array, shape (horizon, n_quantiles), for one series and target."""
         return self.predict_details(horizon, future=future, quantile_levels=quantile_levels,
-                                    idempotency_key=idempotency_key).quantiles
+                                    idempotency_key=idempotency_key, non_negative=non_negative).quantiles

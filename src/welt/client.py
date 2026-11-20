@@ -171,6 +171,17 @@ def _check_upload(upload, spec):
     return chunk, set(received)
 
 
+def _with_non_negative(request, non_negative):
+    """API-267: the raw forecast request with "non_negative": true when asked; otherwise unchanged."""
+    if type(non_negative) is not bool:
+        raise ValueError("non_negative must be True or False.")
+    if not non_negative:
+        return request
+    if not isinstance(request, dict):
+        raise ValueError("non_negative=True needs the forecast request as a JSON object.")
+    return {**request, "non_negative": True}
+
+
 class _HTTP:
     def _configure(self, base_url, api_key, max_retries, max_retry_delay, workspace=None):
         if type(max_retries) is not int or not 0 <= max_retries <= 5:
@@ -369,12 +380,15 @@ class Client(_HTTP):
         return self.request("DELETE", f"/v1/decisions/{_id(job_id)}")
 
     def submit_forecast(self, request, *, idempotency_key=None,
-                        expected_model_version=None, expected_configuration_version=None):
+                        expected_model_version=None, expected_configuration_version=None, non_negative=False):
         """Submit one raw POST /v1/forecasts request (DEC-085); prefer Forecast for validation.
 
         Version expectations are paired guard headers exactly as for model runs. Job.result()
         returns the forecasting result dictionary; forecast_job(job.id) validates it.
+        non_negative=True adds "non_negative": true to a copy of the request (API-267); False
+        sends the request exactly as given.
         """
+        request = _with_non_negative(request, non_negative)
         result = self.request("POST", "/v1/forecasts", json=request,
             headers=_model_run_headers(idempotency_key, expected_model_version, expected_configuration_version))
         return Job(self, result["id"])
@@ -869,8 +883,10 @@ class AsyncClient(_HTTP):
         return await self.request("DELETE", f"/v1/decisions/{_id(job_id)}")
 
     async def submit_forecast(self, request, *, idempotency_key=None,
-                              expected_model_version=None, expected_configuration_version=None):
+                              expected_model_version=None, expected_configuration_version=None,
+                              non_negative=False):
         """Async Client.submit_forecast with the same contract."""
+        request = _with_non_negative(request, non_negative)
         result = await self.request("POST", "/v1/forecasts", json=request,
             headers=_model_run_headers(idempotency_key, expected_model_version, expected_configuration_version))
         return AsyncJob(self, result["id"])
