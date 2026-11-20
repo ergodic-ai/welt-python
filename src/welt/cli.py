@@ -52,6 +52,7 @@ def _parser():
     fc = command('forecast', 'Submit one forecast request (POST /v1/forecasts): history/future dataset IDs or inline tables')
     fc.add_argument('--input', required=True, help='Forecast request JSON file or - for stdin')
     fc.add_argument('--idempotency-key')
+    fc.add_argument('--non-negative', action='store_true', help='Clip forecasts at 0 per series and target whose history is non-negative (API-267); sends "non_negative": true')
     forecasts = group('forecasts', 'Forecast job lifecycle', dict(delete='Delete terminal forecast input/result; retain metadata and usage'))
     forecasts['delete'].add_argument('id'); forecasts['delete'].add_argument('--yes', required=True, action='store_true')
     runs = group('model-runs', 'Testing model run lifecycle', dict(delete='Delete terminal input/result; retain metadata and usage'))
@@ -163,8 +164,10 @@ def _run(args, client):
         key = args.idempotency_key or uuid4().hex
         args.idempotency_key = key
         print(json.dumps({'submission': {'idempotency_key': key}}), file=sys.stderr)
-        submit = client.submit_model_run if command == 'run' else client.submit_forecast
-        job = submit(_json_input(args.input), idempotency_key=key)
+        if command == 'run':
+            job = client.submit_model_run(_json_input(args.input), idempotency_key=key)
+        else:
+            job = client.submit_forecast(_json_input(args.input), idempotency_key=key, non_negative=args.non_negative)
         return {'job_id': job.id, 'idempotency_key': key}
     if command == 'datasets':
         if action == 'list': return {'items': client.datasets()}

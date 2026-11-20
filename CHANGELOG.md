@@ -1,3 +1,23 @@
+# 0.16.7 — Forecast capabilities and non-negative forecasts
+
+- `Forecast.fit` reads each model's `forecast_capabilities` (API-266) when the server
+  publishes it, preferring the forecasting task profile's, and exposes a copy as
+  `Forecast.capabilities_` (`None` on older servers). Quantile levels, panels,
+  cross-learning and categorical/multiple-target checks come from it; older servers keep
+  the `configuration` and `quantile_levels` reads.
+- Past, future and categorical covariates are refused locally (`InvalidInputError`, code
+  `unsupported_capability`) for a model whose capabilities, or older configuration, say
+  `false`, such as ci-proto and the Simons models. Before, they reached the server as `422`.
+- `non_negative=False` on `Forecast.forecast`/`submit_forecast`, the `predict` family,
+  sync/async `Client.submit_forecast` and `welt forecast --non-negative` (API-267). The field
+  is sent only when true, so default requests and their idempotency fingerprint are
+  unchanged. `True` is refused locally unless `supports_non_negative` is true.
+- Results parse the optional record: `ForecastResult.non_negative`, `.clipped_values`,
+  `.non_negative_skipped` and `ForecastSeries.clipped_values`, checked for consistency, and
+  a typed job checks that the result's `non_negative` matches the request. Results without
+  the record still parse. Backtests are unchanged. Requires a server with API-266/267 for
+  the new behaviour; no server rollout is implied by this client release.
+
 # 0.16.6 — Decision protocol v2
 
 - `decision_request(..., protocol=...)` and the sync/async `client.decisions` resources

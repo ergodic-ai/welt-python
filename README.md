@@ -208,6 +208,11 @@ the `forecasting` task. History and future can also be workspace dataset IDs; ta
 sent inline, never uploaded automatically, and bodies above 10 MiB are refused before
 sending. `client.delete_forecast(id)` removes a finished forecast's input and result.
 The univariate `predict` API from SDK 0.11 stays supported.
+From SDK 0.16.7, `forecast(..., non_negative=True)` asks the server to clip forecasts at 0
+for every series and target whose history is non-negative, and reports what it clipped
+(`result.clipped_values`, `result.non_negative_skipped`). The model's published
+`forecast_capabilities` (`model.capabilities_` after `fit`) drive the local checks: covariates
+on a model without them (ci-proto, Simons) are refused before any job is created.
 `Forecast(model="timestral-209m")` (or `timestral-28m`), listed after Chronos-2, uses the same
 calls and price but forecasts one series per request: SDK 0.14.1 refuses a panel before sending
 with `unsupported_capability`, so fit and forecast each series separately. Timestral weights:
