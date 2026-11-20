@@ -610,7 +610,7 @@ def _forecast_capabilities(meta, view):
     return None
 
 
-#: Refusable covariate roles: (plan key, request field, capability / configuration flag).
+#: Refusable covariate roles: (plan key, request field, resolved configuration flag).
 _ROLES = (("past", "past_covariates", "supports_past_covariates"),
           ("future", "future_covariates", "supports_future_covariates"),
           ("categorical", "categorical", "supports_categorical_covariates"))
@@ -632,11 +632,14 @@ def _capabilities(meta, model, value):
             except (KeyError, TypeError, ValueError):
                 raise WeltError("Invalid forecasting metadata: version, configuration, forecast_envelopes "
                                 "and min_context are required.", code="invalid_response") from None
-            # API-266: flags come from forecast_capabilities when the server publishes it, else from
-            # the resolved configuration (older servers). Either way only an explicit false refuses:
-            # an absent field, or any other value, keeps server validation (API-174: supports_panels
-            # false is Timestral's one series per request; Chronos-2 keeps panels).
-            flags = caps if caps is not None else view["configuration"]
+            # Refusal flags come from the resolved configuration on every server, because that is
+            # what the server's refuse_unsupported reads, so a local refusal carries the server's
+            # code. forecast_capabilities (API-266) is not used here: it also folds in the corners
+            # (supports_panels is false when no corner has max_series > 1), and a request ruled out
+            # only by the corners is the server's workload_limit, which _admit reports. Only an
+            # explicit false refuses: an absent field, or any other value, keeps server validation
+            # (API-174: supports_panels false is Timestral's one series per request).
+            flags = view["configuration"]
 
             def supported(name):
                 return flags.get(name) is not False
@@ -682,8 +685,8 @@ def _covariate_capabilities(route, plan, model, cross_learning=False):
         if plan[role] and route.get(role, True) is False:
             kind = "categorical covariates" if role == "categorical" else name.replace("_", " ")
             raise InvalidInputError(f"{model} does not support {kind} ({flag} is false in its "
-                                    f"forecast_capabilities). Fit without {name}=..., or choose a model "
-                                    "whose forecast_capabilities support them.", code="unsupported_capability")
+                                    f"configuration). Fit without {name}=..., or choose a model "
+                                    "that supports them.", code="unsupported_capability")
     if cross_learning and route.get("cross_learning", True) is False:
         raise InvalidInputError(f"{model} does not support cross-learning; use cross_learning=False.",
                                 code="unsupported_capability")
@@ -694,14 +697,21 @@ def _covariate_capabilities(route, plan, model, cross_learning=False):
 
 
 def _non_negative(value, supported, model):
-    """API-267: non_negative is a strict boolean, offered where forecast_capabilities says so."""
+    """API-267: non_negative is a strict boolean, offered where forecast_capabilities says so.
+
+    Unlike the covariate flags, an absent route flag (a Forecast fitted by SDK <= 0.16.6) refuses
+    rather than deferring to the server: the SDK cannot tell whether that server reads the field
+    at all, a server before API-267 answers only invalid_input (extra field) after the history
+    is sent, and fitting again is a free metadata read that settles it."""
     if type(value) is not bool:
         raise ValueError("non_negative must be True or False.")
     if value and not supported:
         raise InvalidInputError(
-            f"{model} on this server does not offer non_negative (forecast_capabilities.supports_non_negative "
-            "is not true). Use a server with API-267, fit again if this Forecast was fitted by an SDK before "
-            "0.16.7, or submit non_negative=False.", code="unsupported_capability")
+            f"{model} was not offered non_negative when this Forecast was fitted "
+            "(forecast_capabilities.supports_non_negative was not true, or the Forecast was fitted by an SDK "
+            "before 0.16.7). Fit again to read the server's current capabilities (a metadata read: nothing "
+            "is uploaded or charged); if the server still does not offer it, it predates API-267. Or submit "
+            "non_negative=False.", code="unsupported_capability")
 
 
 def _admit(envelopes, model, context, variates, series, horizon, panels=True):
@@ -1324,6 +1334,9 @@ class Forecast(BaseEstimator):
     def __setstate__(self, state):
         super().__setstate__({k: _freeze(v[1]) if isinstance(v, tuple) and len(v) == 2
                               and v[0] == "__welt_frozen__" else v for k, v in state.items()})
+        # A Forecast fitted and pickled by SDK <= 0.16.6 has no capabilities_; it read none.
+        if "_route_" in state and "capabilities_" not in state:
+            self.capabilities_ = None
 
     def _clear_fitted(self):
         for name in list(vars(self)):

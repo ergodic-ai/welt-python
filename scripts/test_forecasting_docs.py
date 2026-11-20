@@ -37,6 +37,13 @@ def steps():
     return re.findall(r'```python file="forecast_sales.py"\n(.*?)```', GUIDE.read_text(), re.S)
 
 
+def test_every_labelled_guide_file_is_executed():
+    """A file= label names a program (CONTRIBUTING); in this guide each one is run by a test below.
+    Unlabelled python fences are the univariate guide, which tests/test_forecast.py runs."""
+    labels = set(re.findall(r'```python file="([^"]+)"', GUIDE.read_text()))
+    assert labels == {'forecast_sales.py', 'forecast_timestral.py'}
+
+
 def test_guide_steps_run_in_order_as_one_script(service, capsys):
     programs = steps()
     assert len(programs) >= 10
@@ -45,9 +52,9 @@ def test_guide_steps_run_in_order_as_one_script(service, capsys):
         exec(compile(program, 'forecast_sales.py', 'exec'), namespace)
     capsys.readouterr()  # Fixture numbers are not forecast quality.
     posts = service.posts
-    # One series, panel, two targets, covariates, quantiles, cross-learning, the job form.
-    assert len(posts) == 7
-    one, panel, targets, covariates, quantiles, shared, job = posts
+    # One series, panel, two targets, covariates, quantiles, cross-learning, non_negative, the job form.
+    assert len(posts) == 8
+    one, panel, targets, covariates, quantiles, shared, clipped, job = posts
     assert 'id_column' not in one and one['targets'] == ['sales']
     assert panel['id_column'] == 'store' and 'future' not in panel
     assert targets['targets'] == ['sales', 'visits']
@@ -59,6 +66,10 @@ def test_guide_steps_run_in_order_as_one_script(service, capsys):
     assert quantiles['quantile_levels'] == [0.05, 0.1, 0.5, 0.9, 0.95]
     assert shared['cross_learning'] is True and covariates['cross_learning'] is False
     assert job == covariates
+    assert clipped == dict(covariates, non_negative=True)
+    assert namespace['clipped'].non_negative is True
+    assert len(namespace['clipped'].series) == 6 and namespace['clipped'].non_negative_skipped == ()
+    assert namespace['caps']['supports_non_negative'] is True
     frame = namespace['frame']
     assert list(frame.columns) == ['id', 'target', 'timestamp', 'median', 'q_0.05', 'q_0.1', 'q_0.5',
                                    'q_0.9', 'q_0.95']

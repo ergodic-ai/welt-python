@@ -238,7 +238,7 @@ Pass `non_negative=True` (SDK 0.16.7 or later, on a server whose
 `forecast_capabilities` set `supports_non_negative`) and the server clips the returned
 medians and quantiles at 0:
 
-```python file="non_negative.py"
+```python file="forecast_sales.py"
 clipped = model.forecast(14, future=future, non_negative=True)
 print(clipped.non_negative)            # True
 print(clipped.clipped_values)          # values set to 0, summed over clipped entries
@@ -260,8 +260,10 @@ for series in clipped.series:
   `clipped_values` is 0. That 0 says nothing about the model beyond its own clamp.
 - **Sent only when true.** `non_negative=False`, the default, sends no field, so
   default requests are byte-identical to earlier SDKs' and work on older servers. A
-  server that doesn't offer it is refused locally with `unsupported_capability`; a
-  `Forecast` fitted by an SDK before 0.16.7 needs `fit` again to use it.
+  server that doesn't offer it is refused locally with `unsupported_capability`. The
+  check reads what `fit` saw, so `fit` again (a metadata read; nothing is uploaded or
+  charged) when the `Forecast` was fitted by an SDK before 0.16.7, or before the
+  server offered `non_negative`.
 - `predict`, `predict_details` and `predict_quantiles` take the same argument, and
   `Client.submit_forecast(request, non_negative=True)` (sync and async) and
   `welt forecast --non-negative` add the field to a raw request. Backtests don't take it:
@@ -327,19 +329,31 @@ with the native `quantile_levels`, `supports_panels`, `supports_past_covariates`
 `supports_categorical_with_multiple_targets`, `supports_cross_learning`,
 `supports_non_negative`, the per-axis maxima and the `forecast_envelopes`:
 
-```python file="capabilities.py"
-caps = client.model("ci-proto")["forecast_capabilities"]
-print(caps["quantile_levels"])              # the nine deciles
-print(caps["supports_past_covariates"])     # False
+```python file="forecast_sales.py"
+caps = chronos["forecast_capabilities"]
+print(caps["quantile_levels"])           # the levels a request may ask for
+print(caps["supports_past_covariates"])  # True; False for ci-proto and the Simons models
+print(caps["supports_non_negative"])     # True on a server with API-267
 ```
 
 After `fit`, the same object is `model.capabilities_` (`None` on a server that
-predates it). From SDK 0.16.7, `fit` and `forecast` read their local checks from it:
-quantile levels outside `quantile_levels` raise `ValueError`, and covariates, panels,
-cross-learning or `non_negative=True` the model doesn't support raise
-`InvalidInputError` with code `unsupported_capability`, all before a job is created.
-On older servers the SDK reads the same flags from the model's configuration. Only an
-explicit `false` refuses locally; anything else is left to the server.
+predates it, and on a `Forecast` fitted by an earlier SDK). From SDK 0.16.7 the local
+checks, all made before a job is created, read:
+
+- **From `forecast_capabilities`:** quantile levels outside `quantile_levels` raise
+  `ValueError`, and `non_negative=True` without `supports_non_negative` raises
+  `InvalidInputError` with code `unsupported_capability`. Older servers keep the
+  entry's `quantile_levels`.
+- **From the model's configuration:** covariates, panels, cross-learning and
+  categorical covariates with several targets that the model's recipe doesn't
+  support raise `InvalidInputError` with code `unsupported_capability`. These are the
+  flags the server itself refuses on, so the local code is the server's code.
+
+A `supports_panels` or `supports_*_covariates` of `false` in `forecast_capabilities`
+can also mean that no published corner admits a panel or a covariate. That is a size
+limit, not a missing feature: `fit` reports it with `workload_limit`, naming the
+corners, as the server does. Only an explicit `false` refuses locally; anything else
+is left to the server.
 
 ## What a forecast costs {#pricing}
 

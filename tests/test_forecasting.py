@@ -1125,20 +1125,56 @@ def test_quantile_levels_come_from_forecast_capabilities(service):
     ('supports_future_covariates', dict(future_covariates=['promo'])),
     ('supports_categorical_covariates', dict(past_covariates=['holiday'], categorical=['holiday'])),
 ])
-@pytest.mark.parametrize('source', ['capabilities', 'configuration'])
-def test_unsupported_covariates_are_refused_before_any_job(service, monkeypatch, flag, kwargs, source):
-    # ci-proto and the Simons models refuse every covariate; today's server answers 422 after upload.
-    if source == 'capabilities':
+@pytest.mark.parametrize('published', [False, True])
+def test_unsupported_covariates_are_refused_before_any_job(service, monkeypatch, flag, kwargs, published):
+    # ci-proto and the Simons models refuse every covariate; the server answers 422 after upload.
+    # The flag is the resolved configuration's recipe flag, which the server's refuse_unsupported
+    # reads, whether or not the server also publishes forecast_capabilities (which says false too).
+    if published:
         service.capabilities = capabilities(**{flag: False})
-    else:                                   # an older server: the resolved configuration's recipe flag
-        meta = dict(service.metadata(), configuration={'version': service.configuration, flag: False})
-        monkeypatch.setattr(service, 'metadata', lambda: meta)
-    with pytest.raises(InvalidInputError, match=flag) as error:
+    meta = dict(service.metadata(), configuration={'version': service.configuration, flag: False})
+    monkeypatch.setattr(service, 'metadata', lambda: meta)
+    with pytest.raises(InvalidInputError, match=f'{flag} is false in its configuration') as error:
         Forecast().fit(one_series(), time='date', target=['sales'], **kwargs)
     assert error.value.code == 'unsupported_capability' and isinstance(error.value, ValueError)
+    assert 'forecast_capabilities' not in str(error.value)
     assert not service.posts
     # The same history without that role is admitted.
     assert Forecast().fit(one_series(), time='date', target=['sales']).forecast(2).series[0].target == 'sales'
+
+
+@pytest.mark.parametrize('flag, kwargs', [
+    ('supports_past_covariates', dict(past_covariates=['temperature'])),
+    ('supports_future_covariates', dict(future_covariates=['promo'])),
+    ('supports_categorical_covariates', dict(past_covariates=['holiday'], categorical=['holiday'])),
+])
+def test_covariates_ruled_out_only_by_the_corners_are_a_workload_limit(service, flag, kwargs):
+    # The recipe allows covariates; forecast_capabilities says false only because every corner has
+    # max_variates 1. The server refuses that with workload_limit at corner admission, not with
+    # unsupported_capability, so the SDK must do the same.
+    service.envelopes = [dict(max_context=512, max_variates=1, max_series=1, max_horizon=64)]
+    service.capabilities = capabilities(**{flag: False}, supports_categorical_with_multiple_targets=False,
+                                        max_variates=1, forecast_envelopes=service.envelopes)
+    with pytest.raises(InvalidInputError, match='No published chronos-2 forecasting envelope') as error:
+        Forecast().fit(one_series(), time='date', target=['sales'], **kwargs)
+    assert error.value.code == 'workload_limit' and not service.posts
+
+
+def test_panels_ruled_out_only_by_the_corners_are_a_workload_limit(service):
+    # A deployment serving Chronos-2 (no supports_panels key in its recipe) with only single-series
+    # corners publishes supports_panels false. The server answers a panel with workload_limit, as
+    # SDK 0.16.6 did; it is not unsupported_capability.
+    service.envelopes = [dict(max_context=2000, max_variates=10, max_series=1, max_horizon=256)]
+    service.capabilities = capabilities(supports_panels=False, max_series=1, forecast_envelopes=service.envelopes)
+    with pytest.raises(InvalidInputError, match='No published chronos-2 forecasting envelope') as error:
+        Forecast().fit(panel(), time='date', id='store', target=['sales'])
+    assert error.value.code == 'workload_limit' and not service.posts
+    # The recipe flag still refuses, with the server's code, before the corners are read.
+    meta = dict(service.metadata(), configuration={'version': service.configuration, 'supports_panels': False})
+    service.metadata = lambda: meta
+    with pytest.raises(InvalidInputError, match='supports_panels is false') as error:
+        Forecast().fit(panel(), time='date', id='store', target=['sales'])
+    assert error.value.code == 'unsupported_capability' and not service.posts
 
 
 def test_covariates_absent_flags_keep_server_validation(service):
@@ -1214,13 +1250,23 @@ def test_non_negative_must_be_a_boolean_and_needs_the_forecasting_route(service)
     assert not service.posts and not legacy.posts
 
 
+def test_a_forecast_pickled_by_an_earlier_sdk_has_no_capabilities(service):
+    service.capabilities = capabilities()
+    state = Forecast().fit(one_series(), time='date', target=['sales']).__getstate__()
+    state.pop('capabilities_')                       # what SDK 0.16.6 pickled
+    old = Forecast.__new__(Forecast)
+    old.__setstate__(state)
+    assert old.capabilities_ is None
+    assert not hasattr(pickle.loads(pickle.dumps(Forecast())), 'capabilities_')   # unfitted stays unfitted
+
+
 def test_non_negative_route_saved_by_an_earlier_sdk_is_refused(service):
     service.capabilities = capabilities()
     model = Forecast().fit(one_series(), time='date', target=['sales'])
     route = forecast_module._thaw(model._route_)
     route.pop('non_negative')
     model._route_ = forecast_module._freeze(route)
-    with pytest.raises(InvalidInputError, match='fit again'):
+    with pytest.raises(InvalidInputError, match=r'fitted by an SDK before 0\.16\.7\)\. Fit again'):
         model.forecast(2, non_negative=True)
     assert len(model.forecast(2).series) == 1
 
